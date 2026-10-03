@@ -1,0 +1,11 @@
+import type { IncomingMessage, ServerResponse } from "node:http";
+
+export namespace Connect {
+  export type NextHandleFunction = (req: IncomingMessage, res: ServerResponse, proximo: (erro?: unknown) => void) => unknown;
+}
+
+export interface Plugin {
+  name: string;
+  configureServer?: (servidor: { middlewares: { use: (fn: Connect.NextHandleFunction) => void } }) => void;
+  configurePreviewServer?: (servidor: { middlewares: { use: (fn: Connect.NextHandleFunction) => void } }) => void;
+}

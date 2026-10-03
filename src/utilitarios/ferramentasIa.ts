@@ -1,0 +1,513 @@
+import type { AgenteId, CartaoConfirmacao, Rota, ServicoId } from "../tipos";
+import { conexoesPonte } from "../ponte/conexoesReais";
+import type { FerramentaIa } from "../ponte/ponteLocal";
+import { useRotina, tarefasDoDia, habitoCumprido } from "../estado/rotina";
+import { useOrganizacao } from "../estado/organizacao";
+import { useEstudos, revisoesParaHoje } from "../estado/estudos";
+import { useFinancas, gastosDoMes, receitasDoMes, gastoPorCategoria, parteDoUsuario, saldoDaConta } from "../estado/financas";
+import { useComunicacao } from "../estado/comunicacao";
+import { useConfig } from "../estado/configuracoes";
+import { usePomodoro } from "../estado/pomodoro";
+import { useInterface } from "../estado/interface";
+import { useAgentes } from "../estado/agentes";
+import { sistema } from "../ponte/ponteLocal";
+import { hojeISO, diaDoMomento, paraISO } from "./datas";
+import { somar, normalizarTexto } from "./basicos";
+import { acharPorNome, categoriaPelaDescricao } from "./comandos";
+import { T } from "../textos/textos";
+
+type Argumentos = Record<string, unknown>;
+
+export type ResultadoFerramenta =
+  | { tipo: "dados"; conteudo: unknown; resumo?: string }
+  | { tipo: "confirmar"; cartao: CartaoConfirmacao; agente: AgenteId }
+  | { tipo: "erro"; mensagem: string };
+
+interface FerramentaNiko {
+  definicao: FerramentaIa;
+  executar: (args: Argumentos) => ResultadoFerramenta;
+  assincrona?: (args: Argumentos) => Promise<ResultadoFerramenta>;
+}
+
+const DATA = { type: "string", description: "Data no formato AAAA-MM-DD" };
+const HORA = { type: "string", description: "Hora no formato HH:MM, 24 horas" };
+const TELAS: Rota[] = ["inicio", "chat", "escritorio", "conexoes", "journal", "estudos", "financas", "metas", "calendario", "ia", "consumo", "conquistas", "configuracoes"];
+
+function texto(valor: unknown, limite = 200): string {
+  return typeof valor === "string" ? valor.trim().slice(0, limite) : "";
+}
+
+function dataValida(valor: unknown): string | undefined {
+  const v = texto(valor, 10);
+  return /^\d{4}-\d{2}-\d{2}$/.test(v) && !Number.isNaN(new Date(`${v}T12:00:00`).getTime()) ? v : undefined;
+}
+
+function horaValida(valor: unknown): string | undefined {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(texto(valor, 5));
+  if (!m || Number(m[1]) > 23 || Number(m[2]) > 59) return undefined;
+  return `${m[1].padStart(2, "0")}:${m[2]}`;
+}
+
+function reais(centavos: number): number {
+  return Math.round(centavos) / 100;
+}
+
+function somaDias(base: string, dias: number): string {
+  const d = new Date(`${base}T12:00:00`);
+  d.setDate(d.getDate() + dias);
+  return paraISO(d);
+}
+
+function semHtml(html: string, limite = 1500): string {
+  return html.replace(/<[^>]+>/g, " ").replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/\s+/g, " ").trim().slice(0, limite);
+}
+
+type Registro = Record<string, unknown>;
+
+interface AreaBanco {
+  data?: string;
+  financeira?: boolean;
+  ler: () => Registro[];
+}
+
+function nomeDe(lista: { id: string; nome: string }[], id?: string): string | null {
+  return id ? lista.find((x) => x.id === id)?.nome ?? null : null;
+}
+
+const AREAS_BANCO: Record<string, AreaBanco> = {
+  tarefas: { data: "data", ler: () => useRotina.getState().tarefas.map((t) => ({ id: t.id, titulo: t.titulo, descricao: t.descricao, status: t.status, data: t.data ?? null, hora: t.hora ?? null, prioridade: t.prioridade, materia: nomeDe(useEstudos.getState().materias, t.materiaId), checklist: t.checklist.map((c) => c.texto), concluida_em: t.concluidaEm ?? null })) },
+  habitos: { ler: () => useRotina.getState().habitos.map((h) => ({ id: h.id, nome: h.nome, tipo: h.tipo, meta: h.meta, unidade: h.unidade, arquivado: h.arquivado })) },
+  registros_habitos: {
+    data: "data",
+    ler: () => {
+      const r = useRotina.getState();
+      return Object.entries(r.registros).flatMap(([data, valores]) => Object.entries(valores).map(([id, valor]) => ({ data, habito: nomeDe(r.habitos, id) ?? id, valor })));
+    },
+  },
+  journal: {
+    data: "data",
+    ler: () => Object.entries(useRotina.getState().dias).map(([data, d]) => ({ data, humor: d.humor ?? null, sono_horas: d.sono ?? null, agua_ml: d.agua ?? null, diario: semHtml(d.diario ?? ""), manha: semHtml(d.manha ?? "", 400), tarde: semHtml(d.tarde ?? "", 400), noite: semHtml(d.noite ?? "", 400) })),
+  },
+  eventos: { data: "data", ler: () => useOrganizacao.getState().eventos.map((e) => ({ titulo: e.titulo, data: e.data, hora: e.hora ?? null, tipo: e.tipo, repete: e.repeticao })) },
+  metas: { data: "prazo", ler: () => { const o = useOrganizacao.getState(); return o.metas.map((m) => ({ nome: m.nome, pilar: nomeDe(o.pilares, m.pilarId), tipo: m.tipo, atual: m.atual, alvo: m.alvo, prazo: m.prazo ?? null, periodo: m.periodo })); } },
+  pilares: { ler: () => useOrganizacao.getState().pilares.map((p) => ({ nome: p.nome, nota: p.nota })) },
+  visao: { data: "prazo", ler: () => useOrganizacao.getState().visao.map((v) => ({ titulo: v.titulo, descricao: v.descricao, estado: v.estado, prazo: v.prazo ?? null })) },
+  areas_estudo: { ler: () => useEstudos.getState().areas.map((a) => ({ nome: a.nome, tipo: a.tipo })) },
+  materias: { ler: () => { const e = useEstudos.getState(); return e.materias.map((m) => ({ nome: m.nome, area: nomeDe(e.areas, m.areaId), semestre: m.semestre ?? null, paginas: e.paginas.filter((p) => p.materiaId === m.id).length, cartoes: e.cartoes.filter((c) => c.materiaId === m.id).length })); } },
+  paginas: { data: "atualizada", ler: () => { const e = useEstudos.getState(); return e.paginas.map((p) => ({ titulo: p.titulo, materia: nomeDe(e.materias, p.materiaId), atualizada: diaDoMomento(p.atualizadaEm), estudada: (p.estudadaEm ? diaDoMomento(p.estudadaEm) : null), conteudo: semHtml(p.conteudo) })); } },
+  cartoes: { data: "vencimento", ler: () => { const e = useEstudos.getState(); return e.cartoes.map((c) => ({ materia: nomeDe(e.materias, c.materiaId), frente: c.frente, verso: c.verso, vencimento: diaDoMomento(c.vencimento), repeticoes: c.repeticoes, lapsos: c.lapsos })); } },
+  datas_estudo: { data: "data", ler: () => { const e = useEstudos.getState(); return e.datas.map((d) => ({ titulo: d.titulo, tipo: d.tipo, data: d.data, materia: nomeDe(e.materias, d.materiaId), concluida: d.concluida })); } },
+  links: { data: "criado", ler: () => { const e = useEstudos.getState(); return e.links.map((l) => ({ titulo: l.titulo, url: l.url, nota: l.nota, tags: l.tags, estado: l.estado, materia: nomeDe(e.materias, l.materiaId), criado: diaDoMomento(l.criadoEm) })); } },
+  contas: { financeira: true, ler: () => { const f = useFinancas.getState(); return f.contas.map((c) => ({ nome: c.nome, tipo: c.tipo, saldo: reais(saldoDaConta(f, c.id)), limite: c.limite != null ? reais(c.limite) : null, arquivada: c.arquivada })); } },
+  transacoes: { data: "data", financeira: true, ler: () => { const f = useFinancas.getState(); return f.transacoes.map((t) => ({ data: t.data, tipo: t.tipo, valor: reais(t.valor), descricao: t.descricao, categoria: nomeDe(f.categorias, t.categoriaId), conta: nomeDe(f.contas, t.contaId), parcela: t.parcela ? `${t.parcela.numero}/${t.parcela.total}` : null })); } },
+  categorias: { financeira: true, ler: () => useFinancas.getState().categorias.map((c) => ({ nome: c.nome, tipo: c.tipo, orcamento: reais(c.orcamento) })) },
+  recorrentes: { financeira: true, ler: () => { const f = useFinancas.getState(); return f.recorrentes.map((r) => ({ descricao: r.descricao, valor: reais(r.valor), dia: r.dia, frequencia: r.frequencia, ativa: r.ativa, categoria: nomeDe(f.categorias, r.categoriaId), conta: nomeDe(f.contas, r.contaId) })); } },
+  metas_economia: { data: "prazo", financeira: true, ler: () => useFinancas.getState().metasEconomia.map((m) => ({ nome: m.nome, guardado: reais(m.guardado), alvo: reais(m.alvo), prazo: m.prazo ?? null })) },
+  divisoes: { data: "data", financeira: true, ler: () => { const f = useFinancas.getState(); return f.divisoes.map((d) => ({ data: d.data, descricao: d.descricao, total: reais(d.total), pagador: d.pagadorId === "eu" ? "usuário" : nomeDe(f.pessoas, d.pagadorId), partes: d.partes.map((p) => ({ pessoa: p.pessoaId === "eu" ? "usuário" : nomeDe(f.pessoas, p.pessoaId), valor: reais(p.valor) })) })); } },
+  listas_compras: { ler: () => useFinancas.getState().listas.map((l) => ({ nome: l.nome, itens: l.itens.map((i) => ({ nome: i.nome, quantidade: i.quantidade, marcado: i.marcado })) })) },
+  pomodoros: { data: "data", ler: () => { const e = useEstudos.getState(); return usePomodoro.getState().sessoes.map((s) => ({ data: diaDoMomento(s.inicio), inicio: s.inicio, etapa: s.etapa, minutos: s.minutos, situacao: s.situacao, materia: nomeDe(e.materias, s.materiaId) })); } },
+  memoria: { data: "data", ler: () => useComunicacao.getState().memoria.map((m) => ({ texto: m.texto, data: diaDoMomento(m.data) })) },
+  conversas: { data: "data", ler: () => useComunicacao.getState().conversas.map((c) => ({ titulo: c.titulo, data: diaDoMomento(c.atualizadaEm), mensagens: c.mensagens.length })) },
+  conexoes: { ler: () => useComunicacao.getState().conexoes.map((x) => ({ servico: x.id, ligada: x.ligada, status: x.status, resumo: x.resumo })) },
+  eventos_conexao: { data: "data", ler: () => useComunicacao.getState().eventosConexao.map((e) => ({ servico: e.servico, tipo: e.tipo, texto: e.texto, data: diaDoMomento(e.data) })) },
+  uso_ia: { data: "data", ler: () => useComunicacao.getState().usoIa.map((u) => ({ data: u.data, provedor: u.provedor, modelo: u.modelo, agente: u.agenteId, entrada: u.entrada, saida: u.saida })) },
+};
+
+const SERVICOS_IA: ServicoId[] = ["stripe", "github", "vercel", "gmail", "supabase", "cloudflare", "resend", "notion", "calcom", "n8n"];
+
+function cartaoEmail(tipo: "rascunho" | "email", a: Argumentos): ResultadoFerramenta {
+  if (!useComunicacao.getState().conexoes.find((x) => x.id === "gmail")?.chaveSalva) return { tipo: "erro", mensagem: "Gmail não está conectado." };
+  const para = texto(a.para, 200);
+  if (!/^[^\s@<>,;]+@[^\s@<>,;]+\.[^\s@<>,;]+$/.test(para)) return { tipo: "erro", mensagem: "Endereço de e-mail inválido." };
+  return { tipo: "confirmar", agente: "organizador", cartao: { tipo, situacao: "pendente", dados: { para, assunto: texto(a.assunto, 300), corpo: texto(a.corpo, 8000) } } };
+}
+
+const FERRAMENTAS: FerramentaNiko[] = [
+  {
+    definicao: {
+      nome: "consultar_banco",
+      descricao: `Lê qualquer parte do banco de dados do Niko. Áreas: ${Object.keys(AREAS_BANCO).join(", ")}. Filtre por texto (busca) e por período (de, ate) quando fizer sentido. Valores em reais. Use para perguntas que as outras ferramentas ler_* não cobrem, como histórico, diário, anotações, cartões, links, transações antigas e sessões de foco.`,
+      parametros: {
+        type: "object",
+        properties: {
+          area: { type: "string", enum: Object.keys(AREAS_BANCO) },
+          busca: { type: "string", description: "Texto para filtrar, sem diferenciar acentos" },
+          de: DATA,
+          ate: DATA,
+          limite: { type: "number", minimum: 1, maximum: 200 },
+          contar: { type: "boolean", description: "Só devolve a quantidade de registros" },
+        },
+        required: ["area"],
+      },
+    },
+    executar: (a) => {
+      const area = AREAS_BANCO[texto(a.area, 40)];
+      if (!area) return { tipo: "erro", mensagem: `Área desconhecida. Use: ${Object.keys(AREAS_BANCO).join(", ")}` };
+      if (area.financeira && useConfig.getState().nuncaFinanceiro) return { tipo: "erro", mensagem: T.chat.ferramentas.financeiroBloqueado };
+      const busca = normalizarTexto(texto(a.busca, 80));
+      const de = dataValida(a.de);
+      const ate = dataValida(a.ate);
+      let lista = area.ler();
+      if (busca) lista = lista.filter((r) => normalizarTexto(JSON.stringify(r)).includes(busca));
+      if (area.data && (de || ate)) {
+        const campo = area.data;
+        lista = lista.filter((r) => {
+          const v = typeof r[campo] === "string" ? String(r[campo]).slice(0, 10) : "";
+          return v && (!de || v >= de) && (!ate || v <= ate);
+        });
+      }
+      if (area.data) lista.sort((x, y) => String(y[area.data!] ?? "").localeCompare(String(x[area.data!] ?? "")));
+      const total = lista.length;
+      if (a.contar) return { tipo: "dados", conteudo: { total } };
+      const limite = Math.max(1, Math.min(200, Math.round(Number(a.limite) || 50)));
+      return { tipo: "dados", conteudo: { total, mostrando: Math.min(total, limite), registros: lista.slice(0, limite) } };
+    },
+  },
+  {
+    definicao: {
+      nome: "ler_computador",
+      descricao: "Informações do computador do usuário: sistema, processador, memória, discos, bateria, rede Wi-Fi, Bluetooth, tempo ligado e os programas que mais usam memória e processador agora.",
+      parametros: { type: "object", properties: {} },
+    },
+    assincrona: async () => {
+      const r = await sistema.computador();
+      return { tipo: "dados", conteudo: r };
+    },
+    executar: () => ({ tipo: "erro", mensagem: "assíncrona" }),
+  },
+  {
+    definicao: {
+      nome: "ler_tarefas",
+      descricao: "Lista as tarefas de um dia (padrão: hoje) com id, título, status e hora. Inclui atrasadas quando o dia é hoje.",
+      parametros: { type: "object", properties: { data: DATA, incluir_concluidas: { type: "boolean" } } },
+    },
+    executar: (a) => {
+      const hoje = hojeISO();
+      const dia = dataValida(a.data) ?? hoje;
+      const tarefas = useRotina.getState().tarefas;
+      const doDia = tarefasDoDia(tarefas, dia);
+      const atrasadas = dia === hoje ? tarefas.filter((t) => t.data && t.data < hoje && t.status !== "concluida" && t.status !== "cancelada") : [];
+      const lista = [...doDia, ...atrasadas.filter((t) => !doDia.includes(t))].filter((t) => a.incluir_concluidas || (t.status !== "concluida" && t.status !== "cancelada"));
+      return { tipo: "dados", conteudo: lista.slice(0, 40).map((t) => ({ id: t.id, titulo: t.titulo, status: t.status, data: t.data ?? null, hora: t.hora ?? null, prioridade: t.prioridade })) };
+    },
+  },
+  {
+    definicao: {
+      nome: "ler_agenda",
+      descricao: "Lista eventos, lembretes e tarefas com data entre duas datas (padrão: hoje até 7 dias).",
+      parametros: { type: "object", properties: { inicio: DATA, fim: DATA } },
+    },
+    executar: (a) => {
+      const inicio = dataValida(a.inicio) ?? hojeISO();
+      const fim = dataValida(a.fim) ?? somaDias(inicio, 7);
+      const eventos = useOrganizacao.getState().eventos.filter((e) => e.repeticao !== "nenhuma" || (e.data >= inicio && e.data <= fim));
+      const tarefas = useRotina.getState().tarefas.filter((t) => t.data && t.data >= inicio && t.data <= fim && t.status !== "cancelada");
+      return {
+        tipo: "dados",
+        conteudo: {
+          eventos: eventos.slice(0, 40).map((e) => ({ titulo: e.titulo, data: e.data, hora: e.hora ?? null, tipo: e.tipo, repete: e.repeticao })),
+          tarefas: tarefas.slice(0, 40).map((t) => ({ id: t.id, titulo: t.titulo, data: t.data, hora: t.hora ?? null, status: t.status })),
+        },
+      };
+    },
+  },
+  {
+    definicao: {
+      nome: "ler_financas",
+      descricao: "Resumo financeiro de um mês (padrão: atual): saldo das contas, entradas, saídas, gasto por categoria com orçamento e últimos lançamentos. Valores em reais.",
+      parametros: { type: "object", properties: { mes: { type: "string", description: "Mês no formato AAAA-MM" } } },
+    },
+    executar: (a) => {
+      if (useConfig.getState().nuncaFinanceiro) return { tipo: "erro", mensagem: T.chat.ferramentas.financeiroBloqueado };
+      const fin = useFinancas.getState();
+      const mes = /^\d{4}-\d{2}$/.test(texto(a.mes, 7)) ? texto(a.mes, 7) : hojeISO().slice(0, 7);
+      const porCategoria = gastoPorCategoria(fin, mes);
+      return {
+        tipo: "dados",
+        conteudo: {
+          mes,
+          contas: fin.contas.filter((c) => !c.arquivada).map((c) => ({ nome: c.nome, tipo: c.tipo, saldo: reais(saldoDaConta(fin, c.id)) })),
+          entradas: reais(somar(receitasDoMes(fin, mes), (t) => t.valor)),
+          saidas: reais(somar(gastosDoMes(fin, mes), (t) => parteDoUsuario(t, fin.divisoes))),
+          categorias: fin.categorias
+            .filter((c) => c.tipo === "despesa" && (porCategoria.get(c.id) || c.orcamento))
+            .map((c) => ({ nome: c.nome, gasto: reais(porCategoria.get(c.id) ?? 0), orcamento: reais(c.orcamento) })),
+          ultimos: [...fin.transacoes].filter((t) => t.data.startsWith(mes)).sort((x, y) => y.data.localeCompare(x.data)).slice(0, 12).map((t) => ({ data: t.data, tipo: t.tipo, valor: reais(t.valor), descricao: t.descricao })),
+          metas_economia: fin.metasEconomia.map((m) => ({ nome: m.nome, guardado: reais(m.guardado), alvo: reais(m.alvo), prazo: m.prazo ?? null })),
+        },
+      };
+    },
+  },
+  {
+    definicao: {
+      nome: "ler_estudos",
+      descricao: "Matérias, revisões pendentes hoje e próximas provas e entregas.",
+      parametros: { type: "object", properties: {} },
+    },
+    executar: () => {
+      const e = useEstudos.getState();
+      const hoje = hojeISO();
+      return {
+        tipo: "dados",
+        conteudo: {
+          materias: e.materias.map((m) => ({ nome: m.nome, area: e.areas.find((x) => x.id === m.areaId)?.nome ?? "" })),
+          revisoes_hoje: revisoesParaHoje(e),
+          proximas_datas: e.datas.filter((d) => !d.concluida && d.data >= hoje).sort((x, y) => x.data.localeCompare(y.data)).slice(0, 10).map((d) => ({ titulo: d.titulo, tipo: d.tipo, data: d.data, materia: e.materias.find((m) => m.id === d.materiaId)?.nome ?? "" })),
+        },
+      };
+    },
+  },
+  {
+    definicao: {
+      nome: "ler_habitos",
+      descricao: "Hábitos ativos com id, meta e se já foram cumpridos no dia (padrão: hoje).",
+      parametros: { type: "object", properties: { data: DATA } },
+    },
+    executar: (a) => {
+      const r = useRotina.getState();
+      const dia = dataValida(a.data) ?? hojeISO();
+      return {
+        tipo: "dados",
+        conteudo: r.habitos.filter((h) => !h.arquivado).map((h) => ({ id: h.id, nome: h.nome, tipo: h.tipo, meta: h.meta, unidade: h.unidade, feito: r.registros[dia]?.[h.id] ?? 0, cumprido: habitoCumprido(h, r.registros[dia]?.[h.id]) })),
+      };
+    },
+  },
+  {
+    definicao: {
+      nome: "ler_metas",
+      descricao: "Metas do usuário com progresso atual, alvo e prazo.",
+      parametros: { type: "object", properties: {} },
+    },
+    executar: () => {
+      const o = useOrganizacao.getState();
+      return { tipo: "dados", conteudo: o.metas.map((m) => ({ nome: m.nome, pilar: o.pilares.find((p) => p.id === m.pilarId)?.nome ?? "", atual: m.atual, alvo: m.alvo, prazo: m.prazo ?? null, periodo: m.periodo })) };
+    },
+  },
+  {
+    definicao: {
+      nome: "ler_conexoes",
+      descricao: "Estado das conexões (Stripe, GitHub, Vercel, n8n e outras) e os últimos eventos.",
+      parametros: { type: "object", properties: {} },
+    },
+    executar: () => {
+      const c = useComunicacao.getState();
+      return {
+        tipo: "dados",
+        conteudo: {
+          conexoes: c.conexoes.map((x) => ({ servico: x.id, ligada: x.ligada, status: x.status, resumo: x.resumo, atualizada: x.ultimaAtualizacao ?? null })),
+          eventos: c.eventosConexao.slice(0, 15).map((e) => ({ servico: e.servico, tipo: e.tipo, texto: e.texto, data: e.data })),
+        },
+      };
+    },
+  },
+  {
+    definicao: {
+      nome: "ler_conexao",
+      descricao: "Dados reais e detalhados de uma conexão ligada: Stripe (cobranças, saldo), GitHub (PRs, issues, Actions), Vercel (deploys), Gmail (não lidos, importantes), Supabase (projetos, usuários, storage, logs), Cloudflare (domínios, DNS, Pages, Workers, métricas), Resend, Notion, Cal.com e n8n.",
+      parametros: { type: "object", properties: { servico: { type: "string", enum: SERVICOS_IA } }, required: ["servico"] },
+    },
+    assincrona: async (a) => {
+      const servico = SERVICOS_IA.find((s) => s === a.servico);
+      if (!servico) return { tipo: "erro", mensagem: "Serviço desconhecido." };
+      const c = useComunicacao.getState().conexoes.find((x) => x.id === servico);
+      if (!c?.chaveSalva) return { tipo: "erro", mensagem: `${servico} não está conectado. Diga ao usuário para conectar em Conexões.` };
+      try {
+        const dados = await conexoesPonte.ler(servico);
+        return { tipo: "dados", conteudo: JSON.parse(JSON.stringify(dados).slice(0, 14000).replace(/,[^,]*$/, "]}").length > 0 ? JSON.stringify(dados) : "{}") };
+      } catch (e) {
+        return { tipo: "erro", mensagem: (e as Error).message };
+      }
+    },
+    executar: () => ({ tipo: "erro", mensagem: "assíncrona" }),
+  },
+  {
+    definicao: {
+      nome: "buscar_emails",
+      descricao: "Busca e-mails no Gmail do usuário com a sintaxe de busca do Gmail (ex.: from:ana is:unread, subject:fatura, newer_than:7d).",
+      parametros: { type: "object", properties: { busca: { type: "string" } }, required: ["busca"] },
+    },
+    assincrona: async (a) => {
+      if (!useComunicacao.getState().conexoes.find((x) => x.id === "gmail")?.chaveSalva) return { tipo: "erro", mensagem: "Gmail não está conectado." };
+      try {
+        return { tipo: "dados", conteudo: await conexoesPonte.buscarEmails(texto(a.busca, 300)) };
+      } catch (e) {
+        return { tipo: "erro", mensagem: (e as Error).message };
+      }
+    },
+    executar: () => ({ tipo: "erro", mensagem: "assíncrona" }),
+  },
+  {
+    definicao: {
+      nome: "criar_rascunho_email",
+      descricao: "Prepara um rascunho no Gmail. O usuário confirma antes de salvar.",
+      parametros: { type: "object", properties: { para: { type: "string" }, assunto: { type: "string" }, corpo: { type: "string" } }, required: ["para", "assunto", "corpo"] },
+    },
+    executar: (a) => cartaoEmail("rascunho", a),
+  },
+  {
+    definicao: {
+      nome: "enviar_email",
+      descricao: "Prepara o envio de um e-mail pelo Gmail. Sempre mostra um cartão e só envia quando o usuário confirma.",
+      parametros: { type: "object", properties: { para: { type: "string" }, assunto: { type: "string" }, corpo: { type: "string" } }, required: ["para", "assunto", "corpo"] },
+    },
+    executar: (a) => cartaoEmail("email", a),
+  },  {
+    definicao: {
+      nome: "abrir_tela",
+      descricao: "Abre uma tela do Niko para o usuário.",
+      parametros: { type: "object", properties: { tela: { type: "string", enum: TELAS } }, required: ["tela"] },
+    },
+    executar: (a) => {
+      const tela = TELAS.find((t) => t === a.tela);
+      if (!tela) return { tipo: "erro", mensagem: "Tela desconhecida." };
+      useInterface.getState().irPara(tela);
+      return { tipo: "dados", conteudo: { aberta: tela }, resumo: T.chat.ferramentas.abriu(T.rotas[tela]) };
+    },
+  },
+  {
+    definicao: {
+      nome: "iniciar_pomodoro",
+      descricao: "Começa um foco (pomodoro) agora. Use só quando o usuário pedir para focar ou estudar agora.",
+      parametros: { type: "object", properties: { minutos: { type: "number", minimum: 1, maximum: 180 }, materia: { type: "string" } } },
+    },
+    executar: (a) => {
+      const minutos = Math.max(1, Math.min(180, Math.round(Number(a.minutos) || 25)));
+      const materia = acharPorNome(useEstudos.getState().materias, texto(a.materia, 80) || undefined);
+      const p = usePomodoro.getState();
+      p.escolherEtapa("foco");
+      p.definirVinculo(materia?.id);
+      p.iniciar(minutos);
+      void useAgentes.getState().trabalhar("organizador", T.chat.respostas.pomodoro(minutos, materia?.nome ?? ""), 300);
+      return { tipo: "dados", conteudo: { iniciado: true, minutos }, resumo: T.chat.respostas.pomodoro(minutos, materia?.nome ?? "") };
+    },
+  },
+  {
+    definicao: {
+      nome: "criar_tarefa",
+      descricao: "Prepara uma tarefa. O usuário confirma antes de salvar.",
+      parametros: { type: "object", properties: { titulo: { type: "string" }, data: DATA, hora: HORA }, required: ["titulo"] },
+    },
+    executar: (a) => {
+      const titulo = texto(a.titulo);
+      if (!titulo) return { tipo: "erro", mensagem: "Falta o título." };
+      return { tipo: "confirmar", agente: "organizador", cartao: { tipo: "tarefa", situacao: "pendente", dados: { titulo, data: dataValida(a.data) ?? "", hora: horaValida(a.hora) ?? "" } } };
+    },
+  },
+  {
+    definicao: {
+      nome: "concluir_tarefa",
+      descricao: "Prepara a conclusão de uma tarefa pelo id (pegue o id com ler_tarefas). O usuário confirma.",
+      parametros: { type: "object", properties: { id: { type: "string" } }, required: ["id"] },
+    },
+    executar: (a) => {
+      const tarefa = useRotina.getState().tarefas.find((t) => t.id === a.id);
+      if (!tarefa) return { tipo: "erro", mensagem: "Tarefa não encontrada. Use ler_tarefas para pegar o id." };
+      return { tipo: "confirmar", agente: "organizador", cartao: { tipo: "concluir", situacao: "pendente", dados: { id: tarefa.id, titulo: tarefa.titulo } } };
+    },
+  },
+  {
+    definicao: {
+      nome: "criar_lembrete",
+      descricao: "Prepara um lembrete com data e hora. O usuário confirma.",
+      parametros: { type: "object", properties: { titulo: { type: "string" }, data: DATA, hora: HORA }, required: ["titulo", "data"] },
+    },
+    executar: (a) => {
+      const titulo = texto(a.titulo);
+      const data = dataValida(a.data);
+      if (!titulo || !data) return { tipo: "erro", mensagem: "Falta o título ou a data." };
+      return { tipo: "confirmar", agente: "organizador", cartao: { tipo: "lembrete", situacao: "pendente", dados: { titulo, data, hora: horaValida(a.hora) ?? "" } } };
+    },
+  },
+  {
+    definicao: {
+      nome: "criar_evento",
+      descricao: "Prepara um evento no calendário. O usuário confirma.",
+      parametros: { type: "object", properties: { titulo: { type: "string" }, data: DATA, hora: HORA }, required: ["titulo", "data"] },
+    },
+    executar: (a) => {
+      const titulo = texto(a.titulo);
+      const data = dataValida(a.data);
+      if (!titulo || !data) return { tipo: "erro", mensagem: "Falta o título ou a data." };
+      return { tipo: "confirmar", agente: "organizador", cartao: { tipo: "evento", situacao: "pendente", dados: { titulo, data, hora: horaValida(a.hora) ?? "" } } };
+    },
+  },
+  {
+    definicao: {
+      nome: "lancar_transacao",
+      descricao: "Prepara um gasto ou uma receita. Valor em reais. O usuário confirma antes de salvar.",
+      parametros: {
+        type: "object",
+        properties: { tipo: { type: "string", enum: ["despesa", "receita"] }, valor: { type: "number", minimum: 0.01 }, descricao: { type: "string" }, categoria: { type: "string" }, conta: { type: "string" }, data: DATA },
+        required: ["tipo", "valor", "descricao"],
+      },
+    },
+    executar: (a) => {
+      const fin = useFinancas.getState();
+      fin.garantirCategorias();
+      const valor = Math.round(Number(a.valor) * 100);
+      if (!Number.isFinite(valor) || valor <= 0) return { tipo: "erro", mensagem: "Valor inválido." };
+      const contas = fin.contas.filter((c) => !c.arquivada);
+      if (contas.length === 0) return { tipo: "erro", mensagem: T.chat.respostas.semConta };
+      const tipo = a.tipo === "receita" ? "receita" : "gasto";
+      const descricao = texto(a.descricao, 120) || (tipo === "gasto" ? T.financas.tipos.despesa : T.financas.tipos.receita);
+      const categorias = useFinancas.getState().categorias.filter((c) => c.tipo === (tipo === "gasto" ? "despesa" : "receita"));
+      const categoria = acharPorNome(categorias, texto(a.categoria, 60) || undefined) ?? categorias.find((c) => c.id === fin.categorizar(descricao)) ?? categoriaPelaDescricao(categorias, descricao);
+      const conta = acharPorNome(contas, texto(a.conta, 60) || undefined) ?? contas[0];
+      return { tipo: "confirmar", agente: "operador", cartao: { tipo, situacao: "pendente", dados: { valor, descricao, categoriaId: categoria?.id ?? "", contaId: conta.id, data: dataValida(a.data) ?? hojeISO() } } };
+    },
+  },
+  {
+    definicao: {
+      nome: "marcar_habito",
+      descricao: "Prepara o registro de um hábito feito (pegue o id com ler_habitos). O usuário confirma.",
+      parametros: { type: "object", properties: { id: { type: "string" }, valor: { type: "number" }, data: DATA }, required: ["id"] },
+    },
+    executar: (a) => {
+      const r = useRotina.getState();
+      const habito = r.habitos.find((h) => h.id === a.id) ?? acharPorNome(r.habitos.filter((h) => !h.arquivado), texto(a.id, 60));
+      if (!habito) return { tipo: "erro", mensagem: "Hábito não encontrado. Use ler_habitos." };
+      const data = dataValida(a.data) ?? hojeISO();
+      const valor = habito.tipo === "sim_nao" ? 1 : Math.max(1, Math.round(Number(a.valor) || habito.meta));
+      return { tipo: "confirmar", agente: "organizador", cartao: { tipo: "habito", situacao: "pendente", dados: { id: habito.id, nome: habito.nome, valor, data } } };
+    },
+  },
+  {
+    definicao: {
+      nome: "adicionar_compras",
+      descricao: "Prepara itens para a lista de compras. O usuário confirma.",
+      parametros: { type: "object", properties: { itens: { type: "array", items: { type: "string" } } }, required: ["itens"] },
+    },
+    executar: (a) => {
+      const itens = (Array.isArray(a.itens) ? a.itens : []).map((i) => texto(i, 80)).filter(Boolean).slice(0, 30);
+      if (itens.length === 0) return { tipo: "erro", mensagem: "Nenhum item." };
+      return { tipo: "confirmar", agente: "operador", cartao: { tipo: "compra", situacao: "pendente", dados: { itens } } };
+    },
+  },
+  {
+    definicao: {
+      nome: "lembrar_fato",
+      descricao: "Prepara um fato para a memória do time (algo que o usuário quer que vocês lembrem). O usuário confirma.",
+      parametros: { type: "object", properties: { texto: { type: "string" } }, required: ["texto"] },
+    },
+    executar: (a) => {
+      const fato = texto(a.texto, 300);
+      if (!fato) return { tipo: "erro", mensagem: "Falta o texto." };
+      return { tipo: "confirmar", agente: "organizador", cartao: { tipo: "memoria", situacao: "pendente", dados: { texto: fato } } };
+    },
+  },
+];
+
+export function definicoesFerramentas(): FerramentaIa[] {
+  return FERRAMENTAS.map((f) => f.definicao);
+}
+
+export async function executarFerramenta(nome: string, argumentos: Argumentos): Promise<ResultadoFerramenta> {
+  const ferramenta = FERRAMENTAS.find((f) => f.definicao.nome === normalizarTexto(nome));
+  if (!ferramenta) return { tipo: "erro", mensagem: `Ferramenta desconhecida: ${nome}` };
+  try {
+    if (ferramenta.assincrona) return await ferramenta.assincrona(argumentos ?? {});
+    return ferramenta.executar(argumentos ?? {});
+  } catch (e) {
+    return { tipo: "erro", mensagem: (e as Error).message };
+  }
+}

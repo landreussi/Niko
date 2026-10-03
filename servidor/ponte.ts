@@ -1,0 +1,183 @@
+import type { Plugin, Connect } from "./tiposVite";
+import type { IncomingMessage, ServerResponse } from "node:http";
+import { listarProvedores, salvarProvedor, removerProvedor, testarProvedor, conversar, validarMensagens, validarFerramentas } from "./ia";
+import { lerConsumo } from "./consumo";
+import { lerTudo, gravar, backupManual, zerarBanco } from "./banco";
+import { pedirMidia } from "./midia";
+import { pedirJanelas } from "./janelasWindows";
+import { estadoConexoes, lerConexao, salvarChaveConexao, removerChaveConexao, servicoValido, chaveDe, SERVICOS as SERVICOS_CONEXAO } from "./conexoes";
+import { buscarGmail, criarRascunhoGmail, enviarGmail } from "./gmail";
+import { tipoDoComputador, estadoDoSistema, listarRedes, listarBluetooth, lerComputador, conectarRede, esquecerRede, desconectarRede, definirBrilho, definirRadio, abrirConfiguracoesWindows } from "./sistema";
+
+const LIMITE_CORPO = 24 * 1024 * 1024;
+
+function lerCorpo(req: IncomingMessage): Promise<Record<string, unknown>> {
+  return new Promise((resolver, rejeitar) => {
+    let tamanho = 0;
+    const partes: Buffer[] = [];
+    req.on("data", (p: Buffer) => {
+      tamanho += p.length;
+      if (tamanho > LIMITE_CORPO) {
+        rejeitar(new Error("corpo_grande"));
+        req.destroy();
+        return;
+      }
+      partes.push(p);
+    });
+    req.on("end", () => {
+      try {
+        resolver(partes.length ? JSON.parse(Buffer.concat(partes).toString("utf8")) : {});
+      } catch {
+        rejeitar(new Error("json_invalido"));
+      }
+    });
+    req.on("error", rejeitar);
+  });
+}
+
+function responder(res: ServerResponse, status: number, dados: unknown) {
+  res.statusCode = status;
+  res.setHeader("content-type", "application/json; charset=utf-8");
+  res.setHeader("cache-control", "no-store");
+  res.end(JSON.stringify(dados));
+}
+
+function origemConfiavel(req: IncomingMessage): boolean {
+  if (req.headers["x-niko"] !== "1") return false;
+  const token = process.env.NIKO_TOKEN;
+  if (token && req.headers["x-niko-token"] !== token) return false;
+  const origem = req.headers.origin;
+  if (!origem) return true;
+  try {
+    const host = new URL(origem).hostname;
+    return host === "localhost" || host === "127.0.0.1" || host === "[::1]" || host === "tauri.localhost";
+  } catch {
+    return false;
+  }
+}
+
+export const rotas: Connect.NextHandleFunction = async (req, res, proximo) => {
+  const url = new URL(req.url ?? "/", "http://localhost");
+  if (!url.pathname.startsWith("/ponte/")) return proximo();
+  if (!origemConfiavel(req)) return responder(res, 403, { erro: "origem_nao_permitida" });
+  const caminho = url.pathname.slice("/ponte".length);
+
+  try {
+    if (caminho === "/estado" && req.method === "GET") {
+      return responder(res, 200, { disponivel: true, plataforma: process.platform, provedores: listarProvedores() });
+    }
+    if (caminho === "/provedores" && req.method === "POST") {
+      const corpo = await lerCorpo(req);
+      const provedor = await salvarProvedor(corpo as never);
+      return responder(res, 200, provedor);
+    }
+    const remover = /^\/provedores\/([a-z0-9-]+)$/.exec(caminho);
+    if (remover && req.method === "DELETE") {
+      await removerProvedor(remover[1]);
+      return responder(res, 200, { ok: true });
+    }
+    const testar = /^\/provedores\/([a-z0-9-]+)\/testar$/.exec(caminho);
+    if (testar && req.method === "POST") {
+      return responder(res, 200, await testarProvedor(testar[1]));
+    }
+    if (caminho === "/janelas" && req.method === "GET") return responder(res, 200, await pedirJanelas("listar"));
+    const acaoJanela = /^\/janelas\/(focar|minimizar|fechar)$/.exec(caminho);
+    if (acaoJanela && req.method === "POST") {
+      const corpo = await lerCorpo(req);
+      return responder(res, 200, await pedirJanelas(acaoJanela[1] as "focar", String(corpo.janela ?? "")));
+    }
+    if (caminho === "/midia" && req.method === "GET") {
+      return responder(res, 200, await pedirMidia("estado"));
+    }
+    const acaoMidia = /^\/midia\/(alternar|proxima|anterior|posicao)$/.exec(caminho);
+    if (acaoMidia && req.method === "POST") {
+      const corpo = await lerCorpo(req);
+      return responder(res, 200, await pedirMidia(acaoMidia[1] as "alternar", Number(corpo.segundos)));
+    }
+    if (caminho === "/conexoes" && req.method === "GET") {
+      return responder(res, 200, estadoConexoes());
+    }
+    if (caminho === "/gmail/buscar" && req.method === "GET") return responder(res, 200, await buscarGmail(await chaveDe("gmail"), url.searchParams.get("q") ?? ""));
+    if (caminho === "/gmail/rascunho" && req.method === "POST") return responder(res, 200, await criarRascunhoGmail(await chaveDe("gmail"), await lerCorpo(req)));
+    if (caminho === "/gmail/enviar" && req.method === "POST") return responder(res, 200, await enviarGmail(await chaveDe("gmail"), await lerCorpo(req)));
+    const conexao = /^\/conexoes\/([a-z]+)(\/chave)?$/.exec(caminho);
+    if (conexao && servicoValido(conexao[1])) {
+      const servico = conexao[1];
+      if (!conexao[2] && req.method === "GET") return responder(res, 200, await lerConexao(servico, url.searchParams.get("forcar") === "1"));
+      if (conexao[2] && req.method === "POST") return responder(res, 200, await salvarChaveConexao(servico, await lerCorpo(req)));
+      if (conexao[2] && req.method === "DELETE") return responder(res, 200, await removerChaveConexao(servico));
+    }
+    if (caminho === "/dados" && req.method === "GET") {
+      return responder(res, 200, { dados: lerTudo(String(req.headers["x-niko-banco"] ?? "")) });
+    }
+    if (caminho === "/dados" && req.method === "POST") {
+      const corpo = await lerCorpo(req);
+      const itens = corpo.itens;
+      if (!itens || typeof itens !== "object" || Array.isArray(itens)) return responder(res, 400, { erro: "itens_invalidos" });
+      gravar(itens as Record<string, string | null>, String(req.headers["x-niko-banco"] ?? ""));
+      return responder(res, 200, { ok: true });
+    }
+    if (caminho === "/dados/zerar" && req.method === "POST") {
+      const corpo = await lerCorpo(req);
+      if (corpo.confirmacao !== "APAGAR") return responder(res, 400, { erro: "confirmacao_invalida" });
+      const pasta = zerarBanco(String(req.headers["x-niko-banco"] ?? ""));
+      if (corpo.chaves === true) {
+        for (const p of listarProvedores()) await removerProvedor(p.id);
+        for (const s of SERVICOS_CONEXAO) await removerChaveConexao(s);
+      }
+      return responder(res, 200, { pasta });
+    }
+    if (caminho === "/dados/backup" && req.method === "POST") {
+      return responder(res, 200, { pasta: backupManual() });
+    }
+    if (caminho === "/consumo" && req.method === "GET") {
+      return responder(res, 200, await lerConsumo(url.searchParams.get("forcar") === "1"));
+    }
+    if (caminho === "/ia" && req.method === "POST") {
+      const corpo = await lerCorpo(req);
+      const mensagens = validarMensagens(corpo.mensagens);
+      const ferramentas = validarFerramentas(corpo.ferramentas);
+      const controle = new AbortController();
+      res.on("close", () => {
+        if (!res.writableEnded) controle.abort();
+      });
+      res.statusCode = 200;
+      res.setHeader("content-type", "application/x-ndjson; charset=utf-8");
+      res.setHeader("cache-control", "no-store");
+      for await (const evento of conversar(String(corpo.provedorId ?? ""), String(corpo.sistema ?? "").slice(0, 20000), mensagens, typeof corpo.modelo === "string" ? corpo.modelo : undefined, controle.signal, ferramentas)) {
+        res.write(`${JSON.stringify(evento)}\n`);
+      }
+      return res.end();
+    }
+    if (caminho.startsWith("/sistema/")) {
+      const acao = caminho.slice("/sistema/".length);
+      const leitura: Record<string, () => Promise<unknown>> = { tipo: tipoDoComputador, estado: estadoDoSistema, redes: listarRedes, bluetooth: listarBluetooth, computador: lerComputador };
+      const escrita: Record<string, (d: Record<string, unknown>) => Promise<unknown>> = {
+        conectar: conectarRede,
+        esquecer: esquecerRede,
+        desconectar: () => desconectarRede(),
+        brilho: definirBrilho,
+        radio: definirRadio,
+        configuracoes: abrirConfiguracoesWindows,
+      };
+      if (req.method === "GET" && leitura[acao]) return responder(res, 200, await leitura[acao]());
+      if (req.method === "POST" && escrita[acao]) return responder(res, 200, await escrita[acao](await lerCorpo(req)));
+    }
+    return responder(res, 404, { erro: "rota_desconhecida" });
+  } catch (e) {
+    if (!res.headersSent) return responder(res, 400, { erro: (e as Error).message });
+    res.end();
+  }
+};
+
+export function ponteLocal(): Plugin {
+  return {
+    name: "niko-ponte-local",
+    configureServer(servidor) {
+      servidor.middlewares.use(rotas);
+    },
+    configurePreviewServer(servidor) {
+      servidor.middlewares.use(rotas);
+    },
+  };
+}
