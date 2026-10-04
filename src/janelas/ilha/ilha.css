@@ -1,13 +1,15 @@
 .ilha-raiz {
-  --i-tinta: #f5f6f8;
-  --i-tinta-2: #f1f2f4;
-  --i-dim: #9398a1;
-  --i-dim-2: #8e939c;
-  --i-dim-3: #6b7079;
-  --i-cartao: #141518;
-  --i-cartao-plano: #0e0f11;
-  --i-aba-ativa: #1d1f23;
-  --i-linha: rgba(255, 255, 255, 0.05);
+  --i-rgb: var(--borda-rgb, 255, 255, 255);
+  --i-tinta: rgba(var(--i-rgb), 0.96);
+  --i-tinta-2: rgba(var(--i-rgb), 0.92);
+  --i-tinta-inversa: var(--borda-fundo-solido, #0b0c0e);
+  --i-dim: rgba(var(--i-rgb), 0.6);
+  --i-dim-2: rgba(var(--i-rgb), 0.56);
+  --i-dim-3: rgba(var(--i-rgb), 0.42);
+  --i-cartao: rgba(var(--i-rgb), 0.06);
+  --i-cartao-plano: rgba(var(--i-rgb), 0.035);
+  --i-aba-ativa: rgba(var(--i-rgb), 0.1);
+  --i-linha: rgba(var(--i-rgb), 0.06);
   --i-verde: #34d399;
   --i-vermelho: #f4505e;
   --i-ambar: #f5a524;
@@ -43,20 +45,20 @@
 .ilha::after {
   content: "";
   position: absolute;
-  top: 0;
-  width: 14px;
-  height: 14px;
+  top: var(--topo-orelhas, 0px);
+  width: var(--raio-orelha, 14px);
+  height: var(--raio-orelha, 14px);
   pointer-events: none;
 }
 
 .ilha::before {
-  left: -14px;
-  background: radial-gradient(circle at 0 100%, transparent 13.5px, var(--fundo-ilha, #000) 14px);
+  left: calc(var(--raio-orelha, 14px) * -1);
+  background: radial-gradient(circle at 0 100%, transparent calc(var(--raio-orelha, 14px) - 0.5px), var(--fundo-ilha, #000) var(--raio-orelha, 14px));
 }
 
 .ilha::after {
-  right: -14px;
-  background: radial-gradient(circle at 100% 100%, transparent 13.5px, var(--fundo-ilha, #000) 14px);
+  right: calc(var(--raio-orelha, 14px) * -1);
+  background: radial-gradient(circle at 100% 100%, transparent calc(var(--raio-orelha, 14px) - 0.5px), var(--fundo-ilha, #000) var(--raio-orelha, 14px));
 }
 
 .ilha-recorte {
@@ -171,8 +173,8 @@
 }
 
 .ilha-aba:hover {
-  background: rgba(255, 255, 255, 0.07);
-  color: #c0c4cb;
+  background: rgba(var(--i-rgb), 0.07);
+  color: rgba(var(--i-rgb), 0.75);
 }
 
 .ilha-aba[aria-selected="true"] {
@@ -189,7 +191,7 @@
   padding: 0 3px;
   border-radius: 6px;
   background: var(--i-vermelho);
-  color: #fff;
+  color: var(--i-tinta);
   font-size: 8px;
   font-weight: 700;
   display: grid;
@@ -213,7 +215,7 @@
 }
 
 .ilha-acao:hover {
-  background: rgba(255, 255, 255, 0.07);
+  background: rgba(var(--i-rgb), 0.07);
   color: var(--i-tinta);
 }
 
@@ -279,7 +281,7 @@
   min-height: 0;
   flex: 1 1 auto;
   scrollbar-width: thin;
-  scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
+  scrollbar-color: rgba(var(--i-rgb), 0.18) transparent;
   margin-right: -6px;
   padding-right: 6px;
 }
@@ -296,7 +298,7 @@
 }
 
 .ilha-linha:hover {
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(var(--i-rgb), 0.04);
 }
 
 .ilha-linha .cortar {
@@ -307,7 +309,7 @@
   width: 16px;
   height: 16px;
   border-radius: 50%;
-  border: 1.5px solid #4b5059;
+  border: 1.5px solid rgba(var(--i-rgb), 0.3);
   display: grid;
   place-items: center;
   flex: 0 0 16px;
@@ -332,13 +334,13 @@
   height: 34px;
   padding: 0 6px 0 12px;
   border-radius: 12px;
-  background: rgba(255, 255, 255, 0.07);
+  background: rgba(var(--i-rgb), 0.07);
   border: 1px solid transparent;
   flex: 0 0 auto;
 }
 
 .ilha-campo:focus-within {
-  border-color: rgba(255, 255, 255, 0.22);
+  border-color: rgba(var(--i-rgb), 0.22);
 }
 
 .ilha-campo[data-erro="sim"] {
@@ -379,14 +381,14 @@
   border-radius: 999px;
   font-size: 12px;
   font-weight: 500;
-  background: rgba(255, 255, 255, 0.09);
+  background: rgba(var(--i-rgb), 0.09);
   color: var(--i-tinta-2);
   white-space: nowrap;
   transition: transform 0.08s ease-out, background 0.12s;
 }
 
 .ilha-botao:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.15);
+  background: rgba(var(--i-rgb), 0.15);
 }
 
 .ilha-botao:active:not(:disabled) {
@@ -399,7 +401,7 @@
 
 .ilha-botao-primario {
   background: var(--i-tinta);
-  color: #0b0c0e;
+  color: var(--i-tinta-inversa);
 }
 
 .ilha-botao-primario:hover:not(:disabled) {
@@ -441,12 +443,12 @@
 }
 
 .ilha-chip:hover {
-  color: #c0c4cb;
-  background: rgba(255, 255, 255, 0.05);
+  color: rgba(var(--i-rgb), 0.75);
+  background: rgba(var(--i-rgb), 0.05);
 }
 
 .ilha-chip[aria-pressed="true"] {
-  background: #252830;
+  background: rgba(var(--i-rgb), 0.12);
   color: var(--i-tinta);
 }
 
@@ -454,7 +456,7 @@
   position: relative;
   height: 4px;
   border-radius: 2px;
-  background: rgba(255, 255, 255, 0.12);
+  background: rgba(var(--i-rgb), 0.12);
   cursor: pointer;
 }
 
@@ -472,35 +474,12 @@
   transform: translateX(-50%);
   height: 2px;
   border-radius: 2px;
-  background: rgba(255, 255, 255, 0.35);
+  background: rgba(var(--i-rgb), 0.35);
   z-index: 3;
 }
 
-.ilha-ticker {
-  position: relative;
-  height: 44px;
-  overflow: hidden;
-  -webkit-mask-image: linear-gradient(to bottom, transparent 0%, #000 14%, #000 84%, transparent 100%);
-  mask-image: linear-gradient(to bottom, transparent 0%, #000 14%, #000 84%, transparent 100%);
-}
-
-.ilha-ticker-linha {
-  position: absolute;
-  left: 0;
-  right: 0;
-  height: 22px;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12.5px;
-  font-weight: 500;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
 .brilho-texto {
-  background: linear-gradient(90deg, #7c818a 0%, #f2f3f5 40%, #7c818a 70%);
+  background: linear-gradient(90deg, rgba(var(--i-rgb), 0.45) 0%, rgba(var(--i-rgb), 0.95) 40%, rgba(var(--i-rgb), 0.45) 70%);
   background-size: 260% 100%;
   -webkit-background-clip: text;
   background-clip: text;
@@ -521,7 +500,7 @@
   padding: 0 12px;
   border-radius: 14px;
   background: var(--i-cartao-plano);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(var(--i-rgb), 0.1);
   text-align: left;
   min-width: 0;
   transition: transform 0.2s var(--curva-entrar), border-color 0.18s;
@@ -530,7 +509,7 @@
 
 .ilha-pilula-conexao:hover {
   transform: scale(1.03);
-  border-color: rgba(255, 255, 255, 0.22);
+  border-color: rgba(var(--i-rgb), 0.22);
 }
 
 .ilha-conexoes {
@@ -541,7 +520,7 @@
 
 .ilha-conexao {
   border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(var(--i-rgb), 0.07);
   background: var(--i-cartao-plano);
   flex: 0 0 auto;
   overflow: hidden;
@@ -549,7 +528,7 @@
 }
 
 .ilha-conexao[data-aberta="sim"] {
-  border-color: rgba(255, 255, 255, 0.18);
+  border-color: rgba(var(--i-rgb), 0.18);
 }
 
 .ilha-conexao[data-ligada="nao"] .ilha-conexao-linha > :not(.ilha-conexao-seta) {
@@ -569,12 +548,12 @@
 }
 
 .ilha-conexao-linha:hover {
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(var(--i-rgb), 0.04);
 }
 
 .ilha-conexao-seta {
   flex: 0 0 auto;
-  color: #8a8f98;
+  color: var(--i-dim-2);
   transition: transform 0.2s var(--curva-entrar);
 }
 
@@ -598,12 +577,12 @@
   border-radius: 999px;
   font-size: 11.5px;
   color: var(--i-tinta);
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(var(--i-rgb), 0.08);
   transition: background 0.15s;
 }
 
 .ilha-botao-texto:hover {
-  background: rgba(255, 255, 255, 0.14);
+  background: rgba(var(--i-rgb), 0.14);
 }
 
 .ilha-conexao-dados {
@@ -611,7 +590,7 @@
   flex-wrap: wrap;
   gap: 4px 12px;
   font-size: 11.5px;
-  color: #c4c7cc;
+  color: rgba(var(--i-rgb), 0.78);
   margin-bottom: 4px;
 }
 
@@ -626,21 +605,6 @@
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 6px;
-}
-
-.ilha-agente {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 4px;
-  padding: 8px 4px;
-  border-radius: 14px;
-  min-width: 0;
-  text-align: center;
-}
-
-.ilha-agente:hover {
-  background: rgba(255, 255, 255, 0.04);
 }
 
 .ilha-confirmacao {
@@ -669,7 +633,7 @@
 }
 
 .ilha-raiz :focus-visible {
-  outline: 2px solid rgba(255, 255, 255, 0.6);
+  outline: 2px solid rgba(var(--i-rgb), 0.6);
   outline-offset: 1px;
 }
 
@@ -682,15 +646,15 @@
   max-width: 180px;
   padding: 0 8px;
   border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(var(--i-rgb), 0.1);
+  background: rgba(var(--i-rgb), 0.06);
   color: var(--i-tinta);
   font-size: 12px;
   color-scheme: dark;
 }
 
 .ilha-select option {
-  background: #1a1c20;
+  background: var(--borda-fundo-solido, #1a1c20);
   color: var(--i-tinta);
 }
 
@@ -745,7 +709,7 @@
   height: 18px;
   padding: 0 5px;
   border-radius: 9px;
-  background: rgba(255, 255, 255, 0.14);
+  background: rgba(var(--i-rgb), 0.14);
   color: var(--i-tinta);
   font-size: 10px;
   font-weight: 700;
@@ -756,7 +720,7 @@
 .ilha-progresso {
   height: 3px;
   border-radius: 2px;
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(var(--i-rgb), 0.1);
   overflow: hidden;
   flex: 0 0 auto;
 }
@@ -788,8 +752,8 @@
   gap: 4px;
   padding: 6px 14px;
   border-radius: 14px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(var(--i-rgb), 0.05);
+  border: 1px solid rgba(var(--i-rgb), 0.08);
   backface-visibility: hidden;
   transition: transform 0.45s var(--curva-entrar);
 }
@@ -830,7 +794,7 @@
   gap: 1px;
   padding: 5px 4px;
   border-radius: 10px;
-  background: rgba(255, 255, 255, 0.06);
+  background: rgba(var(--i-rgb), 0.06);
   border: 1px solid transparent;
   color: var(--i-tinta);
   font-size: 12px;
@@ -866,184 +830,6 @@
   text-transform: capitalize;
 }
 
-.ilha-sistema {
-  gap: 10px;
-}
-
-.ilha-sistema-topo {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
-  gap: 8px;
-}
-
-.ilha-sistema-bateria,
-.ilha-sistema-brilho {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-width: 0;
-  padding: 8px 12px;
-  border-radius: 14px;
-  background: var(--i-cartao-plano);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  color: var(--i-tinta);
-}
-
-.ilha-sistema-bateria {
-  position: relative;
-  overflow: hidden;
-}
-
-.ilha-sistema-bateria b {
-  font-size: 15px;
-}
-
-.ilha-sistema-bateria[data-baixa="sim"] {
-  border-color: rgba(248, 113, 113, 0.5);
-  color: #fca5a5;
-}
-
-.ilha-sistema-barra {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  height: 3px;
-  background: rgba(255, 255, 255, 0.06);
-}
-
-.ilha-sistema-barra > span {
-  display: block;
-  height: 100%;
-  background: linear-gradient(90deg, #22c55e, #86efac);
-  transition: width 0.4s;
-}
-
-.ilha-sistema-bateria[data-baixa="sim"] .ilha-sistema-barra > span {
-  background: #ef4444;
-}
-
-.ilha-sistema-brilho input[type="range"] {
-  flex: 1 1 auto;
-  min-width: 0;
-  height: 6px;
-  appearance: none;
-  border-radius: 999px;
-  background: linear-gradient(90deg, #fde68a var(--p), rgba(255, 255, 255, 0.12) var(--p));
-  cursor: pointer;
-}
-
-.ilha-sistema-brilho input[type="range"]::-webkit-slider-thumb {
-  appearance: none;
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  background: #fff;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
-}
-
-.ilha-sistema-chaves {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
-}
-
-.ilha-sistema-chave {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-width: 0;
-  padding: 8px 12px;
-  border-radius: 14px;
-  text-align: left;
-  font-size: 11.5px;
-  color: #c4c7cc;
-  background: var(--i-cartao-plano);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  transition: background 0.18s, border-color 0.18s, color 0.18s;
-}
-
-.ilha-sistema-chave b {
-  font-size: 12.5px;
-  color: var(--i-tinta);
-}
-
-.ilha-sistema-chave[aria-pressed="true"] {
-  background: rgba(96, 165, 250, 0.18);
-  border-color: rgba(96, 165, 250, 0.45);
-  color: #bfdbfe;
-}
-
-.ilha-sistema-chave[aria-pressed="true"] > svg {
-  color: #60a5fa;
-}
-
-.ilha-sistema-chave:disabled {
-  opacity: 0.6;
-}
-
-.ilha-sistema-abas {
-  display: flex;
-  gap: 2px;
-  padding: 2px;
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.05);
-}
-
-.ilha-sistema-abas button {
-  padding: 4px 12px;
-  border-radius: 8px;
-  font-size: 11.5px;
-  color: #8a8f98;
-}
-
-.ilha-sistema-abas button[aria-selected="true"] {
-  background: rgba(255, 255, 255, 0.12);
-  color: var(--i-tinta);
-}
-
-.ilha-sistema-lista {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  max-height: 120px;
-}
-
-.ilha-rede {
-  border-radius: 10px;
-}
-
-.ilha-rede[data-atual="sim"] {
-  background: rgba(34, 197, 94, 0.08);
-}
-
-.ilha-rede-conectada {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 11px;
-  color: #4ade80;
-}
-
-.ilha-rede-senha {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 0 6px 6px 28px;
-}
-
-.ilha-rede-senha input {
-  flex: 1 1 auto;
-  min-width: 0;
-  height: 28px;
-  padding: 0 10px;
-  border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  background: rgba(255, 255, 255, 0.06);
-  color: var(--i-tinta);
-  font-size: 12px;
-}
-
 .ilha-chat {
   height: 100%;
   display: flex;
@@ -1064,7 +850,7 @@
   flex-direction: column;
   gap: 8px;
   scrollbar-width: thin;
-  scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
+  scrollbar-color: rgba(var(--i-rgb), 0.18) transparent;
   padding-right: 4px;
 }
 
@@ -1090,12 +876,12 @@
   border-radius: 999px;
   font-size: 11.5px;
   color: var(--i-tinta);
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(var(--i-rgb), 0.08);
+  border: 1px solid rgba(var(--i-rgb), 0.08);
 }
 
 .ilha-pilula:hover {
-  background: rgba(255, 255, 255, 0.15);
+  background: rgba(var(--i-rgb), 0.15);
 }
 
 .ilha-chat-eu {
@@ -1103,7 +889,7 @@
   max-width: 80%;
   padding: 6px 10px;
   border-radius: 12px 12px 4px 12px;
-  background: rgba(255, 255, 255, 0.12);
+  background: rgba(var(--i-rgb), 0.12);
   color: var(--i-tinta);
   font-size: 12.5px;
   white-space: pre-wrap;
@@ -1141,7 +927,7 @@
   max-height: 140px;
   overflow: auto;
   font-size: 11px;
-  background: rgba(255, 255, 255, 0.06);
+  background: rgba(var(--i-rgb), 0.06);
   border-radius: 8px;
   padding: 6px 8px;
 }
@@ -1166,12 +952,12 @@
 }
 
 .ilha-chat .chat-escolha-time {
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(var(--i-rgb), 0.08);
 }
 
 .ilha-chat .chat-confirmacao {
-  background: rgba(255, 255, 255, 0.06);
-  border-color: rgba(255, 255, 255, 0.1);
+  background: rgba(var(--i-rgb), 0.06);
+  border-color: rgba(var(--i-rgb), 0.1);
   color: var(--i-tinta);
   padding: 8px 10px;
   font-size: 11.5px;
@@ -1182,7 +968,7 @@
 }
 
 .ilha-chat .chat-confirmacao .botao-secundario {
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(var(--i-rgb), 0.1);
   color: var(--i-tinta);
   border-color: transparent;
 }
@@ -1242,19 +1028,19 @@
 }
 
 .ilha-chat .anexo-chip {
-  background: rgba(255, 255, 255, 0.07);
-  border-color: rgba(255, 255, 255, 0.08);
-  color: #f1f2f4;
+  background: rgba(var(--i-rgb), 0.07);
+  border-color: rgba(var(--i-rgb), 0.08);
+  color: var(--i-tinta-2);
   height: 34px;
 }
 
 .ilha-chat .anexo-sub,
 .ilha-chat .anexo-pct {
-  color: #8e939c;
+  color: var(--i-dim-2);
 }
 
 .ilha-chat .anexo-barra {
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(var(--i-rgb), 0.1);
   width: 90px;
 }
 .ilha-conexoes-grade {
@@ -1274,19 +1060,19 @@
   border-radius: 14px;
   text-align: left;
   color: var(--i-tinta);
-  background: radial-gradient(120px 60px at 0% 0%, color-mix(in srgb, var(--marca) 16%, transparent), transparent 70%), rgba(255, 255, 255, 0.045);
-  border: 1px solid rgba(255, 255, 255, 0.07);
+  background: radial-gradient(120px 60px at 0% 0%, color-mix(in srgb, var(--marca) 16%, transparent), transparent 70%), rgba(var(--i-rgb), 0.045);
+  border: 1px solid rgba(var(--i-rgb), 0.07);
   transition: border-color 0.2s, background-color 0.2s;
 }
 
 .ilha-conexao-bloco:hover {
-  border-color: color-mix(in srgb, var(--marca) 45%, rgba(255, 255, 255, 0.15));
-  background-color: rgba(255, 255, 255, 0.07);
+  border-color: color-mix(in srgb, var(--marca) 45%, rgba(var(--i-rgb), 0.15));
+  background-color: rgba(var(--i-rgb), 0.07);
 }
 
 .ilha-conexao-bloco[data-ligada="nao"] {
   opacity: 0.5;
-  background: rgba(255, 255, 255, 0.03);
+  background: rgba(var(--i-rgb), 0.03);
 }
 
 .ilha-conexao-logo {
@@ -1296,8 +1082,8 @@
   display: grid;
   place-items: center;
   border-radius: 9px;
-  background: color-mix(in srgb, var(--marca, #fff) 18%, rgba(255, 255, 255, 0.06));
-  color: #fff;
+  background: color-mix(in srgb, var(--marca, #fff) 18%, rgba(var(--i-rgb), 0.06));
+  color: var(--i-tinta);
 }
 
 .ilha-conexao-textos {
@@ -1324,7 +1110,7 @@
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: #4b4f57;
+  background: rgba(var(--i-rgb), 0.25);
 }
 
 .ilha-conexao-estado[data-status="conectado"] {
@@ -1367,46 +1153,6 @@
   color: #fff;
 }
 
-.ilha-conexao-destaque {
-  font-size: 13px;
-  font-weight: 600;
-  padding: 8px 12px;
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.06);
-}
-
-.ilha-linha-tempo {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.ilha-evento {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-height: 24px;
-  padding-left: 4px;
-}
-
-.ilha-evento-ponto {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  flex: none;
-  background: #8e939c;
-}
-
-.ilha-evento[data-tipo="sucesso"] .ilha-evento-ponto {
-  background: #22c55e;
-}
-
-.ilha-evento[data-tipo="falha"] .ilha-evento-ponto {
-  background: #f4505e;
-  box-shadow: 0 0 6px rgba(244, 80, 94, 0.7);
-}
-
 @media (prefers-reduced-motion: reduce) {
   .ilha-conexao-estado[data-status="conectado"] {
     animation: none;
@@ -1419,4 +1165,247 @@
   border-radius: 999px;
   background: #a78bfa;
   color: #0b0c0e;
+}
+
+.ilha-calendario-mes::first-letter {
+  text-transform: uppercase;
+}
+
+.ilha-calendario {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+  margin-top: 4px;
+}
+
+.ilha-calendario-semana {
+  height: 18px;
+  display: grid;
+  place-items: center;
+  color: var(--i-dim-3);
+  font-size: 10.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.ilha-calendario-dia {
+  position: relative;
+  height: 25px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border-radius: 8px;
+  color: var(--i-tinta);
+  font-size: 12px;
+  transition: background 0.15s;
+}
+
+.ilha-calendario-dia:hover {
+  background: var(--i-aba-ativa);
+}
+
+.ilha-calendario-dia[data-fora] {
+  color: var(--i-dim-3);
+}
+
+.ilha-calendario-dia[data-hoje] {
+  background: var(--i-tinta);
+  color: var(--i-tinta-inversa);
+  font-weight: 700;
+}
+
+.ilha-calendario-ponto {
+  position: absolute;
+  bottom: 3px;
+  left: 50%;
+  width: 4px;
+  height: 4px;
+  margin-left: -2px;
+  border-radius: 50%;
+  background: var(--i-vermelho);
+}
+
+.ilha-calendario-corpo {
+  display: flex;
+  gap: 18px;
+  flex: 1;
+  min-height: 0;
+}
+
+.ilha-calendario-relogio {
+  flex: 0 0 150px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  padding-right: 16px;
+  border-right: 1px solid var(--i-linha);
+}
+
+.ilha-calendario-hora {
+  font-size: 34px;
+  font-weight: 600;
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+}
+
+.ilha-calendario-data {
+  color: var(--i-dim);
+  font-size: 12px;
+}
+
+.ilha-calendario-data::first-letter {
+  text-transform: uppercase;
+}
+
+.ilha-calendario-hoje {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 12px;
+  min-width: 0;
+}
+
+.ilha-calendario-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 4px 6px;
+  margin-left: -6px;
+  border-radius: 8px;
+  color: var(--i-tinta);
+  font-size: 12px;
+  text-align: left;
+  transition: background 0.15s;
+}
+
+.ilha-calendario-item:hover {
+  background: var(--i-aba-ativa);
+}
+
+.ilha-calendario-item-hora {
+  flex: 0 0 auto;
+  color: var(--i-vermelho);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.ilha-calendario-mes-bloco {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.ilha-conexao-numeros {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+}
+
+.ilha-conexao-numero {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px;
+  border-radius: 12px;
+  background: var(--i-cartao);
+}
+
+.ilha-conexao-numero-valor {
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ilha-conexao-numero-rotulo {
+  color: var(--i-dim);
+  font-size: 10.5px;
+}
+
+.ilha-conexao-numero[data-tom="sucesso"] .ilha-conexao-numero-valor { color: var(--i-verde); }
+.ilha-conexao-numero[data-tom="erro"] .ilha-conexao-numero-valor { color: var(--i-vermelho); }
+.ilha-conexao-numero[data-tom="alerta"] .ilha-conexao-numero-valor { color: var(--i-ambar); }
+
+.ilha-conexao-aviso {
+  padding: 6px 10px;
+  border-radius: 10px;
+  background: var(--i-cartao-plano);
+  color: var(--i-dim);
+  font-size: 11.5px;
+}
+
+.ilha-conexao-aviso[data-tom="erro"] { color: var(--i-vermelho); background: rgba(244, 80, 94, 0.1); }
+.ilha-conexao-aviso[data-tom="alerta"] { color: var(--i-ambar); background: rgba(245, 165, 36, 0.1); }
+.ilha-conexao-aviso[data-tom="sucesso"] { color: var(--i-verde); background: rgba(52, 211, 153, 0.08); }
+
+.ilha-conexao-lista {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.ilha-conexao-linha-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  padding: 3px 6px;
+  border-radius: 8px;
+  font-size: 12px;
+}
+
+.ilha-conexao-linha-item:hover {
+  background: var(--i-cartao-plano);
+}
+
+.ilha-conexao-ponto {
+  width: 6px;
+  height: 6px;
+  flex: 0 0 6px;
+  border-radius: 50%;
+  background: rgba(var(--i-rgb), 0.25);
+}
+
+.ilha-conexao-ponto[data-tom="sucesso"] { background: var(--i-verde); }
+.ilha-conexao-ponto[data-tom="erro"] { background: var(--i-vermelho); }
+.ilha-conexao-ponto[data-tom="alerta"] { background: var(--i-ambar); }
+
+.ilha-conexao-linha-textos {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  line-height: 1.3;
+}
+
+.ilha-conexao-etiqueta {
+  flex: 0 0 auto;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: rgba(var(--i-rgb), 0.08);
+  color: var(--i-dim);
+  font-size: 10.5px;
+  font-weight: 500;
+}
+
+.ilha-conexao-etiqueta[data-tom="sucesso"] { color: var(--i-verde); background: rgba(52, 211, 153, 0.12); }
+.ilha-conexao-etiqueta[data-tom="erro"] { color: var(--i-vermelho); background: rgba(244, 80, 94, 0.12); }
+.ilha-conexao-etiqueta[data-tom="alerta"] { color: var(--i-ambar); background: rgba(245, 165, 36, 0.12); }
+
+.ilha-conexao-valor {
+  flex: 0 0 auto;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.ilha-conexao-quando {
+  flex: 0 0 auto;
+  min-width: 52px;
+  text-align: right;
 }

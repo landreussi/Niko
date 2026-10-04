@@ -3,6 +3,7 @@ import { rotas } from "./ponte";
 import { fecharBanco } from "./banco";
 import { encerrarMidia } from "./midia";
 import { encerrarJanelas } from "./janelasWindows";
+import { encerrarControle } from "./controleRapido";
 
 const porta = Number(process.env.NIKO_PORTA) || 47831;
 const ORIGENS = new Set(["http://tauri.localhost", "https://tauri.localhost", "tauri://localhost"]);
@@ -38,6 +39,7 @@ servidor.listen(porta, "127.0.0.1", () => process.stderr.write(`${new Date().toI
 const encerrar = () => {
   encerrarMidia();
   encerrarJanelas();
+  encerrarControle();
   fecharBanco();
   servidor.close();
   process.exit(0);

@@ -26,6 +26,7 @@ interface EstadoMidia {
   disponivel: boolean;
   faixa: Faixa | null;
   tocando: boolean;
+  tocouPorUltimoEm: number;
   posicao: number;
   lidoEm: number;
   podeAvancar: boolean;
@@ -51,6 +52,7 @@ function aplicar(r: RespostaMidia, anterior: Faixa | null): Partial<EstadoMidia>
     disponivel: true,
     faixa: mesmaFaixa(anterior, nova) ? anterior : nova,
     tocando: Boolean(r.tocando),
+    ...(r.tocando ? { tocouPorUltimoEm: Date.now() } : {}),
     posicao: r.posicao ?? 0,
     lidoEm: Date.now(),
     podeAvancar: Boolean(r.podeAvancar),
@@ -89,6 +91,7 @@ export const useMidia = create<EstadoMidia>()((set, get) => {
     disponivel: false,
     faixa: null,
     tocando: false,
+    tocouPorUltimoEm: 0,
     posicao: 0,
     lidoEm: 0,
     podeAvancar: false,
@@ -100,7 +103,7 @@ export const useMidia = create<EstadoMidia>()((set, get) => {
       else if (get().disponivel) set({ disponivel: false, faixa: null, tocando: false });
     },
     alternar: () => {
-      set((s) => ({ tocando: !s.tocando, posicao: posicaoAtual(s, Date.now()), lidoEm: Date.now() }));
+      set((s) => ({ tocando: !s.tocando, tocouPorUltimoEm: Date.now(), posicao: posicaoAtual(s, Date.now()), lidoEm: Date.now() }));
       void agir("alternar");
     },
     proxima: () => void agir("proxima"),
@@ -111,6 +114,12 @@ export const useMidia = create<EstadoMidia>()((set, get) => {
     },
   };
 });
+
+const MIDIA_PAUSADA_NA_ILHA_MS = 5 * 60000;
+
+export function midiaAtivaNaIlha(s: Pick<EstadoMidia, "faixa" | "tocando" | "tocouPorUltimoEm">, agora: number): boolean {
+  return Boolean(s.faixa) && (s.tocando || agora - s.tocouPorUltimoEm < MIDIA_PAUSADA_NA_ILHA_MS);
+}
 
 export function posicaoAtual(s: Pick<EstadoMidia, "tocando" | "posicao" | "lidoEm" | "faixa">, agora: number): number {
   const duracao = s.faixa?.duracao ?? 0;

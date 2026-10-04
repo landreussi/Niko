@@ -246,10 +246,11 @@ export function useServicos() {
   const sons = useConfig((s) => s.sons);
   const virada = useConfig((s) => s.viradaAs4h);
   const inatividade = useConfig((s) => s.agentes.inatividadeMin);
+  const naoPerturbe = useConfig((s) => s.naoPerturbe);
 
   useEffect(() => {
-    definirPreferenciasSom({ ...sons, silencioFoco: false });
-  }, [sons]);
+    definirPreferenciasSom({ ...sons, silencioFoco: naoPerturbe });
+  }, [sons, naoPerturbe]);
 
   useEffect(() => {
     definirViradaDoDia(virada);

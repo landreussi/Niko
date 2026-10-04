@@ -110,7 +110,7 @@ pub fn restaurar(app: &AppHandle) {
         return;
     }
     if let Some(original) = guardado {
-        definir_estado_da_barra(original);
+        definir_estado_da_barra(original & !ABS_AUTOHIDE);
     }
     for barra in barras_do_windows() {
         let _ = unsafe { ShowWindow(barra, SW_SHOWNA) };
@@ -164,7 +164,6 @@ pub fn reservar_espaco_do_dock(app: &AppHandle, reservar: bool) {
         SHAppBarMessage(ABM_SETPOS, &mut dados);
     }
 }
-
 #[tauri::command]
 pub fn reservar_dock(app: AppHandle, reservar: bool) {
     reservar_espaco_do_dock(&app, reservar);

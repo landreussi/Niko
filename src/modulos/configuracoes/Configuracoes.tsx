@@ -15,13 +15,14 @@ import { useComunicacao } from "../../estado/comunicacao";
 import { useInterface } from "../../estado/interface";
 import { usePomodoro } from "../../estado/pomodoro";
 import { T } from "../../textos/textos";
-import { contraste, hexValido } from "../../utilitarios/cores";
+import { contraste, hexValido, FUNDO_DESTAQUE } from "../../utilitarios/cores";
 import { baixarArquivo, lerArquivoTexto } from "../../utilitarios/basicos";
 import { hojeISO } from "../../utilitarios/datas";
 import { listarChaves, lerChave, gravarChave, salvarAgora, modoArmazenamento, zerarTudo, tamanhoGuardado, PREFIXO } from "../../ponte/armazenamento";
 import { TODOS_OS_SONS, tocarSom, type CategoriaSom } from "../../ponte/sons";
 import { DESTAQUE_PADRAO } from "../../janelas/area-de-trabalho/usarTema";
 import { EditorFoto } from "../../componentes/FotoPerfil";
+import { SeletorDeFundo } from "./SeletorDeFundo";
 import type { EstadoAgente, Rota } from "../../tipos";
 
 type Secao = keyof typeof T.configuracoes.secoes;
@@ -60,6 +61,14 @@ function ItemBarraOrdenavel({ rota, nome, visivel, aoMudarNome, aoMudarVisivel }
 
 const CHAVES_VISUAL = ["tema", "paleta", "destaque", "escala", "barraLateral", "ilha", "dock"] as const;
 
+function fundoValido(valor: unknown): valor is string {
+  return valor === FUNDO_DESTAQUE || (typeof valor === "string" && hexValido(valor));
+}
+
+function opacidadeValida(valor: unknown): valor is number {
+  return typeof valor === "number" && valor >= 0.3 && valor <= 1;
+}
+
 function validarVisual(dados: unknown): Partial<ReturnType<typeof useConfig.getState>> | null {
   if (!dados || typeof dados !== "object") return null;
   const d = dados as Record<string, unknown>;
@@ -81,15 +90,23 @@ function validarVisual(dados: unknown): Partial<ReturnType<typeof useConfig.getS
       ...CONFIG_PADRAO.ilha,
       modo: ["fixo", "esconder", "inteligente"].includes(i.modo as string) ? i.modo : CONFIG_PADRAO.ilha.modo,
       tamanho: ["pequena", "media", "grande"].includes(i.tamanho as string) ? i.tamanho : "media",
-      cor: i.cor === "destaque" ? "destaque" : "preta",
+      fundo: fundoValido(i.fundo) ? i.fundo : CONFIG_PADRAO.ilha.fundo,
+      opacidade: opacidadeValida(i.opacidade) ? i.opacidade : 1,
       repouso: ["nada", "relogio", "midia", "agente"].includes(i.repouso as string) ? i.repouso : "agente",
       fechamentoSeg: typeof i.fechamentoSeg === "number" && i.fechamentoSeg >= 0 && i.fechamentoSeg <= 120 ? i.fechamentoSeg : 15,
       abrirHover: i.abrirHover === true,
+      laterais: i.laterais !== false,
     };
   }
   if (v.dock && typeof v.dock === "object") {
     const k = v.dock as Record<string, unknown>;
-    saida.dock = { ativo: k.ativo !== false, modo: ["fixo", "esconder", "inteligente"].includes(k.modo as string) ? (k.modo as ModoBorda) : "fixo" };
+    saida.dock = {
+      ...useConfig.getState().dock,
+      ativo: k.ativo !== false,
+      modo: ["fixo", "esconder", "inteligente"].includes(k.modo as string) ? (k.modo as ModoBorda) : "inteligente",
+      fundo: fundoValido(k.fundo) ? k.fundo : CONFIG_PADRAO.dock.fundo,
+      opacidade: opacidadeValida(k.opacidade) ? k.opacidade : 1,
+    };
   }
   return saida as Partial<ReturnType<typeof useConfig.getState>>;
 }
@@ -422,13 +439,8 @@ export default function Configuracoes() {
               {(["pequena", "media", "grande"] as const).map((t) => <option key={t} value={t}>{T.configuracoes.tamanhos[t]}</option>)}
             </select>
           </Campo>
-          <Campo id="il-cor" rotulo={T.configuracoes.corIlha}>
-            <select id="il-cor" className="seletor" value={cfg.ilha.cor} onChange={(e) => cfg.definirIlha({ cor: e.target.value as "preta" | "destaque" })}>
-              <option value="preta">{T.configuracoes.cores.preta}</option>
-              <option value="destaque">{T.configuracoes.cores.destaque}</option>
-            </select>
-          </Campo>
         </div>
+        <SeletorDeFundo id="il-fundo" fundo={cfg.ilha.fundo} opacidade={cfg.ilha.opacidade} aoMudar={(m) => cfg.definirIlha(m)} />
         <div className="formulario-linha">
           <Campo id="il-fech" rotulo={T.configuracoes.fechamentoAuto}>
             <select id="il-fech" className="seletor" value={cfg.ilha.fechamentoSeg} onChange={(e) => cfg.definirIlha({ fechamentoSeg: Number(e.target.value) })}>
@@ -442,6 +454,7 @@ export default function Configuracoes() {
             </select>
           </Campo>
         </div>
+        <LinhaAlternador rotulo={T.configuracoes.lateraisIlha} dica={T.configuracoes.lateraisDica} ligado={cfg.ilha.laterais} aoMudar={(v) => cfg.definirIlha({ laterais: v })} />
         <LinhaAlternador rotulo={T.configuracoes.abrirHover} ligado={cfg.ilha.abrirHover} aoMudar={(v) => cfg.definirIlha({ abrirHover: v })} />
         <div className="campo-grupo">
           <span className="campo-rotulo">{T.configuracoes.notificacoesIlha}</span>
@@ -464,6 +477,7 @@ export default function Configuracoes() {
           <span className="campo-dica">{T.configuracoes.modosDica[cfg.dock.modo]}</span>
         </div>
         <LinhaAlternador rotulo={T.configuracoes.ampliarDock} ligado={cfg.dock.ampliar} aoMudar={(v) => cfg.definir({ dock: { ...cfg.dock, ampliar: v } })} />
+        <SeletorDeFundo id="dk-fundo" fundo={cfg.dock.fundo} opacidade={cfg.dock.opacidade} aoMudar={(m) => cfg.definir({ dock: { ...cfg.dock, ...m } })} />
         <AvisoFaixa>{T.configuracoes.appsWindowsDock}</AvisoFaixa>
       </>
     ),

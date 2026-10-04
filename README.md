@@ -12,6 +12,14 @@ Rotina, estudos, finanças, metas e os serviços que você acompanha, reunidos e
 ![Versão](https://img.shields.io/badge/versão-0.1.0-0b0d10?style=flat-square)
 ![Licença](https://img.shields.io/badge/licença-proprietária-b42318?style=flat-square)
 
+<br />
+
+<a href="midia/comercial.mp4">
+  <img src="midia/capa-comercial.png" alt="Assistir ao comercial do Niko" width="760" />
+</a>
+
+<sub>Clique na imagem para assistir ao comercial.</sub>
+
 </div>
 
 ---
@@ -38,14 +46,20 @@ Três princípios guiam o projeto:
 
 Uma barra discreta no topo da tela, com três estados: escondida, compacta e expandida. As abas são configuráveis:
 
+- **Calendário:** a hora, o que tem marcado hoje e o mês, com uma marca nos dias com compromisso. Um clique no dia abre o calendário completo.
 - **Hoje:** tarefas do dia, com entrada em linguagem natural ("ligar pro banco 15h").
 - **Capturar:** tarefa, gasto, link, nota ou lembrete em poucos segundos.
 - **Mídia:** o que está tocando no Windows, com capa e controles.
 - **Foco:** pomodoro com etapas de foco e pausa.
 - **Hábitos e Agenda:** marcação rápida e próximos compromissos.
 - **Chat:** conversa rápida com o time, com anexos.
-- **Conexões, Time e Avisos:** situação dos serviços, o que cada agente está fazendo e os alertas.
-- **Sistema:** Wi-Fi, Bluetooth e brilho, em notebooks.
+- **Conexões:** números e últimas atividades de cada serviço, como cobranças do Stripe, Actions do GitHub, e-mails do Resend e tráfego do Cloudflare.
+- **Avisos:** os alertas do time.
+
+Na área de trabalho, a ilha ganha uma **aba de cada lado**, ligadas por uma faixa fina no topo. Com um app na frente, fica só a ilha.
+
+- **Esquerda:** personalização (tema, cor de destaque, cor e opacidade da ilha e do dock, tamanho e repouso da ilha), o Iniciar do Windows e as tarefas do dia.
+- **Direita:** os apps em segundo plano (os ícones da bandeja do Windows), Wi-Fi, volume, bateria e um painel de controles rápidos, com Wi-Fi e Bluetooth, não perturbe, mudo, microfone, captura de tela, teclado virtual, modo escuro, volume de cada app, brilho, mídia e energia.
 
 Modos **fixo**, **esconder** e **inteligente**. Durante jogos, vídeos em tela cheia e apresentações, a ilha e o dock somem por completo. O **modo privacidade** esconde valores e textos sensíveis quando você compartilha a tela.
 

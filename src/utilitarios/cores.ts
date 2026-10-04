@@ -31,3 +31,34 @@ export function comAlfa(hex: string, alfa: number): string {
   const [r, g, b] = hexParaRgb(hex);
   return `rgba(${r}, ${g}, ${b}, ${alfa})`;
 }
+
+export function misturar(a: string, b: string, pesoDeA: number): string {
+  const ca = hexParaRgb(a);
+  const cb = hexParaRgb(b);
+  return `#${ca.map((v, i) => Math.round(v * pesoDeA + cb[i] * (1 - pesoDeA)).toString(16).padStart(2, "0")).join("")}`;
+}
+
+export const FUNDO_DESTAQUE = "destaque";
+const TINTA_CLARA = "255, 255, 255";
+const TINTA_ESCURA = "17, 17, 17";
+
+export interface AparenciaDeBorda {
+  fundo: string;
+  fundoSolido: string;
+  fundoElevado: string;
+  claro: boolean;
+  rgbDaTinta: string;
+}
+
+export function aparenciaDeBorda(fundo: string, opacidade: number, destaque: string): AparenciaDeBorda {
+  const base = fundo === FUNDO_DESTAQUE ? misturar(destaque, "#000000", 0.82) : hexValido(fundo) ? fundo : "#000000";
+  const claro = textoSobre(base) !== "#ffffff";
+  const alfa = Math.max(0.3, Math.min(1, opacidade));
+  return {
+    fundo: comAlfa(base, alfa),
+    fundoSolido: base,
+    fundoElevado: misturar(base, claro ? "#000000" : "#ffffff", claro ? 0.97 : 0.94),
+    claro,
+    rgbDaTinta: claro ? TINTA_ESCURA : TINTA_CLARA,
+  };
+}

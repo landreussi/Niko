@@ -15,6 +15,11 @@
     linear-gradient(160deg, #1b1d22 0%, #0b0c0f 100%);
 }
 
+.area-trabalho:not(.area-nativa),
+[data-tema="escuro"] .area-trabalho:not(.area-nativa) {
+  background: #eef1f6 url("/fundo/papel-de-parede.jpg") center / cover no-repeat;
+}
+
 .barra-tarefas {
   position: fixed;
   left: 0;

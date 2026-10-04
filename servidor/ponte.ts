@@ -7,6 +7,7 @@ import { pedirMidia } from "./midia";
 import { pedirJanelas } from "./janelasWindows";
 import { estadoConexoes, lerConexao, salvarChaveConexao, removerChaveConexao, servicoValido, chaveDe, SERVICOS as SERVICOS_CONEXAO } from "./conexoes";
 import { buscarGmail, criarRascunhoGmail, enviarGmail } from "./gmail";
+import { lerAudio, definirVolume, definirMudo, ajustarSessao, lerTema, definirTema, abrirFerramenta, agirNaEnergia, lerBandeja, abrirDaBandeja } from "./controleRapido";
 import { tipoDoComputador, estadoDoSistema, listarRedes, listarBluetooth, lerComputador, conectarRede, esquecerRede, desconectarRede, definirBrilho, definirRadio, abrirConfiguracoesWindows } from "./sistema";
 
 const LIMITE_CORPO = 24 * 1024 * 1024;
@@ -159,6 +160,21 @@ export const rotas: Connect.NextHandleFunction = async (req, res, proximo) => {
         brilho: definirBrilho,
         radio: definirRadio,
         configuracoes: abrirConfiguracoesWindows,
+      };
+      if (req.method === "GET" && leitura[acao]) return responder(res, 200, await leitura[acao]());
+      if (req.method === "POST" && escrita[acao]) return responder(res, 200, await escrita[acao](await lerCorpo(req)));
+    }
+    if (caminho.startsWith("/controle/")) {
+      const acao = caminho.slice("/controle/".length);
+      const leitura: Record<string, () => Promise<unknown>> = { audio: lerAudio, tema: lerTema, bandeja: lerBandeja };
+      const escrita: Record<string, (d: Record<string, unknown>) => Promise<unknown>> = {
+        volume: definirVolume,
+        mudo: definirMudo,
+        sessao: ajustarSessao,
+        tema: definirTema,
+        ferramenta: abrirFerramenta,
+        energia: agirNaEnergia,
+        bandeja: abrirDaBandeja,
       };
       if (req.method === "GET" && leitura[acao]) return responder(res, 200, await leitura[acao]());
       if (req.method === "POST" && escrita[acao]) return responder(res, 200, await escrita[acao](await lerCorpo(req)));

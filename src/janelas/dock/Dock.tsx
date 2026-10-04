@@ -12,6 +12,7 @@ import { tocarSom } from "../../ponte/sons";
 import { ALTURA_DOCK, alguemCobre } from "../geometria";
 import { ICONE_ROTA } from "../sistema/rotas";
 import { COR_AGENTE } from "../../personagens/cores";
+import { usarAparenciaDeBorda, variaveisDaBorda } from "../aparencia";
 import "./dock.css";
 
 interface PropsItemDock {
@@ -224,7 +225,7 @@ function AppsDoWindows({ mouseX, ampliar, ativo }: { mouseX: MotionValue<number>
 
 export function Dock() {
   const cfg = useConfig((s) => s.dock);
-  const corIlha = useConfig((s) => s.ilha.cor);
+  const aparencia = usarAparenciaDeBorda(cfg.fundo, cfg.opacidade);
   const nomesBarra = useConfig((s) => s.barraLateral);
   const aberto = useInterface((s) => s.sistemaAberto);
   const minimizado = useInterface((s) => s.sistemaMinimizado);
@@ -277,7 +278,7 @@ export function Dock() {
   const coberto = cfg.modo === "inteligente" && (NATIVO ? frente.cobre : alguemCobre(area));
   const escondido = (cfg.modo === "esconder" || coberto) && !perto;
   const sistemaNaFrente = aberto && !minimizado && zSistema === proximoZ - 1;
-  const fundo = corIlha === "destaque" ? "color-mix(in srgb, var(--destaque) 82%, #000)" : "#000";
+  const fundo = aparencia.fundo;
   const IconeAba = ICONE_ROTA[rota];
   const nomeAba = nomesBarra.find((b) => b.rota === rota)?.nome || T.rotas[rota];
 
@@ -316,7 +317,8 @@ export function Dock() {
       <motion.div
         ref={caixa}
         className="dock"
-        style={{ height: ALTURA_DOCK, background: fundo }}
+        data-fundo-claro={aparencia.claro || undefined}
+        style={{ ...variaveisDaBorda(aparencia), height: ALTURA_DOCK, background: fundo }}
         initial={false}
         animate={{ y: escondido ? ALTURA_DOCK + 8 : 0 }}
         transition={{ type: "spring", visualDuration: 0.35, bounce: 0.15 }}

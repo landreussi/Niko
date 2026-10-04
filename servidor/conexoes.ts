@@ -220,11 +220,12 @@ const LEITORES: Record<Servico, Leitor> = {
       projetos.slice(0, 6).map(async (p) => {
         const ref = p.ref ?? p.id;
         const sql = (query: string) => pedir<Record<string, unknown>[]>(`${base}/projects/${ref}/database/query`, h, { query, read_only: true }).catch(() => null);
-        const [usuarios, buckets, tamanho, saude] = await Promise.all([
+        const [usuarios, buckets, tamanho, saude, tabelas] = await Promise.all([
           sql("select count(*)::int as total, count(*) filter (where created_at > now() - interval '7 days')::int as novos, max(last_sign_in_at) as ultimo_login from auth.users"),
           sql("select b.name, b.public, count(o.id)::int as arquivos, coalesce(sum((o.metadata->>'size')::bigint), 0)::bigint as bytes from storage.buckets b left join storage.objects o on o.bucket_id = b.id group by b.name, b.public order by b.name"),
           sql("select pg_database_size(current_database())::bigint as bytes"),
           pedir<{ name: string; healthy: boolean; status: string }[]>(`${base}/projects/${ref}/health?services=auth,db,rest,realtime,storage`, h).catch(() => []),
+          sql("select schemaname as esquema, relname as nome, n_live_tup::bigint as linhas, pg_total_relation_size(relid)::bigint as bytes from pg_stat_user_tables order by n_live_tup desc limit 8"),
         ]);
         const logs = await pedir<{ result?: { timestamp: number | string; event_message: string; error_severity?: string }[] }>(
           `${base}/projects/${ref}/analytics/endpoints/logs.all?iso_timestamp_start=${encodeURIComponent(new Date(Date.now() - 3600000).toISOString())}&sql=${encodeURIComponent("select timestamp, event_message from postgres_logs order by timestamp desc limit 15")}`,
@@ -244,6 +245,7 @@ const LEITORES: Record<Servico, Leitor> = {
           bancoBytes: Number(tamanho?.[0]?.bytes ?? 0),
           buckets: (buckets ?? []).map((b) => ({ nome: String(b.name), publico: Boolean(b.public), arquivos: Number(b.arquivos ?? 0), bytes: Number(b.bytes ?? 0) })),
           servicos: saude.map((s) => ({ nome: s.name, saudavel: s.healthy, status: s.status })),
+          tabelas: (tabelas ?? []).map((t) => ({ nome: String(t.esquema) === "public" ? String(t.nome) : `${String(t.esquema)}.${String(t.nome)}`, linhas: Number(t.linhas ?? 0), bytes: Number(t.bytes ?? 0) })),
           logs: (logs.result ?? []).map((l) => ({ data: typeof l.timestamp === "number" ? new Date(l.timestamp / 1000).toISOString() : String(l.timestamp), texto: String(l.event_message).slice(0, 300) })),
           semSql: usuarios === null,
         };

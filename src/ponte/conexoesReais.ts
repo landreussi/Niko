@@ -79,6 +79,7 @@ export interface DadosSupabase {
     bancoBytes: number;
     buckets: { nome: string; publico: boolean; arquivos: number; bytes: number }[];
     servicos: { nome: string; saudavel: boolean; status: string }[];
+    tabelas?: { nome: string; linhas: number; bytes: number }[];
     logs: { data: string; texto: string }[];
     semSql: boolean;
   }[];

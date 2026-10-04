@@ -50,7 +50,7 @@
                     "updater":  {
                                     "pubkey":  "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDQ4NDg1ODRGQ0IyMThBOTgKUldTWWlpSExUMWhJU04zK0l4TUsxT0Z1aHkxQzVtOCtXZWZRd3pUZ3dYKzdOckhBay96OUFRczMK",
                                     "endpoints":  [
-                                                      "https://github.com/vitorcgo/niko-releases/releases/latest/download/latest.json"
+                                                      "https://github.com/vitorcgo/niko/releases/latest/download/latest.json"
                                                   ],
                                     "windows":  {
                                                     "installMode":  "passive"

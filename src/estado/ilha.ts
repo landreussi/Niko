@@ -27,6 +27,7 @@ interface EstadoDaIlha {
   recolher: () => void;
   revelar: (r: Revelacao, ms?: number, importancia?: "alta" | "normal") => void;
   dispensarRevelacao: () => void;
+  avisarFalha: (texto: string) => void;
   tocar: () => void;
 }
 
@@ -48,15 +49,17 @@ export const useIlha = create<EstadoDaIlha>()((set, get) => {
 
   return {
     estado: "compacta",
-    aba: "conexoes",
+    aba: "calendario",
     revelacao: null,
     ultimaInteracao: Date.now(),
     definirEstado: (estado) => set({ estado, ultimaInteracao: Date.now() }),
     abrir: (aba) => set({ estado: "expandida", aba: aba ?? get().aba, ultimaInteracao: Date.now() }),
     recolher: () => set({ estado: "compacta", ultimaInteracao: Date.now() }),
     revelar: (r, ms = 4500, importancia = "alta") => {
-      const preferencia = useConfig.getState().ilha.notificacoes;
+      const { ilha, naoPerturbe } = useConfig.getState();
+      const preferencia = ilha.notificacoes;
       if (preferencia === "nenhuma") return;
+      if (naoPerturbe && r.aba !== "foco") return;
       if (importancia === "normal") {
         if (preferencia !== "todas") return;
         if (Date.now() - ultimaNormal < INTERVALO_NORMAL) return;
@@ -76,6 +79,7 @@ export const useIlha = create<EstadoDaIlha>()((set, get) => {
       if (proxima) mostrar(proxima);
       else set({ revelacao: null });
     },
+    avisarFalha: (texto) => mostrar({ r: { texto, tipo: "alerta" }, ms: 4500 }),
     tocar: () => set({ ultimaInteracao: Date.now() }),
   };
 });

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import {
   Check, Play, Pause, SkipBack, SkipForward, RotateCcw, FastForward, Plus, Minus, ArrowUpRight, CornerDownLeft,
-  CalendarClock, GraduationCap, ListTodo, BellRing, MessageSquare, Bell, ChevronLeft, Music,
+  CalendarClock, GraduationCap, ListTodo, BellRing, Bell, ChevronLeft, ChevronRight, Music,
 } from "lucide-react";
 import { useRotina, tarefasDoDia, habitoCumprido } from "../../estado/rotina";
 import { useMidia, posicaoAtual, capaDaFaixa, fundoDaCapa } from "../../estado/midia";
@@ -10,21 +10,23 @@ import { usePomodoro, restanteAtual, formatarRelogio } from "../../estado/pomodo
 import { useEstudos } from "../../estado/estudos";
 import { useOrganizacao } from "../../estado/organizacao";
 import { useComunicacao } from "../../estado/comunicacao";
-import { useAgentes, AGENTES, estadoDoAgente, COR_ESTADO } from "../../estado/agentes";
+import { useAgentes } from "../../estado/agentes";
 import { useConfig } from "../../estado/configuracoes";
 import { useInterface } from "../../estado/interface";
 import { useIlha } from "../../estado/ilha";
-import { Personagem } from "../../personagens/Personagem";
 import { Marca, MARCAS } from "../../marcas/Marca";
 import { Anel } from "../../componentes/Graficos";
 import { T } from "../../textos/textos";
-import { hojeISO, paraISO, horarioRelativo } from "../../utilitarios/datas";
+import { deISO, formatarData, hojeISO, paraISO, horarioRelativo } from "../../utilitarios/datas";
+import { itensDoCalendario } from "../../utilitarios/itensDoCalendario";
+import { ConexaoNaIlha } from "./ConexaoNaIlha";
+import { useFinancas } from "../../estado/financas";
 import { interpretarQuando } from "../../utilitarios/linguagem";
 import { capturar, TIPOS_CAPTURA, type TipoCaptura } from "../../utilitarios/captura";
-import { executarComando, confirmarComando } from "../../utilitarios/comandos";
+import { confirmarComando } from "../../utilitarios/comandos";
 import { formatarDinheiro } from "../../utilitarios/dinheiro";
 import { tocarSom } from "../../ponte/sons";
-import { addDays } from "date-fns";
+import { addDays, addMonths, eachDayOfInterval, endOfMonth, endOfWeek, isSameMonth, startOfMonth, startOfWeek } from "date-fns";
 import type { CartaoConfirmacao, EtapaPomodoro } from "../../tipos";
 
 function Cartao({ veu, children }: { veu?: string; children: React.ReactNode }) {
@@ -309,7 +311,7 @@ export function VisaoFoco() {
   }, [p.rodando]);
   const restante = restanteAtual(p, agora);
   const progresso = 1 - restante / p.duracaoMs;
-  const cor = p.etapa === "foco" ? "#f5f6f8" : "#34d399";
+  const cor = p.etapa === "foco" ? undefined : "#34d399";
   const iniciado = p.rodando || p.restanteMs != null;
 
   return (
@@ -455,7 +457,7 @@ export function VisaoAgenda() {
         ) : (
           itens.map((i) => (
             <div key={i.id} className="ilha-linha">
-              <span style={{ color: "#8e939c", display: "grid" }}>{i.icone}</span>
+              <span style={{ color: "var(--i-dim-2)", display: "grid" }}>{i.icone}</span>
               <span className="cortar privado">{i.titulo}</span>
               <span className="ilha-mini numero">
                 {i.data === hoje ? "" : `${T.geral.amanha} `}
@@ -546,119 +548,108 @@ export function VisaoConexoes() {
                 </button>
               )}
             </div>
-            {atual.ligada && atual.resumo && <div className="ilha-conexao-destaque privado">{atual.resumo}</div>}
-            <span className="ilha-mini">{T.ilha.ultimasMensagens}</span>
-            <div className="ilha-rolagem ilha-linha-tempo">
-              {eventos.filter((e) => e.servico === atual.id).slice(0, 6).map((e, i) => (
-                <motion.div key={e.id} className="ilha-evento" data-tipo={e.tipo} initial={{ opacity: 0, x: 8 }} animate={{ opacity: 1, x: 0, transition: { delay: 0.05 + i * 0.04 } }}>
-                  <span className="ilha-evento-ponto" />
-                  <span className="cortar ilha-sub privado" style={{ flex: 1 }}>{e.texto}</span>
-                  <span className="ilha-mini">{horarioRelativo(e.data)}</span>
-                </motion.div>
-              ))}
-              {eventos.every((e) => e.servico !== atual.id) && <span className="ilha-sub">{T.ilha.semMensagens}</span>}
-            </div>
+            {atual.ligada && <ConexaoNaIlha servico={atual.id} />}
           </motion.div>
         )}
       </AnimatePresence>
     </Cartao>
   );
 }
-export function VisaoTime() {
-  const s = useAgentes();
-  const nomes = useConfig((c) => c.agentes.nomes);
+export function VisaoCalendario() {
+  const eventos = useOrganizacao((s) => s.eventos);
+  const metas = useOrganizacao((s) => s.metas);
+  const tarefas = useRotina((s) => s.tarefas);
+  const datas = useEstudos((s) => s.datas);
+  const revisoes = useEstudos((s) => s.revisoesConteudo);
+  const recorrentes = useFinancas((s) => s.recorrentes);
   const irPara = useInterface((i) => i.irPara);
-  const [comando, setComando] = useState("");
-  const [resposta, setResposta] = useState<{ ok: boolean; texto: string } | null>(null);
-  const [confirmacao, setConfirmacao] = useState<CartaoConfirmacao | null>(null);
-  const [indice, setIndice] = useState(0);
-  const atividades = s.atividades.slice(0, 6);
+  const recolher = useIlha((i) => i.recolher);
+  const hoje = hojeISO();
+  const [agora, setAgora] = useState(() => new Date());
+  const [mes, setMes] = useState(() => startOfMonth(deISO(hoje)));
+  const dias = useMemo(() => eachDayOfInterval({ start: startOfWeek(mes, { weekStartsOn: 1 }), end: endOfWeek(endOfMonth(mes), { weekStartsOn: 1 }) }), [mes]);
+  const inicio = paraISO(dias[0]);
+  const fim = paraISO(dias[dias.length - 1]);
+  const dados = useMemo(() => ({ eventos, metas, tarefas, datas, revisoes, recorrentes }), [eventos, metas, tarefas, datas, revisoes, recorrentes]);
+  const comCompromisso = useMemo(() => new Set(itensDoCalendario(dados, inicio, fim).map((i) => i.data)), [dados, inicio, fim]);
+  const deHoje = useMemo(() => itensDoCalendario(dados, hoje, hoje), [dados, hoje]);
+  const C = T.ilha.calendario;
 
   useEffect(() => {
-    if (atividades.length < 2) return;
-    const t = window.setInterval(() => setIndice((i) => (i + 1) % atividades.length), 2800);
+    const t = window.setInterval(() => setAgora(new Date()), 15000);
     return () => window.clearInterval(t);
-  }, [atividades.length]);
+  }, []);
 
-  const enviar = () => {
-    const texto = comando.trim();
-    if (!texto) return;
-    const r = executarComando(texto.startsWith("/") ? texto : `/${texto}`);
-    if (r.confirmacao) setConfirmacao(r.confirmacao);
-    setResposta({ ok: r.ok, texto: r.resposta.split("\n")[0] });
-    if (r.ok && !r.confirmacao) setComando("");
-    void tocarSom("send");
+  const abrirDia = (iso: string) => {
+    void tocarSom("open");
+    irPara("calendario", { data: iso });
+    recolher();
   };
-
-  const atividade = atividades[indice];
 
   return (
     <Cartao>
-      <div className="linha" style={{ gap: 6 }}>
-        {AGENTES.map((a) => {
-          const estado = estadoDoAgente(s, a);
-          return (
-            <div key={a} className="ilha-agente" style={{ flex: 1 }}>
-              <Personagem agente={a} tamanho={34} halo={false} rotulo={nomes[a]} />
-              <span className="cortar" style={{ fontSize: 11.5, fontWeight: 600, maxWidth: "100%" }}>{nomes[a]}</span>
-              <span className="ilha-mini" style={{ color: COR_ESTADO[estado] }}>{T.agentes.estados[estado]}</span>
-            </div>
-          );
-        })}
-        <button type="button" className="ilha-botao ilha-botao-icone" aria-label={T.ilha.conversar} title={T.ilha.conversar} onClick={() => irPara("chat")}>
-          <MessageSquare size={13} />
-        </button>
-      </div>
-      {confirmacao ? (
-        <ConfirmacaoIlha
-          confirmacao={confirmacao}
-          aoFim={(texto) => {
-            setConfirmacao(null);
-            setResposta(texto ? { ok: true, texto } : null);
-            if (texto) setComando("");
-          }}
-        />
-      ) : (
-        <div className="ilha-campo">
-          <input
-            value={comando}
-            maxLength={300}
-            aria-label={T.ilha.comandoTime}
-            placeholder={T.ilha.comandoTime}
-            onChange={(e) => {
-              setComando(e.target.value);
-              setResposta(null);
-            }}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") enviar();
-            }}
-          />
-        </div>
-      )}
-      {resposta ? (
-        <span className={resposta.ok ? "ilha-ok" : "ilha-erro"} role="status">{resposta.texto}</span>
-      ) : (
-        <div className="ilha-ticker" style={{ height: 22 }}>
-          <AnimatePresence initial={false}>
-            {atividade && (
-              <motion.div
-                key={atividade.id}
-                className="ilha-ticker-linha"
-                initial={{ y: 22, opacity: 0 }}
-                animate={{ y: 0, opacity: 1 }}
-                exit={{ y: -22, opacity: 0 }}
-                transition={{ duration: 0.38, ease: [0.3, 0.9, 0.3, 1] }}
-              >
-                <span className="brilho-texto cortar">{nomes[atividade.agenteId]}: {atividade.texto}</span>
-              </motion.div>
+      <div className="ilha-calendario-corpo">
+        <div className="ilha-calendario-relogio">
+          <span className="ilha-calendario-hora numero">{formatarData(agora, "HH:mm")}</span>
+          <span className="ilha-calendario-data">{formatarData(agora, "EEEE, d 'de' MMMM")}</span>
+          <div className="ilha-calendario-hoje">
+            {deHoje.length === 0 ? (
+              <span className="ilha-sub">{C.semNadaHoje}</span>
+            ) : (
+              <>
+                {deHoje.slice(0, 3).map((item) => (
+                  <button key={item.id} type="button" className="ilha-calendario-item" onClick={() => abrirDia(hoje)}>
+                    <span className="ilha-calendario-item-hora numero">{item.hora ?? C.diaTodo}</span>
+                    <span className="cortar privado">{item.titulo}</span>
+                  </button>
+                ))}
+                {deHoje.length > 3 && <span className="ilha-mini">{C.maisHoje(deHoje.length - 3)}</span>}
+              </>
             )}
-          </AnimatePresence>
+          </div>
         </div>
-      )}
+        <div className="ilha-calendario-mes-bloco">
+          <div className="linha-entre">
+            <span className="ilha-titulo ilha-calendario-mes">{formatarData(mes, "MMMM 'de' yyyy")}</span>
+            <div className="linha" style={{ gap: 2 }}>
+              {!isSameMonth(mes, deISO(hoje)) && (
+                <button type="button" className="ilha-botao-texto" onClick={() => setMes(startOfMonth(deISO(hoje)))}>{C.hoje}</button>
+              )}
+              <button type="button" className="ilha-acao" aria-label={C.anterior} title={C.anterior} onClick={() => setMes((m) => addMonths(m, -1))}><ChevronLeft size={14} /></button>
+              <button type="button" className="ilha-acao" aria-label={C.proximo} title={C.proximo} onClick={() => setMes((m) => addMonths(m, 1))}><ChevronRight size={14} /></button>
+            </div>
+          </div>
+          <div className="ilha-calendario" role="grid" aria-label={formatarData(mes, "MMMM 'de' yyyy")}>
+            {dias.slice(0, 7).map((d) => (
+              <span key={`s-${d.getDay()}`} className="ilha-calendario-semana" aria-hidden="true">{formatarData(d, "EEEEE")}</span>
+            ))}
+            {dias.map((d) => {
+              const iso = paraISO(d);
+              const marcado = comCompromisso.has(iso);
+              const rotulo = formatarData(d, "d 'de' MMMM");
+              return (
+                <button
+                  key={iso}
+                  type="button"
+                  role="gridcell"
+                  className="ilha-calendario-dia numero"
+                  data-hoje={iso === hoje || undefined}
+                  data-fora={!isSameMonth(d, mes) || undefined}
+                  aria-label={marcado ? C.diaComCompromisso(rotulo) : C.abrirDia(rotulo)}
+                  title={marcado ? C.diaComCompromisso(rotulo) : C.abrirDia(rotulo)}
+                  onClick={() => abrirDia(iso)}
+                >
+                  {d.getDate()}
+                  {marcado && <span className="ilha-calendario-ponto" aria-hidden="true" />}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </div>
     </Cartao>
   );
 }
-
 export function VisaoAvisos() {
   const alertas = useAgentes((s) => s.alertas);
   const resolver = useAgentes((s) => s.resolverAlerta);

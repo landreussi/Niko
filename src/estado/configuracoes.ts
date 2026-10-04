@@ -3,13 +3,16 @@ import { persist } from "zustand/middleware";
 import { armazenamento, chave } from "../ponte/armazenamento";
 import type { AgenteId, CartaoConfirmacao, Rota } from "../tipos";
 import type { CategoriaSom } from "../ponte/sons";
+import { FUNDO_DESTAQUE, hexValido, misturar } from "../utilitarios/cores";
+
+const DESTAQUE_ESCURO_PADRAO = "#a78bfa";
 
 export type Tema = "claro" | "escuro" | "sistema";
 export type Paleta = "padrao" | "areia" | "grafite" | "floresta" | "oceano";
 export type ModoBorda = "fixo" | "esconder" | "inteligente";
-export type AbaIlha = "hoje" | "captura" | "midia" | "foco" | "habitos" | "agenda" | "chat" | "conexoes" | "sistema" | "time" | "avisos";
+export type AbaIlha = "calendario" | "hoje" | "captura" | "midia" | "foco" | "habitos" | "agenda" | "chat" | "conexoes" | "avisos";
 
-export const ABAS_ILHA: AbaIlha[] = ["conexoes", "chat", "sistema", "hoje", "captura", "midia", "foco", "habitos", "agenda", "time", "avisos"];
+export const ABAS_ILHA: AbaIlha[] = ["calendario", "conexoes", "chat", "hoje", "captura", "midia", "foco", "habitos", "agenda", "avisos"];
 export type RepousoIlha = "nada" | "relogio" | "midia" | "agente";
 export type BlocoInicio =
   | "time" | "hoje" | "foco" | "financas" | "conexoes" | "revisoes" | "consumo" | "mapa" | "conquistas";
@@ -69,6 +72,8 @@ export interface AtalhoDock {
   url: string;
 }
 
+export const FUNDO_PADRAO_DAS_BORDAS = "#232428";
+
 export interface ConfigIlha {
   ativa: boolean;
   modo: ModoBorda;
@@ -76,11 +81,13 @@ export interface ConfigIlha {
   ordemAbas: AbaIlha[];
   repouso: RepousoIlha;
   tamanho: "pequena" | "media" | "grande";
-  cor: "preta" | "destaque";
+  fundo: string;
+  opacidade: number;
   fechamentoSeg: number;
   abrirHover: boolean;
   esconderSeg: number;
   notificacoes: "todas" | "importantes" | "nenhuma";
+  laterais: boolean;
 }
 
 export interface Configuracoes {
@@ -99,7 +106,7 @@ export interface Configuracoes {
   gruposFechados: string[];
   blocosInicio: { id: BlocoInicio; visivel: boolean }[];
   ilha: ConfigIlha;
-  dock: { ativo: boolean; modo: ModoBorda; favoritos: Rota[]; atalhos: AtalhoDock[]; ampliar: boolean };
+  dock: { ativo: boolean; modo: ModoBorda; favoritos: Rota[]; atalhos: AtalhoDock[]; ampliar: boolean; fundo: string; opacidade: number };
   pomodoro: { foco: number; curta: number; longa: number; ciclos: number; autoProxima: boolean; tique: boolean };
   agua: { meta: number; copo: number };
   sons: { ligado: boolean; volume: number; categorias: Record<CategoriaSom, boolean> };
@@ -107,6 +114,7 @@ export interface Configuracoes {
   consumo: { precoEntrada: number; precoSaida: number; limiteMensal: number; lerPlanos: boolean };
   ia: { provedorId: string | null; modelo: string; reservas: string[]; modelos: Record<string, string>; autoAprovar: CartaoConfirmacao["tipo"][] };
   privacidade: boolean;
+  naoPerturbe: boolean;
   nuncaFinanceiro: boolean;
   pausarConexoes: boolean;
   conquistasAtivas: boolean;
@@ -133,18 +141,20 @@ export const CONFIG_PADRAO: Configuracoes = {
   blocosInicio: BLOCOS_INICIO_PADRAO,
   ilha: {
     ativa: true,
-    modo: "esconder",
-    blocos: { hoje: true, captura: true, midia: true, foco: true, habitos: true, agenda: true, chat: true, conexoes: true, sistema: true, time: true, avisos: true },
+    modo: "inteligente",
+    blocos: { calendario: true, hoje: true, captura: true, midia: true, foco: true, habitos: true, agenda: true, chat: true, conexoes: true, avisos: true },
     ordemAbas: ABAS_ILHA,
     repouso: "agente",
     tamanho: "media",
-    cor: "preta",
+    fundo: FUNDO_PADRAO_DAS_BORDAS,
+    opacidade: 1,
     fechamentoSeg: 15,
     abrirHover: false,
     esconderSeg: 4,
     notificacoes: "importantes",
+    laterais: true,
   },
-  dock: { ativo: true, modo: "inteligente", favoritos: ["chat", "journal", "estudos", "financas", "calendario"], atalhos: [], ampliar: true },
+  dock: { ativo: true, modo: "inteligente", favoritos: ["chat", "journal", "estudos", "financas", "calendario"], atalhos: [], ampliar: true, fundo: FUNDO_PADRAO_DAS_BORDAS, opacidade: 1 },
   pomodoro: { foco: 25, curta: 5, longa: 15, ciclos: 4, autoProxima: false, tique: false },
   agua: { meta: 2000, copo: 250 },
   sons: {
@@ -161,6 +171,7 @@ export const CONFIG_PADRAO: Configuracoes = {
   consumo: { precoEntrada: 0, precoSaida: 0, limiteMensal: 20, lerPlanos: false },
   ia: { provedorId: null, modelo: "", reservas: [], modelos: {}, autoAprovar: [] },
   privacidade: false,
+  naoPerturbe: false,
   nuncaFinanceiro: true,
   pausarConexoes: false,
   conquistasAtivas: true,
@@ -187,7 +198,7 @@ export const useConfig = create<Configuracoes & AcoesConfig>()(
     {
       name: chave("configuracoes"),
       storage: armazenamento,
-      version: 4,
+      version: 7,
       migrate: (salvo, versao) => {
         const s = (salvo ?? {}) as Partial<Configuracoes>;
         if (versao < 2) {
@@ -203,6 +214,30 @@ export const useConfig = create<Configuracoes & AcoesConfig>()(
           semChat.splice(posicao < 0 ? 0 : posicao, 0, "chat");
           const { revisao: _revisao, ...blocos } = antigo.blocos ?? {};
           s.ilha = { ...antigo, ordemAbas: semChat as AbaIlha[], blocos: { ...blocos, chat: true } as Configuracoes["ilha"]["blocos"] };
+        }
+        if (versao < 5) {
+          const corAntiga = (s.ilha as { cor?: string } | undefined)?.cor;
+          const fundo = corAntiga === "destaque" ? FUNDO_DESTAQUE : FUNDO_PADRAO_DAS_BORDAS;
+          if (s.ilha) {
+            const { cor: _cor, ...ilha } = s.ilha as Configuracoes["ilha"] & { cor?: string };
+            s.ilha = { ...ilha, modo: "inteligente", fundo, opacidade: 1 };
+          }
+          if (s.dock) s.dock = { ...s.dock, modo: "inteligente", fundo, opacidade: 1 };
+        }
+        if (versao < 6 && s.ilha) {
+          const ordem = ((s.ilha.ordemAbas as string[] | undefined) ?? []).filter((a) => a !== "time" && a !== "calendario");
+          const { time: _time, ...blocos } = (s.ilha.blocos ?? {}) as Record<string, boolean>;
+          s.ilha = { ...s.ilha, ordemAbas: ["calendario", ...ordem] as AbaIlha[], blocos: { ...blocos, calendario: true } as Configuracoes["ilha"]["blocos"] };
+        }
+        if (versao < 7) {
+          const destaque = s.destaque && hexValido(s.destaque) ? s.destaque : DESTAQUE_ESCURO_PADRAO;
+          const congelar = (fundo: string | undefined) => (fundo === FUNDO_DESTAQUE ? misturar(destaque, "#000000", 0.82) : fundo);
+          if (s.ilha) s.ilha = { ...s.ilha, fundo: congelar(s.ilha.fundo) ?? FUNDO_PADRAO_DAS_BORDAS };
+          if (s.dock) s.dock = { ...s.dock, fundo: congelar(s.dock.fundo) ?? FUNDO_PADRAO_DAS_BORDAS };
+          if (s.ilha) {
+            const { sistema: _sistema, ...blocos } = (s.ilha.blocos ?? {}) as Record<string, boolean>;
+            s.ilha = { ...s.ilha, ordemAbas: ((s.ilha.ordemAbas as string[] | undefined) ?? []).filter((a) => a !== "sistema") as AbaIlha[], blocos: blocos as Configuracoes["ilha"]["blocos"] };
+          }
         }
         if (s.ia) s.ia = { ...s.ia, reservas: s.ia.reservas ?? [], modelos: s.ia.modelos ?? (s.ia.provedorId && s.ia.modelo ? { [s.ia.provedorId]: s.ia.modelo } : {}) };
         return s as Configuracoes & AcoesConfig;

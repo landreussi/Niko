@@ -25,8 +25,8 @@ const manifesto = {
   notes: notas,
   pub_date: new Date().toISOString(),
   platforms: {
-    "windows-x86_64": { signature: assinatura, url: `https://github.com/vitorcgo/niko-releases/releases/download/v${versao}/${instalador}` },
+    "windows-x86_64": { signature: assinatura, url: `https://github.com/vitorcgo/niko/releases/download/v${versao}/${instalador}` },
   },
 };
 writeFileSync(join(pasta, "latest.json"), JSON.stringify(manifesto, null, 2));
-console.log(`\nPronto. Crie a release v${versao} em github.com/vitorcgo/niko-releases e envie:\n  ${join(pasta, instalador)}\n  ${join(pasta, "latest.json")}`);
+console.log(`\nPronto. Crie a release v${versao} em github.com/vitorcgo/niko e envie:\n  ${join(pasta, instalador)}\n  ${join(pasta, "latest.json")}`);

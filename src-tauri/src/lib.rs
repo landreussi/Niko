@@ -17,7 +17,7 @@ mod janela_frente;
 mod miniaturas;
 
 const PORTA: u16 = 47831;
-const ALTURA_ILHA: f64 = 460.0;
+const ALTURA_ILHA: f64 = 720.0;
 const ALTURA_DOCK: f64 = 250.0;
 
 #[derive(Deserialize, Clone, Copy)]
@@ -164,7 +164,7 @@ fn vigiar_cursor(app: AppHandle) {
                 let dentro = areas.get(rotulo).map(|lista| lista.iter().any(|r| x >= r.x - 4.0 && x <= r.x + r.w + 4.0 && y >= r.y - 4.0 && y <= r.y + r.h + 4.0)).unwrap_or(false);
                 let estava_fora = *fora.get(rotulo).unwrap_or(&false);
                 let agora_fora = !dentro;
-                if fora.get(rotulo).is_none() || estava_fora != agora_fora {
+                if !fora.contains_key(rotulo) || estava_fora != agora_fora {
                     let _ = janela.set_ignore_cursor_events(agora_fora);
                     if agora_fora {
                         let _ = janela.emit_to(rotulo, "niko://cursor-fora", ());
@@ -282,15 +282,21 @@ pub fn run() {
             iniciar_ponte(&handle, &token);
 
             let monitor = app.primary_monitor()?.or(app.available_monitors()?.into_iter().next());
-            let (mx, my, mw, mh, escala) = match &monitor {
+            let (mx, my, mw, mh) = match &monitor {
                 Some(m) => {
                     let escala = m.scale_factor();
                     let area = m.work_area();
-                    (area.position.x as f64 / escala, area.position.y as f64 / escala, area.size.width as f64 / escala, area.size.height as f64 / escala, escala)
+                    (area.position.x as f64 / escala, area.position.y as f64 / escala, area.size.width as f64 / escala, area.size.height as f64 / escala)
                 }
-                None => (0.0, 0.0, 1920.0, 1040.0, 1.0),
+                None => (0.0, 0.0, 1920.0, 1040.0),
             };
-            let _ = escala;
+            let (tela_x, tela_y, tela_largura) = match &monitor {
+                Some(m) => {
+                    let escala = m.scale_factor();
+                    (m.position().x as f64 / escala, m.position().y as f64 / escala, m.size().width as f64 / escala)
+                }
+                None => (mx, my, mw),
+            };
 
             let sistema = WebviewWindowBuilder::new(app, "sistema", WebviewUrl::App("index.html".into()))
                 .title("Niko")
@@ -309,7 +315,7 @@ pub fn run() {
                 }
             });
 
-            criar_sobreposta(&handle, "ilha", my, mx, mw, ALTURA_ILHA)?;
+            criar_sobreposta(&handle, "ilha", tela_y, tela_x, tela_largura, ALTURA_ILHA)?;
             criar_sobreposta(&handle, "dock", my + mh - ALTURA_DOCK, mx, mw, ALTURA_DOCK)?;
             for rotulo in ["ilha", "dock"] {
                 if let Some(j) = handle.get_webview_window(rotulo) {
@@ -346,8 +352,7 @@ pub fn run() {
 
     app.run(|handle, evento| {
         if let RunEvent::Exit = evento {
-            barra_windows::reservar_espaco_do_dock(handle, false);
-            barra_windows::restaurar(handle);
+            barra_windows::reservar_espaco_do_dock(handle, false);            barra_windows::restaurar(handle);
             parar_ponte(handle);
         }
     });

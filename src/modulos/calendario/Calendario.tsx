@@ -11,21 +11,13 @@ import { useInterface } from "../../estado/interface";
 import { T } from "../../textos/textos";
 import { dataValida, deISO, formatar, formatarData, hojeISO, horaValida, paraISO } from "../../utilitarios/datas";
 import { baixarArquivo, lerArquivoTexto } from "../../utilitarios/basicos";
-import { formatarDinheiro } from "../../utilitarios/dinheiro";
 import { EVENTO_NOVO } from "../../janelas/area-de-trabalho/usarAtalhos";
-import type { Evento, Repeticao } from "../../tipos";
+import type { Repeticao } from "../../tipos";
+import { itensDoCalendario, type FonteDoCalendario, type ItemDoCalendario } from "../../utilitarios/itensDoCalendario";
 
-type Fonte = keyof typeof T.calendario.fontes;
+type Fonte = FonteDoCalendario;
 type Vista = "mes" | "semana" | "agenda";
-
-interface Item {
-  id: string;
-  titulo: string;
-  data: string;
-  hora?: string;
-  fonte: Fonte;
-  evento?: Evento;
-}
+type Item = ItemDoCalendario;
 
 const COR_FONTE: Record<Fonte, string> = {
   eventos: "#3b6fe0",
@@ -36,20 +28,6 @@ const COR_FONTE: Record<Fonte, string> = {
 };
 
 const FONTES = Object.keys(T.calendario.fontes) as Fonte[];
-
-function ocorrencias(e: Evento, inicio: string, fim: string): string[] {
-  if (e.repeticao === "nenhuma") return e.data >= inicio && e.data <= fim ? [e.data] : [];
-  const resultado: string[] = [];
-  let d = deISO(e.data);
-  let protecao = 0;
-  while (paraISO(d) <= fim && protecao < 800) {
-    const iso = paraISO(d);
-    if (iso >= inicio) resultado.push(iso);
-    d = e.repeticao === "diaria" ? addDays(d, 1) : e.repeticao === "semanal" ? addWeeks(d, 1) : addMonths(d, 1);
-    protecao++;
-  }
-  return resultado;
-}
 
 function escaparIcs(t: string) {
   return t.replace(/\\/g, "\\\\").replace(/;/g, "\\;").replace(/,/g, "\\,").replace(/\n/g, "\\n");
@@ -207,25 +185,7 @@ export default function Calendario() {
   const inicioISO = paraISO(intervalo.inicio);
   const fimISO = paraISO(intervalo.fim);
 
-  const gerar = useMemo(() => (de: string, ate: string) => {
-    const lista: Item[] = [];
-    for (const e of eventos) for (const d of ocorrencias(e, de, ate)) lista.push({ id: `${e.id}-${d}`, titulo: e.titulo, data: d, hora: e.hora, fonte: "eventos", evento: e });
-    for (const t of tarefas) if (t.data && t.data >= de && t.data <= ate && t.status !== "cancelada") lista.push({ id: t.id, titulo: t.titulo, data: t.data, hora: t.hora, fonte: "tarefas" });
-    for (const d of datas) if (d.data >= de && d.data <= ate) lista.push({ id: d.id, titulo: `${T.estudos.tiposData[d.tipo]}: ${d.titulo}`, data: d.data, fonte: "estudos" });
-    for (const r of revisoes) if (!r.feita && r.data >= de && r.data <= ate) lista.push({ id: r.id, titulo: T.calendario.revisao, data: r.data, fonte: "estudos" });
-    for (const m of metas) if (m.prazo && m.prazo >= de && m.prazo <= ate) lista.push({ id: m.id, titulo: m.nome, data: m.prazo, fonte: "metas" });
-    for (const r of recorrentes) {
-      if (!r.ativa) continue;
-      let d = startOfMonth(deISO(de));
-      while (paraISO(d) <= ate) {
-        const dia = paraISO(new Date(d.getFullYear(), d.getMonth(), Math.min(r.dia, endOfMonth(d).getDate())));
-        if (dia >= de && dia <= ate && (r.frequencia === "mensal" || d.getMonth() + 1 === r.mesAnual)) lista.push({ id: `${r.id}-${dia}`, titulo: `${r.descricao} ${formatarDinheiro(r.valor)}`, data: dia, fonte: "financas" });
-        d = addMonths(d, 1);
-      }
-    }
-    return lista.filter((i) => fontes[i.fonte]).sort((a, b) => `${a.data}${a.hora ?? "99"}`.localeCompare(`${b.data}${b.hora ?? "99"}`));
-  }, [eventos, tarefas, datas, revisoes, metas, recorrentes, fontes]);
-
+  const gerar = useMemo(() => (de: string, ate: string) => itensDoCalendario({ eventos, tarefas, datas, revisoes, metas, recorrentes }, de, ate).filter((i) => fontes[i.fonte]), [eventos, tarefas, datas, revisoes, metas, recorrentes, fontes]);
   const itens = useMemo(() => gerar(inicioISO, fimISO), [gerar, inicioISO, fimISO]);
   const proximos = useMemo(() => gerar(hoje, paraISO(addDays(deISO(hoje), 6))).filter((i) => !repeteTodoDia(i)), [gerar, hoje]);
   const doDiaSelecionado = useMemo(() => gerar(diaSelecionado, diaSelecionado), [gerar, diaSelecionado]);

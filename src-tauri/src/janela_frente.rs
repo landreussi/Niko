@@ -1,4 +1,5 @@
 use serde::Serialize;
+use tauri::{AppHandle, Manager};
 use windows::Win32::Foundation::{HWND, POINT, RECT};
 use windows::Win32::Graphics::Gdi::{GetMonitorInfoW, MonitorFromPoint, MonitorFromWindow, HMONITOR, MONITORINFO, MONITOR_DEFAULTTONEAREST, MONITOR_DEFAULTTOPRIMARY};
 use windows::Win32::UI::Shell::{SHQueryUserNotificationState, QUNS_PRESENTATION_MODE, QUNS_RUNNING_D3D_FULL_SCREEN};
@@ -6,11 +7,21 @@ use windows::Win32::UI::WindowsAndMessaging::{GetClassNameW, GetForegroundWindow
 
 const CLASSES_DO_SHELL: [&str; 4] = ["Progman", "WorkerW", "Shell_TrayWnd", "Shell_SecondaryTrayWnd"];
 
+#[derive(Serialize, Default, Clone, Copy, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum TipoDaFrente {
+    #[default]
+    AreaDeTrabalho,
+    Sobreposta,
+    App,
+}
+
 #[derive(Serialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct EstadoDaFrente {
     cobre: bool,
     tela_cheia: bool,
+    frente: TipoDaFrente,
 }
 
 fn windows_em_tela_cheia() -> bool {
@@ -33,7 +44,11 @@ unsafe fn retangulo_cobre_monitor(janela: HWND, monitor: HMONITOR) -> bool {
     retangulo.left <= tela.left && retangulo.top <= tela.top && retangulo.right >= tela.right && retangulo.bottom >= tela.bottom
 }
 
-unsafe fn ler_janela_da_frente() -> EstadoDaFrente {
+fn e_janela_do_sistema(app: &AppHandle, janela: HWND) -> bool {
+    app.get_webview_window("sistema").and_then(|j| j.hwnd().ok()).map(|h| h.0 == janela.0).unwrap_or(false)
+}
+
+unsafe fn ler_janela_da_frente(app: &AppHandle) -> EstadoDaFrente {
     let frente = GetForegroundWindow();
     if frente.is_invalid() {
         return EstadoDaFrente::default();
@@ -41,7 +56,8 @@ unsafe fn ler_janela_da_frente() -> EstadoDaFrente {
     let mut pid = 0u32;
     GetWindowThreadProcessId(frente, Some(&mut pid));
     if pid == std::process::id() {
-        return EstadoDaFrente::default();
+        let tipo = if e_janela_do_sistema(app, frente) { TipoDaFrente::App } else { TipoDaFrente::Sobreposta };
+        return EstadoDaFrente { frente: tipo, ..Default::default() };
     }
     let mut classe = [0u16; 64];
     let tamanho = GetClassNameW(frente, &mut classe).max(0) as usize;
@@ -51,16 +67,16 @@ unsafe fn ler_janela_da_frente() -> EstadoDaFrente {
     }
     let monitor = MonitorFromWindow(frente, MONITOR_DEFAULTTONEAREST);
     if monitor != MonitorFromPoint(POINT { x: 0, y: 0 }, MONITOR_DEFAULTTOPRIMARY) {
-        return EstadoDaFrente::default();
+        return EstadoDaFrente { frente: TipoDaFrente::App, ..Default::default() };
     }
     let maximizada = IsZoomed(frente).as_bool();
     let cobre_monitor = retangulo_cobre_monitor(frente, monitor);
-    EstadoDaFrente { cobre: maximizada || cobre_monitor, tela_cheia: !maximizada && cobre_monitor }
+    EstadoDaFrente { cobre: maximizada || cobre_monitor, tela_cheia: !maximizada && cobre_monitor, frente: TipoDaFrente::App }
 }
 
 #[tauri::command]
-pub fn frente_cobre_tela() -> EstadoDaFrente {
-    let janela = unsafe { ler_janela_da_frente() };
+pub fn frente_cobre_tela(app: AppHandle) -> EstadoDaFrente {
+    let janela = unsafe { ler_janela_da_frente(&app) };
     let tela_cheia = janela.tela_cheia || windows_em_tela_cheia();
-    EstadoDaFrente { cobre: janela.cobre || tela_cheia, tela_cheia }
+    EstadoDaFrente { cobre: janela.cobre || tela_cheia, tela_cheia, frente: if tela_cheia { TipoDaFrente::App } else { janela.frente } }
 }

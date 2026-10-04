@@ -212,12 +212,15 @@ export function reservarEspacoDoDock(reservar: boolean) {
   return invocar("reservar_dock", { reservar });
 }
 
+export type TipoDaFrente = "area_de_trabalho" | "sobreposta" | "app";
+
 export interface EstadoDaFrente {
   cobre: boolean;
   telaCheia: boolean;
+  frente: TipoDaFrente;
 }
 
-const FRENTE_LIVRE: EstadoDaFrente = { cobre: false, telaCheia: false };
+const FRENTE_LIVRE: EstadoDaFrente = { cobre: false, telaCheia: false, frente: "area_de_trabalho" };
 
 export function usarEstadoDaFrente(ativo: boolean): EstadoDaFrente {
   const [estado, setEstado] = useState<EstadoDaFrente>(FRENTE_LIVRE);
@@ -232,7 +235,8 @@ export function usarEstadoDaFrente(ativo: boolean): EstadoDaFrente {
       if (!vivo) return;
       const cobre = Boolean(r?.cobre);
       const telaCheia = Boolean(r?.telaCheia);
-      setEstado((anterior) => (anterior.cobre === cobre && anterior.telaCheia === telaCheia ? anterior : { cobre, telaCheia }));
+      const frente: TipoDaFrente = r?.frente === "app" || r?.frente === "sobreposta" ? r.frente : "area_de_trabalho";
+      setEstado((anterior) => (anterior.cobre === cobre && anterior.telaCheia === telaCheia && anterior.frente === frente ? anterior : { cobre, telaCheia, frente }));
     };
     void ler();
     const t = window.setInterval(() => void ler(), 800);

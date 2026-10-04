@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import {
-  ListTodo, Zap, Music, Timer, Repeat, CalendarClock, MessageCircle, Plug, Users, Bell, Volume2, VolumeX, AppWindow, ChevronUp, Check, CircleAlert, Laptop, Download,
+  ListTodo, Zap, Music, Timer, Repeat, CalendarClock, CalendarDays, MessageCircle, Plug, Bell, Volume2, VolumeX, AppWindow, ChevronUp, Check, CircleAlert, Download,
   type LucideIcon,
 } from "lucide-react";
 import { useConfig, type AbaIlha } from "../../estado/configuracoes";
@@ -9,21 +9,21 @@ import { useIlha } from "../../estado/ilha";
 import { useInterface } from "../../estado/interface";
 import { useAgentes, AGENTES, estadoDoAgente, alertaFresco } from "../../estado/agentes";
 import { usePomodoro, restanteAtual, formatarRelogio } from "../../estado/pomodoro";
-import { useMidia, fundoDaCapa } from "../../estado/midia";
+import { useMidia, fundoDaCapa, midiaAtivaNaIlha } from "../../estado/midia";
 import { Personagem } from "../../personagens/Personagem";
 import { Marca } from "../../marcas/Marca";
 import { Anel } from "../../componentes/Graficos";
 import { T } from "../../textos/textos";
 import { tocarSom } from "../../ponte/sons";
 import {
-  VisaoHoje, VisaoCaptura, VisaoMidia, VisaoFoco, VisaoHabitos, VisaoAgenda, VisaoConexoes, VisaoTime, VisaoAvisos,
+  VisaoHoje, VisaoCaptura, VisaoMidia, VisaoFoco, VisaoHabitos, VisaoAgenda, VisaoConexoes, VisaoCalendario, VisaoAvisos,
 } from "./Visoes";
 import { alguemCobre } from "../geometria";
-import { VisaoSistema } from "./VisaoSistema";
 import { VisaoChat } from "./VisaoChat";
 import { useAtualizacao } from "../../estado/atualizacao";
 import { NATIVO, usarAreaInterativa, usarCursorFora, usarEstadoDaFrente } from "../../desktop/desktop";
-import { sistema } from "../../ponte/ponteLocal";
+import { BarraDoTopo, ALTURA_DA_FAIXA } from "./barra/BarraDoTopo";
+import { usarAparenciaDeBorda, variaveisDaBorda } from "../aparencia";
 import type { AgenteId, EstadoAgente } from "../../tipos";
 import "./ilha.css";
 
@@ -36,8 +36,7 @@ const ICONE_ABA: Record<AbaIlha, LucideIcon> = {
   agenda: CalendarClock,
   chat: MessageCircle,
   conexoes: Plug,
-  sistema: Laptop,
-  time: Users,
+  calendario: CalendarDays,
   avisos: Bell,
 };
 
@@ -50,8 +49,7 @@ const VISAO_ABA: Record<AbaIlha, () => React.JSX.Element> = {
   agenda: VisaoAgenda,
   chat: VisaoChat,
   conexoes: VisaoConexoes,
-  sistema: VisaoSistema,
-  time: VisaoTime,
+  calendario: VisaoCalendario,
   avisos: VisaoAvisos,
 };
 
@@ -63,9 +61,8 @@ const ALTURA_ABA: Record<AbaIlha, number> = {
   habitos: 230,
   agenda: 220,
   chat: 300,
-  conexoes: 270,
-  sistema: 330,
-  time: 214,
+  conexoes: 350,
+  calendario: 286,
   avisos: 178,
 };
 
@@ -75,7 +72,8 @@ function estadoCalmo(e: EstadoAgente): EstadoAgente {
   return e === "alerta" || e === "erro" ? "ocioso" : e;
 }
 const LARGURA_EXPANDIDA = 660;
-const AGENTE_DA_ABA: Partial<Record<AbaIlha, AgenteId>> = { hoje: "organizador", habitos: "organizador", agenda: "organizador", foco: "organizador", conexoes: "java", sistema: "operador" };
+const ALTURA_COMPACTA = 30;
+const AGENTE_DA_ABA: Partial<Record<AbaIlha, AgenteId>> = { calendario: "organizador", hoje: "organizador", habitos: "organizador", agenda: "organizador", foco: "organizador", conexoes: "java" };
 const MOLA = { type: "spring" as const, visualDuration: 0.5, bounce: 0.2 };
 const FECHAR = { duration: 0.34, ease: [0.45, 0, 0.2, 1] as [number, number, number, number] };
 
@@ -107,10 +105,10 @@ export function Ilha() {
   const recolher = useIlha((s) => s.recolher);
   useInterface((s) => s.sistemaMaximizado);
   useInterface((s) => s.geometria);
-  useInterface((s) => s.janelasConexao);
+  const janelasConexao = useInterface((s) => s.janelasConexao);
   const [revelada, setRevelada] = useState(false);
-  useInterface((s) => s.sistemaAberto);
-  useInterface((s) => s.sistemaMinimizado);
+  const sistemaAberto = useInterface((s) => s.sistemaAberto);
+  const sistemaMinimizado = useInterface((s) => s.sistemaMinimizado);
   const irPara = useInterface((s) => s.irPara);
   const agentes = useAgentes();
   const pomodoro = usePomodoro();
@@ -126,8 +124,10 @@ export function Ilha() {
       window.clearInterval(sempre);
     };
   }, []);
-  usarAreaInterativa([".ilha-raiz .ilha", ".ilha-gatilho"]);
+  usarAreaInterativa([".ilha-raiz .ilha", ".ilha-gatilho", ".ilha-barra-aba", ".ilha-pop"]);
   usarCursorFora(useCallback(() => setSobre(false), []));
+  const [barraEmUso, setBarraEmUso] = useState(false);
+  const aparencia = usarAparenciaDeBorda(cfg.fundo, cfg.opacidade);
   const [restanteFechar, setRestanteFechar] = useState<number | null>(null);
   const anterior = useRef({ w: 0, h: 0 });
   const relogioHover = useRef<number | undefined>(undefined);
@@ -140,13 +140,15 @@ export function Ilha() {
     [],
   );
 
-  const [notebook, setNotebook] = useState(false);
-  useEffect(() => {
-    void sistema.tipo().then((t) => setNotebook(t.notebook));
-  }, []);
-  const abas = cfg.ordemAbas.filter((a) => cfg.blocos[a] && (a !== "sistema" || notebook));
+  const abas = cfg.ordemAbas.filter((a) => cfg.blocos[a]);
   const abaAtual = abas.includes(aba) ? aba : abas[0] ?? "hoje";
   const frente = usarEstadoDaFrente(cfg.ativa);
+  const [areaDeTrabalhoNativa, setAreaDeTrabalhoNativa] = useState(true);
+  useEffect(() => {
+    if (frente.frente !== "sobreposta") setAreaDeTrabalhoNativa(frente.frente === "area_de_trabalho");
+  }, [frente.frente]);
+  const appAbertoNoNavegador = (sistemaAberto && !sistemaMinimizado) || janelasConexao.some((j) => !j.minimizada);
+  const naAreaDeTrabalho = NATIVO ? areaDeTrabalhoNativa : !appAbertoNoNavegador;
   const coberta = cfg.modo === "inteligente" && !revelada && (NATIVO ? frente.cobre : alguemCobre({ x: (window.innerWidth - LARGURA_EXPANDIDA) / 2, y: 0, w: LARGURA_EXPANDIDA, h: 40 }));
   const pomodoroIniciado = pomodoro.rodando || pomodoro.restanteMs != null;
   const agora = useAgora(1000, pomodoro.rodando && estado !== "expandida");
@@ -159,10 +161,10 @@ export function Ilha() {
   const estadoEfetivo = coberta && estado !== "expandida" && !revelacao ? "escondida" : cfg.modo === "fixo" && estado === "escondida" ? "compacta" : estado;
 
   useEffect(() => {
-    if (cfg.modo !== "esconder" || estadoEfetivo !== "compacta" || sobre || revelacao || frescos > 0 || pomodoro.rodando || atualizacao.fase !== "nada") return;
+    if (cfg.modo !== "esconder" || estadoEfetivo !== "compacta" || sobre || barraEmUso || revelacao || frescos > 0 || pomodoro.rodando || atualizacao.fase !== "nada") return;
     const t = window.setTimeout(() => definirEstado("escondida"), cfg.esconderSeg * 1000);
     return () => window.clearTimeout(t);
-  }, [cfg.modo, cfg.esconderSeg, estadoEfetivo, sobre, revelacao, frescos, pomodoro.rodando, definirEstado, atualizacao.fase]);
+  }, [cfg.modo, cfg.esconderSeg, estadoEfetivo, sobre, barraEmUso, revelacao, frescos, pomodoro.rodando, definirEstado, atualizacao.fase]);
 
   useEffect(() => {
     if (estado === "expandida" && abaAtual === "avisos") useAgentes.getState().marcarVistos();
@@ -219,13 +221,13 @@ export function Ilha() {
     if (atualizacao.fase !== "nada") return { tipo: "atualizacao" as const, largura: 350 };
     if (revelacao) return { tipo: "revelacao" as const, largura: 340 };
     if (pomodoroIniciado) return { tipo: "pomodoro" as const, largura: midia.tocando ? 330 : 290 };
-    if (midia.tocando && midia.faixa) return { tipo: "midia" as const, largura: 330 };
+    if (midiaAtivaNaIlha(midia, midia.lidoEm)) return { tipo: "midia" as const, largura: 330 };
     if (trabalhando.length > 0) return { tipo: "trabalho" as const, largura: 280 };
     if (cfg.repouso === "relogio") return { tipo: "relogio" as const, largura: 190 };
     if (cfg.repouso === "midia") return { tipo: "midia" as const, largura: 330 };
     if (cfg.repouso === "agente") return { tipo: "agente" as const, largura: 230 };
     return { tipo: "nada" as const, largura: 120 };
-  }, [revelacao, pomodoroIniciado, midia.tocando, Boolean(midia.faixa), trabalhando.length, cfg.repouso, atualizacao.fase]);
+  }, [revelacao, pomodoroIniciado, midia.tocando, midia.tocouPorUltimoEm, midia.lidoEm, Boolean(midia.faixa), trabalhando.length, cfg.repouso, atualizacao.fase]);
 
   if (!cfg.ativa || frente.telaCheia) return null;
 
@@ -234,7 +236,7 @@ export function Ilha() {
     estadoEfetivo === "escondida"
       ? { w: 120, h: 6, r: 6 }
       : estadoEfetivo === "compacta"
-        ? { w: compacta.largura, h: 34, r: 14 }
+        ? { w: compacta.largura, h: ALTURA_COMPACTA, r: 12 }
         : { w: LARGURA_EXPANDIDA, h: ALTURA_ABA[abaAtual], r: 30 };
   const crescendo = alvo.w * alvo.h >= anterior.current.w * anterior.current.h;
   anterior.current = { w: alvo.w, h: alvo.h };
@@ -243,10 +245,10 @@ export function Ilha() {
   const VisaoAtual = VISAO_ABA[abaAtual];
   const agenteLateral: AgenteId = abaAtual === "avisos" && alertas[0] ? alertas[0].agenteId : AGENTE_DA_ABA[abaAtual] ?? (trabalhando[0] as AgenteId | undefined) ?? favorito;
   const restantePomodoro = restanteAtual(pomodoro, agora);
-  const corFundo = cfg.cor === "destaque" ? "color-mix(in srgb, var(--destaque) 82%, #000)" : "#000";
+  const barraVisivel = cfg.laterais && estadoEfetivo !== "escondida" && naAreaDeTrabalho;
 
   const abaDaCompacta = (): AbaIlha | undefined =>
-    compacta.tipo === "revelacao" ? revelacao?.aba : compacta.tipo === "pomodoro" ? "foco" : compacta.tipo === "midia" ? "midia" : compacta.tipo === "trabalho" ? "time" : undefined;
+    compacta.tipo === "revelacao" ? revelacao?.aba : compacta.tipo === "pomodoro" ? "foco" : compacta.tipo === "midia" ? "midia" : compacta.tipo === "trabalho" ? "chat" : undefined;
 
   const acionarCompacta = () => {
     window.clearTimeout(relogioHover.current);
@@ -291,10 +293,10 @@ export function Ilha() {
         return (
           <>
             <div className="ilha-compacta-lado">
-              <Anel progresso={1 - restantePomodoro / pomodoro.duracaoMs} tamanho={18} espessura={2.5} cor={pomodoro.etapa === "foco" ? "#f5f6f8" : "#34d399"} />
+              <Anel progresso={1 - restantePomodoro / pomodoro.duracaoMs} tamanho={18} espessura={2.5} cor={pomodoro.etapa === "foco" ? undefined : "#34d399"} />
               <span className="ilha-tempo">{formatarRelogio(restantePomodoro)}</span>
             </div>
-            <span className="ilha-compacta-texto" style={{ color: "#8e939c" }}>
+            <span className="ilha-compacta-texto" style={{ color: "var(--i-dim-2)" }}>
               {T.pomodoro.etapas[pomodoro.etapa]}
             </span>
             <div className="ilha-compacta-lado">
@@ -347,6 +349,16 @@ export function Ilha() {
 
   return (
     <>
+      {cfg.laterais && (
+        <BarraDoTopo
+          visivel={barraVisivel}
+          escala={escala}
+          larguraDaIlha={alvo.w * escala}
+          aparencia={aparencia}
+          aoAbrirAba={(a) => abrir(abas.includes(a) ? a : abaAtual)}
+          aoUsar={setBarraEmUso}
+        />
+      )}
       {estadoEfetivo === "escondida" && (
         <div
           className="ilha-gatilho"
@@ -366,7 +378,15 @@ export function Ilha() {
         ref={raiz}
         className="ilha-raiz"
         data-privacidade={privacidade ? "sim" : "nao"}
-        style={{ transform: `translateX(-50%) scale(${escala})`, transformOrigin: "top center", opacity: coberta && estadoEfetivo === "escondida" ? 0 : 1 }}
+        data-fundo-claro={aparencia.claro || undefined}
+        style={{
+          ...variaveisDaBorda(aparencia),
+          transform: `translateX(-50%) scale(${escala})`,
+          transformOrigin: "top center",
+          opacity: coberta && estadoEfetivo === "escondida" ? 0 : 1,
+          ["--topo-orelhas" as string]: `${barraVisivel ? ALTURA_DA_FAIXA : 0}px`,
+          ["--raio-orelha" as string]: barraVisivel ? "10px" : "14px",
+        }}
         onPointerEnter={() => {
           setSobre(true);
           window.clearTimeout(relogioRevelada.current);
@@ -387,7 +407,7 @@ export function Ilha() {
       >
         <motion.div
           className="ilha"
-          style={{ ["--fundo-ilha" as string]: corFundo }}
+          style={{ ["--fundo-ilha" as string]: aparencia.fundo }}
           initial={false}
           animate={{ width: alvo.w, height: alvo.h, borderBottomLeftRadius: alvo.r, borderBottomRightRadius: alvo.r }}
           transition={transicao}
@@ -478,7 +498,7 @@ export function Ilha() {
                         aria-label={T.ilha.abrirSistema}
                         title={T.ilha.abrirSistema}
                         onClick={() => {
-                          const rota = { hoje: "journal", captura: "inicio", midia: "inicio", foco: "estudos", habitos: "journal", agenda: "calendario", chat: "chat", conexoes: "conexoes", sistema: "configuracoes", time: "escritorio", avisos: "inicio" } as const;
+                          const rota = { hoje: "journal", captura: "inicio", midia: "inicio", foco: "estudos", habitos: "journal", agenda: "calendario", chat: "chat", conexoes: "conexoes", calendario: "calendario", avisos: "inicio" } as const;
                           irPara(rota[abaAtual]);
                           recolher();
                           void tocarSom("open");
@@ -492,7 +512,7 @@ export function Ilha() {
                     </div>
                   </div>
                   <div className="ilha-miolo">
-                  {abaAtual !== "time" && abaAtual !== "chat" && <motion.div className="ilha-lateral" initial={{ opacity: 0, x: -10, scale: 0.8 }} animate={{ opacity: 1, x: 0, scale: 1, transition: { delay: 0.2, type: "spring", visualDuration: 0.45, bounce: 0.3 } }}>
+                  {abaAtual !== "chat" && <motion.div className="ilha-lateral" initial={{ opacity: 0, x: -10, scale: 0.8 }} animate={{ opacity: 1, x: 0, scale: 1, transition: { delay: 0.2, type: "spring", visualDuration: 0.45, bounce: 0.3 } }}>
                     <Personagem agente={agenteLateral} tamanho={ALTURA_ABA[abaAtual] < 200 ? 50 : 70} halo={false} rotulo={nomes[agenteLateral]} />
                     <span className="ilha-lateral-nome cortar">{nomes[agenteLateral]}</span>
                     <span className="ilha-lateral-cargo" title={cargos[agenteLateral]}>{cargos[agenteLateral]}</span>

@@ -151,6 +151,60 @@ export const sistema = {
   configuracoes: (pagina: "bluetooth" | "wifi" | "bateria") => pedir("/sistema/configuracoes", { method: "POST", body: JSON.stringify({ pagina }) }),
 };
 
+export interface NivelDeAudio {
+  volume: number;
+  mudo: boolean;
+}
+
+export interface SessaoDeAudio {
+  pid: number;
+  sistema: boolean;
+  ativa: boolean;
+  volume: number;
+  mudo: boolean;
+  nome: string;
+  caminho: string | null;
+  icone: string | null;
+}
+
+export interface EstadoAudio {
+  saida: NivelDeAudio | null;
+  entrada: NivelDeAudio | null;
+  sessoes: SessaoDeAudio[];
+}
+
+export interface ItemDaBandeja {
+  caminho: string;
+  nome: string;
+  dica: string | null;
+  icone: string | null;
+}
+
+export type AlvoDeAudio = "saida" | "entrada";
+export type FerramentaWindows = "captura" | "teclado" | "iniciar" | "papelDeParede";
+export type AcaoDeEnergia = "bloquear" | "suspender" | "reiniciar" | "desligar";
+
+function comoLista<T>(valor: T[] | T | null | undefined): T[] {
+  return Array.isArray(valor) ? valor : valor ? [valor] : [];
+}
+
+function enviar<T>(caminho: string, corpo: unknown) {
+  return pedir<T>(caminho, { method: "POST", body: JSON.stringify(corpo) });
+}
+
+export const controle = {
+  audio: () => pedir<EstadoAudio>("/controle/audio").then((r) => ({ ...r, sessoes: comoLista(r.sessoes) })),
+  volume: (alvo: AlvoDeAudio, volume: number) => enviar("/controle/volume", { alvo, volume }),
+  mudo: (alvo: AlvoDeAudio, mudo: boolean) => enviar("/controle/mudo", { alvo, mudo }),
+  sessao: (pids: number[], ajuste: { volume?: number; mudo?: boolean }) => enviar("/controle/sessao", { pids, ...ajuste }),
+  tema: () => pedir<{ escuro: boolean }>("/controle/tema"),
+  definirTema: (escuro: boolean) => enviar<{ escuro: boolean }>("/controle/tema", { escuro }),
+  ferramenta: (nome: FerramentaWindows) => enviar("/controle/ferramenta", { nome }),
+  energia: (tipo: AcaoDeEnergia) => enviar("/controle/energia", { tipo, confirmacao: "CONFIRMADO" }),
+  bandeja: () => pedir<{ itens: ItemDaBandeja[] | ItemDaBandeja | null }>("/controle/bandeja").then((r) => comoLista(r.itens)),
+  abrirDaBandeja: (caminho: string) => enviar("/controle/bandeja", { caminho }),
+};
+
 export function lerConsumo(forcar = false) {
   return pedir<Consumo>(`/consumo${forcar ? "?forcar=1" : ""}`);
 }
