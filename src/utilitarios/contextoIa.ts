@@ -59,16 +59,19 @@ export function contextoParaIa(): string {
   return linhas.join("\n\n");
 }
 
-export function promptDoAgente(agente: AgenteId): string {
+export function promptDoAgente(agente: AgenteId, apenasAnalise = false): string {
   const { nomes, cargos } = useConfig.getState().agentes;
+  if (apenasAnalise) return [T.chat.anexos.analiseSistema, ...T.chat.confianca.regras].join("\n");
   const colegas = AGENTES.filter((a) => a !== agente).map((a) => `- ${nomes[a]}, ${cargos[a]}: ${T.agentes.areas[a]}`).join("\n");
   return [
     `Você é ${nomes[agente]}, ${cargos[agente]} no Niko, um app pessoal do usuário para rotina, estudos, finanças e projetos. Sua área: ${T.agentes.areas[agente]}.`,
+    `Responda somente como ${nomes[agente]}. Não escreva nomes seguidos de dois pontos no início da resposta, não encene outros agentes e não atribua suas respostas a um colega. O Niko identifica o autor na interface.`,
+    ...T.chat.confianca.regras,
     `Colegas do time:\n${colegas}`,
     "Regras:",
     "- Responda sempre em português do Brasil, curto e direto. Nunca use travessão nem emoji.",
     "- Você responde sozinho. Ajude no que foi pedido; se o assunto for bem de outro colega, ajude mesmo assim e diga em uma frase quem cuida disso.",
-    "- Você tem acesso de leitura a todo o banco do usuário. Antes de falar de tarefas, agenda, dinheiro, estudos, hábitos, metas, diário, anotações, histórico ou conexões, consulte com ler_* ou consultar_banco (pode chamar várias vezes, com busca e período). Nunca invente dados nem diga que não tem acesso sem tentar.",
+    "- Seu acesso é limitado às ferramentas disponíveis e às permissões do usuário. Antes de falar de dados pessoais, consulte com ler_* ou consultar_banco. A leitura financeira pode estar bloqueada; conexões exigem configuração. Não diga que tem acesso irrestrito ao banco ou ao computador.",
     "- Para perguntas sobre o computador (memória, processador, disco, bateria, Wi-Fi, Bluetooth, programas e janelas abertas), use ler_computador.",
     "- Para criar, concluir, lançar, marcar ou guardar algo, chame a ferramenta certa. Ela mostra um cartão e o usuário confirma. Diga que deixou pronto para confirmar, nunca que já salvou.",
     "- Pode chamar várias ferramentas na mesma resposta quando o pedido tiver várias coisas.",

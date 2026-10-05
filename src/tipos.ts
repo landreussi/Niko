@@ -352,6 +352,7 @@ export interface Mensagem {
   confirmacao?: CartaoConfirmacao;
   incompleta?: boolean;
   repetir?: string;
+  analiseAnexo?: boolean;
   confirmacoes?: CartaoConfirmacao[];
   origem?: string;
   acoes?: string[];

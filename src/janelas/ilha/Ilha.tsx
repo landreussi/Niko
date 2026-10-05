@@ -152,7 +152,7 @@ export function Ilha() {
   const coberta = cfg.modo === "inteligente" && !revelada && (NATIVO ? frente.cobre : alguemCobre({ x: (window.innerWidth - LARGURA_EXPANDIDA) / 2, y: 0, w: LARGURA_EXPANDIDA, h: 40 }));
   const pomodoroIniciado = pomodoro.rodando || pomodoro.restanteMs != null;
   const agora = useAgora(1000, pomodoro.rodando && estado !== "expandida");
-  const relogio = useAgora(15000, cfg.repouso === "relogio" || cfg.repouso === "agente");
+  const relogio = useAgora(15000, cfg.repouso === "relogio" || cfg.repouso === "agente" || cfg.repouso === "midia");
   const alertas = agentes.alertas;
   const naoVistos = alertas.filter((a) => !a.visto).length;
   const frescos = alertas.filter((a) => alertaFresco(a, agentes.relogio)).length;
@@ -221,13 +221,13 @@ export function Ilha() {
     if (atualizacao.fase !== "nada") return { tipo: "atualizacao" as const, largura: 350 };
     if (revelacao) return { tipo: "revelacao" as const, largura: 340 };
     if (pomodoroIniciado) return { tipo: "pomodoro" as const, largura: midia.tocando ? 330 : 290 };
-    if (midiaAtivaNaIlha(midia, midia.lidoEm)) return { tipo: "midia" as const, largura: 330 };
+    if (cfg.blocos.midia && midiaAtivaNaIlha(midia)) return { tipo: "midia" as const, largura: 330 };
     if (trabalhando.length > 0) return { tipo: "trabalho" as const, largura: 280 };
     if (cfg.repouso === "relogio") return { tipo: "relogio" as const, largura: 190 };
-    if (cfg.repouso === "midia") return { tipo: "midia" as const, largura: 330 };
+    if (cfg.repouso === "midia") return { tipo: "relogio" as const, largura: 190 };
     if (cfg.repouso === "agente") return { tipo: "agente" as const, largura: 230 };
     return { tipo: "nada" as const, largura: 120 };
-  }, [revelacao, pomodoroIniciado, midia.tocando, midia.tocouPorUltimoEm, midia.lidoEm, Boolean(midia.faixa), trabalhando.length, cfg.repouso, atualizacao.fase]);
+  }, [revelacao, pomodoroIniciado, midia.tocando, Boolean(midia.faixa), trabalhando.length, cfg.repouso, cfg.blocos.midia, atualizacao.fase]);
 
   if (!cfg.ativa || frente.telaCheia) return null;
 

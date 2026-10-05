@@ -3962,3 +3962,5 @@
     grid-template-columns: minmax(0, 1fr);
   }
 }
+.chat-recursos { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+.chat-recursos-aviso { flex-basis: 100%; font-size: 11px; }

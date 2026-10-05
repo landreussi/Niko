@@ -18,6 +18,7 @@ import { baixarArquivo, contem, normalizarTexto } from "../../utilitarios/basico
 import { provedoresEmOrdem, escolherAgente, type ProvedorEmUso } from "../../utilitarios/assistente";
 import { EVENTO_NOVO } from "../../janelas/area-de-trabalho/usarAtalhos";
 import type { AgenteId, Conversa, Mensagem } from "../../tipos";
+import type { AcaoAnexo } from "../../utilitarios/recursosChat";
 
 function grupoDaData(iso: string): string {
   const d = new Date(iso);
@@ -225,7 +226,7 @@ export default function Chat() {
     return T.chat.ajuda.filter((c) => c.startsWith(texto.split(" ")[0])).slice(0, 6);
   }, [texto]);
 
-  const enviar = () => {
+  const enviar = (acaoAnexo?: AcaoAnexo) => {
     const limpo = texto.trim();
     if ((!limpo && anexos.lista.length === 0) || fase || anexos.carregando) return;
     const prontos = anexos.prontos();
@@ -237,7 +238,14 @@ export default function Chat() {
     setHistoricoEnvio((h) => [limpo, ...h].slice(0, 20));
     setTexto("");
     anexos.limpar();
-    void enviarAoTime(conversa.id, limpo, prontos);
+    void enviarAoTime(conversa.id, limpo, prontos, { acaoAnexo });
+  };
+
+  const consultar = (pedido: string) => {
+    if (fase) return;
+    const conversa = atual ?? criar("organizador");
+    setAtualId(conversa.id);
+    void enviarAoTime(conversa.id, pedido);
   };
 
   const exportar = () => {
@@ -371,6 +379,19 @@ export default function Chat() {
               </div>
             )}
             <ChipsAnexos lista={anexos.lista} agente={mascote} aoRemover={anexos.remover} />
+            <div className="chat-recursos" aria-label={T.chat.recursos.capacidades}>
+              {([["/capacidades", T.chat.recursos.capacidades], ["/relatorio", T.chat.recursos.relatorio], ["/pomodoro status", T.chat.recursos.timer]] as const).map(([pedido, rotulo]) => (
+                <Botao key={pedido} pequeno variante="fantasma" disabled={fase !== null} onClick={() => consultar(pedido)}>{rotulo}</Botao>
+              ))}
+            </div>
+            {anexos.lista.length > 0 && anexos.lista.every((a) => a.tipo === "texto") && (
+              <div className="chat-recursos" aria-label={T.chat.anexos.acoesRotulo}>
+                {(Object.keys(T.chat.anexos.acoes) as AcaoAnexo[]).map((acao) => (
+                  <Botao key={acao} pequeno disabled={fase !== null || anexos.carregando || !anexos.prontos().some((a) => a.anexo.texto?.trim())} onClick={() => enviar(acao)}>{T.chat.anexos.acoes[acao]}</Botao>
+                ))}
+                <span className="texto-3 chat-recursos-aviso">{T.chat.anexos.limiteAviso}</span>
+              </div>
+            )}
             <div className="chat-mascote">
             <motion.div className="chat-mascote-boneco" key={mascote} initial={{ scale: 0.6, opacity: 0, y: 6 }} animate={{ scale: 1, opacity: 1, y: 0 }} transition={{ type: "spring", visualDuration: 0.3, bounce: 0.45 }}>
               <Personagem agente={mascote} estado={fase ? "pensando" : texto.trim() ? "ouvindo" : undefined} tamanho={44} rotulo={nomes[mascote]} />
@@ -426,7 +447,7 @@ export default function Chat() {
                 {fase === "respondendo" ? (
                   <Botao variante="secundario" soIcone icone={<Square size={14} />} aria-label={T.chat.parar} onClick={pararResposta} />
                 ) : (
-                  <Botao variante="primario" soIcone icone={<Send size={15} />} aria-label={T.chat.enviar} disabled={(!texto.trim() && anexos.lista.length === 0) || anexos.carregando || fase !== null} onClick={enviar} />
+                  <Botao variante="primario" soIcone icone={<Send size={15} />} aria-label={T.chat.enviar} disabled={(!texto.trim() && anexos.lista.length === 0) || anexos.carregando || fase !== null} onClick={() => enviar()} />
                 )}
               </div>
             </div>

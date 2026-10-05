@@ -111,6 +111,22 @@ Cada agente tem oito estados visíveis (ocioso, ouvindo, pensando, escrevendo, s
 | `Ctrl` `1` a `Ctrl` `9` | Ir para as áreas da barra lateral |
 | `Esc` | Fechar modal, painel ou ilha |
 
+## Recursos do chat
+
+O pomodoro, a lista de capacidades e o relatório semanal funcionam sem provedor de IA:
+
+- `/pomodoro 25` inicia o foco, sem sobrescrever uma sessão existente.
+- `/pomodoro pausar`, `/pomodoro continuar` e `/pomodoro encerrar` controlam a sessão atual. Encerrar registra somente os minutos utilizados e não inicia outra etapa.
+- `/pomodoro status` consulta o estado e o tempo restante real.
+- `/capacidades` lista as ferramentas cadastradas, respeitando as permissões e conexões atuais. Não comprova que o modelo escolhido aceita ferramentas.
+- `/relatorio` calcula os últimos sete dias a partir dos registros locais. Não inclui finanças e não preenche dias sem registro.
+
+Anexos de texto têm botões para resumir, explicar, criar perguntas e extrair texto. Extrair funciona localmente; as demais análises usam o provedor escolhido, com ferramentas de ação desativadas e sem enviar o contexto pessoal do Niko. O conteúdo enviado para análise é limitado a 45 mil caracteres. Imagens não usam esses botões e precisam de um modelo com visão; PDF e pesquisa web ainda não estão disponíveis.
+
+Perguntas sobre Cloudflare e Supabase são encaminhadas ao Java. Menções explícitas continuam escolhendo o agente. Confirmações e resultados de ações vêm das ferramentas, sem anunciar um cartão pendente como salvo. As respostas do modelo são verificadas antes de aparecer, mas isso não elimina todos os possíveis erros de uma IA.
+
+A ilha compacta destaca mídia somente enquanto o Windows informa reprodução ativa. Uma música pausada continua acessível na aba Mídia, sem ocupar automaticamente a compacta. Quando Mídia é escolhida para repouso, a compacta mostra o relógio enquanto não há reprodução.
+
 ## Tecnologias
 
 | Camada | Tecnologia |
@@ -157,7 +173,10 @@ pnpm tauri dev
 
 ```powershell
 pnpm verificar   # checagem de tipos em modo estrito
+pnpm test        # todos os testes isolados, executados em sequência
 pnpm build       # build da interface em dist/
+pnpm chat:testar # testes do chat com provedor falso, sem rede ou banco real
+pnpm midia:testar # testes de mídia pausada e consultas fora de ordem
 pnpm app         # gera o instalador do Windows
 ```
 

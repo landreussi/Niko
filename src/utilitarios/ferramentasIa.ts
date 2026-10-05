@@ -15,11 +15,12 @@ import { hojeISO, diaDoMomento, paraISO } from "./datas";
 import { somar, normalizarTexto } from "./basicos";
 import { acharPorNome, categoriaPelaDescricao } from "./comandos";
 import { T } from "../textos/textos";
+import { lerPomodoro, controlarPomodoro, gerarRelatorioSemanal, textoPomodoro, textoRelatorioSemanal } from "./recursosChat";
 
 type Argumentos = Record<string, unknown>;
 
 export type ResultadoFerramenta =
-  | { tipo: "dados"; conteudo: unknown; resumo?: string }
+  | { tipo: "dados"; conteudo: unknown; resumo?: string; textoVerificado?: string }
   | { tipo: "confirmar"; cartao: CartaoConfirmacao; agente: AgenteId }
   | { tipo: "erro"; mensagem: string };
 
@@ -123,6 +124,25 @@ function cartaoEmail(tipo: "rascunho" | "email", a: Argumentos): ResultadoFerram
 }
 
 const FERRAMENTAS: FerramentaNiko[] = [
+  {
+    definicao: { nome: "ler_pomodoro", descricao: T.chat.recursos.pomodoroDescricao, parametros: { type: "object", properties: {} } },
+    executar: () => ({ tipo: "dados", conteudo: lerPomodoro(), textoVerificado: textoPomodoro() }),
+  },
+  {
+    definicao: { nome: "controlar_pomodoro", descricao: T.chat.recursos.controleDescricao, parametros: { type: "object", properties: { acao: { type: "string", enum: ["pausar", "continuar", "encerrar"] } }, required: ["acao"] } },
+    executar: (a) => controlarPomodoro(texto(a.acao, 20)),
+  },
+  {
+    definicao: { nome: "listar_capacidades", descricao: T.chat.recursos.capacidadesDescricao, parametros: { type: "object", properties: {} } },
+    executar: () => ({ tipo: "dados", conteudo: { ferramentas: definicoesFerramentas(), limites: T.chat.recursos.capacidadesLimites, modelo: T.chat.recursos.capacidadesModelo }, textoVerificado: textoCapacidades() }),
+  },
+  {
+    definicao: { nome: "ler_relatorio_semanal", descricao: T.chat.recursos.relatorioDescricao, parametros: { type: "object", properties: {} } },
+    executar: () => {
+      const relatorio = gerarRelatorioSemanal();
+      return { tipo: "dados", conteudo: relatorio, textoVerificado: textoRelatorioSemanal(relatorio) };
+    },
+  },
   {
     definicao: {
       nome: "consultar_banco",
@@ -371,9 +391,12 @@ const FERRAMENTAS: FerramentaNiko[] = [
       parametros: { type: "object", properties: { minutos: { type: "number", minimum: 1, maximum: 180 }, materia: { type: "string" } } },
     },
     executar: (a) => {
-      const minutos = Math.max(1, Math.min(180, Math.round(Number(a.minutos) || 25)));
+      const minutos = a.minutos === undefined ? useConfig.getState().pomodoro.foco : Number(a.minutos);
+      if (!Number.isFinite(minutos) || minutos < 1 || minutos > 180) return { tipo: "erro", mensagem: T.chat.recursos.minutosInvalidos };
       const materia = acharPorNome(useEstudos.getState().materias, texto(a.materia, 80) || undefined);
+      if (texto(a.materia) && !materia) return { tipo: "erro", mensagem: T.chat.recursos.materiaInvalida };
       const p = usePomodoro.getState();
+      if (p.inicioEtapa || p.rodando || p.restanteMs !== null) return { tipo: "erro", mensagem: T.chat.recursos.timerAtivo };
       p.escolherEtapa("foco");
       p.definirVinculo(materia?.id);
       p.iniciar(minutos);
@@ -498,7 +521,19 @@ const FERRAMENTAS: FerramentaNiko[] = [
 ];
 
 export function definicoesFerramentas(): FerramentaIa[] {
-  return FERRAMENTAS.map((f) => f.definicao);
+  const financeiroBloqueado = useConfig.getState().nuncaFinanceiro;
+  const gmailConectado = useComunicacao.getState().conexoes.some((c) => c.id === "gmail" && c.chaveSalva);
+  return FERRAMENTAS.map((f) => f.definicao).filter((f) => {
+    if (financeiroBloqueado && f.nome === "ler_financas") return false;
+    if (!gmailConectado && ["buscar_emails", "criar_rascunho_email", "enviar_email"].includes(f.nome)) return false;
+    return true;
+  });
+}
+
+export function textoCapacidades(): string {
+  const S = T.chat.recursos;
+  const ferramentas = definicoesFerramentas().map((f) => `- ${f.nome}: ${f.descricao}`);
+  return [S.capacidadesIntroducao, ferramentas.join("\n"), S.capacidadesModelo, S.capacidadesLimites, ...(useConfig.getState().nuncaFinanceiro ? [S.capacidadesPrivacidade] : []), S.capacidadesComandos].join("\n\n");
 }
 
 export async function executarFerramenta(nome: string, argumentos: Argumentos): Promise<ResultadoFerramenta> {

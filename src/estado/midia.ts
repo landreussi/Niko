@@ -33,10 +33,10 @@ interface EstadoMidia {
   podeVoltar: boolean;
   podeBuscar: boolean;
   sincronizar: () => Promise<void>;
-  alternar: () => void;
-  proxima: () => void;
-  anterior: () => void;
-  buscar: (segundos: number) => void;
+  alternar: () => Promise<void>;
+  proxima: () => Promise<void>;
+  anterior: () => Promise<void>;
+  buscar: (segundos: number) => Promise<void>;
 }
 
 const CABECALHOS = { "x-niko": "1", "content-type": "application/json" };
@@ -46,7 +46,7 @@ function mesmaFaixa(a: Faixa | null, b: Faixa): boolean {
 }
 
 function aplicar(r: RespostaMidia, anterior: Faixa | null): Partial<EstadoMidia> {
-  if (!r.sessao || !r.titulo) return { disponivel: true, faixa: null, tocando: false, posicao: 0, lidoEm: Date.now() };
+  if (!r.sessao || !r.titulo) return { disponivel: true, faixa: null, tocando: false, posicao: 0, lidoEm: Date.now(), tocouPorUltimoEm: 0, podeAvancar: false, podeVoltar: false, podeBuscar: false };
   const nova: Faixa = { titulo: r.titulo, artista: r.artista ?? "", app: nomeDoApp(r.app ?? ""), duracao: r.duracao ?? 0, capa: r.capa ?? null };
   return {
     disponivel: true,
@@ -83,9 +83,18 @@ async function pedir(caminho: string, corpo?: unknown): Promise<RespostaMidia | 
 }
 
 export const useMidia = create<EstadoMidia>()((set, get) => {
+  let consultaEmAndamento = false;
+  let acoesEmAndamento = 0;
+  let revisao = 0;
   const agir = async (acao: string, corpo: unknown = {}) => {
-    const r = await pedir(`/${acao}`, corpo);
-    if (r) set(aplicar(r, get().faixa));
+    const atual = ++revisao;
+    acoesEmAndamento++;
+    try {
+      const r = await pedir(`/${acao}`, corpo);
+      if (atual !== revisao) return;
+      if (r) set(aplicar(r, get().faixa));
+      else set({ disponivel: false, tocando: false });
+    } finally { acoesEmAndamento--; }
   };
   return {
     disponivel: false,
@@ -98,27 +107,25 @@ export const useMidia = create<EstadoMidia>()((set, get) => {
     podeVoltar: false,
     podeBuscar: false,
     sincronizar: async () => {
-      const r = await pedir("");
-      if (r) set(aplicar(r, get().faixa));
-      else if (get().disponivel) set({ disponivel: false, faixa: null, tocando: false });
+      if (consultaEmAndamento || acoesEmAndamento) return;
+      consultaEmAndamento = true;
+      const atual = revisao;
+      try {
+        const r = await pedir("");
+        if (atual !== revisao) return;
+        if (r) set(aplicar(r, get().faixa));
+        else set({ disponivel: false, faixa: null, tocando: false });
+      } finally { consultaEmAndamento = false; }
     },
-    alternar: () => {
-      set((s) => ({ tocando: !s.tocando, tocouPorUltimoEm: Date.now(), posicao: posicaoAtual(s, Date.now()), lidoEm: Date.now() }));
-      void agir("alternar");
-    },
-    proxima: () => void agir("proxima"),
-    anterior: () => void agir("anterior"),
-    buscar: (segundos) => {
-      set({ posicao: segundos, lidoEm: Date.now() });
-      void agir("posicao", { segundos });
-    },
+    alternar: () => agir("alternar"),
+    proxima: () => agir("proxima"),
+    anterior: () => agir("anterior"),
+    buscar: (segundos) => agir("posicao", { segundos }),
   };
 });
 
-const MIDIA_PAUSADA_NA_ILHA_MS = 5 * 60000;
-
-export function midiaAtivaNaIlha(s: Pick<EstadoMidia, "faixa" | "tocando" | "tocouPorUltimoEm">, agora: number): boolean {
-  return Boolean(s.faixa) && (s.tocando || agora - s.tocouPorUltimoEm < MIDIA_PAUSADA_NA_ILHA_MS);
+export function midiaAtivaNaIlha(s: Pick<EstadoMidia, "faixa" | "tocando">): boolean {
+  return Boolean(s.faixa) && s.tocando;
 }
 
 export function posicaoAtual(s: Pick<EstadoMidia, "tocando" | "posicao" | "lidoEm" | "faixa">, agora: number): number {

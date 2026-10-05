@@ -10,6 +10,7 @@ import { gerarId, normalizarTexto } from "./basicos";
 import { hojeISO } from "./datas";
 import { textoComAnexos, imagensDaMensagem } from "./anexos";
 import { T } from "../textos/textos";
+import { afirmaExecucao, removerPrefixoDeAgente } from "./recursosChat";
 
 export interface ProvedorEmUso {
   provedor: Provedor;
@@ -102,6 +103,7 @@ export async function perguntarAssistente(opcoes: {
   historico: MensagemPonteIa[];
   sinal: AbortSignal;
   aoTexto?: (texto: string) => void;
+  apenasAnalise?: boolean;
 }): Promise<RespostaAssistente> {
   const resposta: RespostaAssistente = { texto: "", confirmacoes: [], acoes: [], origem: null, trocas: [], falha: null, parado: false };
   const fila = await provedoresEmOrdem();
@@ -109,8 +111,13 @@ export async function perguntarAssistente(opcoes: {
     resposta.falha = "sem_provedor";
     return resposta;
   }
-  const sistema = promptDoAgente(opcoes.agente);
-  const definicoes = definicoesFerramentas();
+  const sistema = promptDoAgente(opcoes.agente, opcoes.apenasAnalise);
+  const definicoes = opcoes.apenasAnalise ? [] : definicoesFerramentas();
+  const permitidas = new Set(definicoes.map((f) => f.nome));
+  const errosFerramenta: string[] = [];
+  const textosVerificados: string[] = [];
+  let analiseBloqueada = false;
+  let modeloSemFerramentas = false;
   const mensagens = [...opcoes.historico];
   let indice = 0;
   let ultimoErro = "";
@@ -126,6 +133,7 @@ export async function perguntarAssistente(opcoes: {
     while (indice < fila.length) {
       const { provedor, modelo } = fila[indice];
       const chave = `${provedor.id}|${modelo}`;
+      modeloSemFerramentas = semFerramentas.has(chave);
       textoPasso = "";
       chamadas = [];
       erro = null;
@@ -134,9 +142,11 @@ export async function perguntarAssistente(opcoes: {
         for await (const ev of conversarIa({ provedorId: provedor.id, modelo: modelo || undefined, sistema, mensagens, ferramentas: semFerramentas.has(chave) ? undefined : definicoes }, opcoes.sinal)) {
           if (ev.tipo === "texto" && ev.texto) {
             textoPasso += ev.texto;
-            opcoes.aoTexto?.(`${resposta.texto}${resposta.texto && textoPasso ? "\n\n" : ""}${textoPasso}`);
           } else if (ev.tipo === "ferramenta" && ev.chamada) chamadas.push(ev.chamada);
-          else if (ev.tipo === "aviso" && ev.texto === "sem_ferramentas") semFerramentas.add(chave);
+          else if (ev.tipo === "aviso" && ev.texto === "sem_ferramentas") {
+            semFerramentas.add(chave);
+            modeloSemFerramentas = true;
+          }
           else if (ev.tipo === "erro") {
             erro = ev.texto || "erro";
             break;
@@ -179,7 +189,7 @@ export async function perguntarAssistente(opcoes: {
       break;
     }
 
-    resposta.texto += `${resposta.texto && textoPasso ? "\n\n" : ""}${textoPasso}`;
+    if (chamadas.length === 0) resposta.texto = textoPasso;
     if (fim) registrarUso(fim, opcoes.agente);
     if (resposta.parado) break;
     if (indice >= fila.length) {
@@ -195,15 +205,26 @@ export async function perguntarAssistente(opcoes: {
     mensagens.push({ papel: "assistente", texto: textoPasso, chamadas });
     let continuar = false;
     for (const c of chamadas) {
+      if (opcoes.sinal.aborted) { resposta.parado = true; break; }
+      if (opcoes.apenasAnalise) { analiseBloqueada = true; break; }
+      if (modeloSemFerramentas || !permitidas.has(c.nome)) {
+        const mensagem = T.chat.confianca.ferramentaIndisponivel(c.nome);
+        errosFerramenta.push(mensagem);
+        mensagens.push({ papel: "ferramenta", idChamada: c.id, texto: mensagem });
+        continuar = true;
+        continue;
+      }
       const r = await executarFerramenta(c.nome, c.argumentos);
       if (r.tipo === "dados") {
         if (r.resumo) resposta.acoes.push(r.resumo);
+        if (r.textoVerificado) textosVerificados.push(r.textoVerificado);
         mensagens.push({ papel: "ferramenta", idChamada: c.id, texto: JSON.stringify(r.conteudo).slice(0, 12000) });
         continuar = true;
       } else if (r.tipo === "confirmar") {
         resposta.confirmacoes.push(r.cartao);
         mensagens.push({ papel: "ferramenta", idChamada: c.id, texto: T.chat.ferramentas.aguardandoConfirmacao });
       } else {
+        errosFerramenta.push(r.mensagem);
         mensagens.push({ papel: "ferramenta", idChamada: c.id, texto: `Erro: ${r.mensagem}` });
         continuar = true;
       }
@@ -211,8 +232,18 @@ export async function perguntarAssistente(opcoes: {
     if (!continuar) break;
   }
 
-  if (!resposta.texto.trim() && resposta.confirmacoes.length > 0) resposta.texto = T.chat.ferramentas.confira(resposta.confirmacoes.length);
-  if (!resposta.texto.trim() && resposta.acoes.length > 0) resposta.texto = resposta.acoes.join("\n");
+  resposta.texto = removerPrefixoDeAgente(resposta.texto, [...Object.values(useConfig.getState().agentes.nomes), ...AGENTES, "Rubi", "Nanquim", "Sol", "Java"]);
+  if (analiseBloqueada) resposta.texto = T.chat.confianca.analiseBloqueada;
+  else if (textosVerificados.length || resposta.acoes.length || resposta.confirmacoes.length || errosFerramenta.length) {
+    resposta.texto = [
+      ...textosVerificados,
+      ...resposta.acoes,
+      ...(resposta.confirmacoes.length ? [T.chat.ferramentas.confira(resposta.confirmacoes.length)] : []),
+      ...(errosFerramenta.length ? [T.chat.confianca.falhaFerramenta([...new Set(errosFerramenta)].join("; "))] : []),
+    ].join("\n\n");
+  } else if (afirmaExecucao(resposta.texto)) resposta.texto = T.chat.confianca.semExecucao;
+  if (modeloSemFerramentas && !opcoes.apenasAnalise) resposta.texto = [resposta.texto, T.chat.confianca.semFerramentas].filter(Boolean).join("\n\n");
+  opcoes.aoTexto?.(resposta.texto);
   return resposta;
 }
 

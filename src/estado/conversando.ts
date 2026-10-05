@@ -11,6 +11,8 @@ import { hojeISO } from "../utilitarios/datas";
 import { guardarImagens, type AnexoPronto } from "../utilitarios/anexos";
 import { tocarSom } from "../ponte/sons";
 import { T } from "../textos/textos";
+import { controlarPomodoro, detectarPedidoLocal, montarPedidoAnexo, textoPomodoro, textoRelatorioSemanal, type AcaoAnexo } from "../utilitarios/recursosChat";
+import { textoCapacidades } from "../utilitarios/ferramentasIa";
 
 export type FaseConversa = "escolhendo" | "respondendo" | null;
 
@@ -69,7 +71,7 @@ function limiteAtingido(): boolean {
   return custo >= cfg.limiteMensal;
 }
 
-async function perguntar(conversaId: string, pedido: string, agente: AgenteId, rapido: boolean, historico?: Mensagem[]) {
+async function perguntar(conversaId: string, pedido: string, agente: AgenteId, rapido: boolean, historico?: Mensagem[], enviada?: Mensagem, apenasAnalise = false) {
   useConversando.setState({ conversaId, fase: "escolhendo", agente, parcial: "" });
   await esperar(rapido ? 320 : 1100);
   useConversando.setState({ fase: "respondendo" });
@@ -77,18 +79,27 @@ async function perguntar(conversaId: string, pedido: string, agente: AgenteId, r
   controle = new AbortController();
   const conversa = useComunicacao.getState().conversas.find((c) => c.id === conversaId);
   const anteriores = historico ?? (conversa?.mensagens ?? []).slice(0, -1);
-  const mensagemPedido = [...(conversa?.mensagens ?? [])].reverse().find((m) => m.autor === "usuario" && m.texto === pedido);
-  const r = await perguntarAssistente({ agente, historico: historicoParaIa(anteriores, agente, mensagemPedido ?? pedido), sinal: controle.signal, aoTexto: mostrarParcial });
+  const mensagemPedido = enviada ?? [...(conversa?.mensagens ?? [])].reverse().find((m) => m.autor === "usuario" && m.texto === pedido);
+  const r = await perguntarAssistente({ agente, historico: apenasAnalise ? [{ papel: "usuario", texto: pedido }] : historicoParaIa(anteriores, agente, mensagemPedido ? { ...mensagemPedido, texto: pedido } : pedido), sinal: controle.signal, aoTexto: mostrarParcial, apenasAnalise });
   const adicionar = useComunicacao.getState().adicionarMensagem;
   const origem = r.origem ? (r.trocas.length ? T.chat.trocouProvedor(r.trocas.join(", "), r.origem) : r.origem) : undefined;
   const automaticas = useConfig.getState().ia.autoAprovar ?? [];
-  r.confirmacoes = r.confirmacoes.map((c) => {
-    if (!automaticas.includes(c.tipo)) return c;
-    if (c.tipo === "email" || c.tipo === "rascunho") return c;
-    void Promise.resolve(confirmarComando(c));
-    r.acoes.push(T.chat.permissao.acoes[c.tipo]);
-    return { ...c, situacao: "confirmado" };
-  });
+  const avisoConfirmacao = r.confirmacoes.length ? T.chat.ferramentas.confira(r.confirmacoes.length) : "";
+  for (let i = 0; i < r.confirmacoes.length; i++) {
+    const c = r.confirmacoes[i];
+    if (!automaticas.includes(c.tipo) || c.tipo === "email" || c.tipo === "rascunho") continue;
+    const resultado = await confirmarComando(c);
+    const falhou = resultado === T.chat.respostas.naoAchei || resultado === T.chat.respostas.semConta;
+    r.texto += `\n\n${resultado}`;
+    if (!falhou) {
+      r.acoes.push(T.chat.permissao.acoes[c.tipo]);
+      r.confirmacoes[i] = { ...c, situacao: "confirmado" };
+    }
+  }
+  if (avisoConfirmacao) {
+    const pendentes = r.confirmacoes.filter((c) => c.situacao === "pendente").length;
+    r.texto = r.texto.replace(avisoConfirmacao, pendentes ? T.chat.ferramentas.confira(pendentes) : "").trim();
+  }
   if (r.texto.trim() || r.confirmacoes.length) {
     adicionar(conversaId, {
       autor: "agente",
@@ -101,27 +112,53 @@ async function perguntar(conversaId: string, pedido: string, agente: AgenteId, r
     });
     if (r.confirmacoes.length) void tocarSom("approval", "avisos");
   }
-  if (r.parado && !r.texto.trim()) adicionar(conversaId, { autor: "agente", agenteId: agente, texto: T.chat.paradoAntes, repetir: pedido });
+  if (r.parado && !r.texto.trim()) adicionar(conversaId, { autor: "agente", agenteId: agente, texto: T.chat.paradoAntes, repetir: pedido, analiseAnexo: apenasAnalise });
   if (r.falha !== null && !r.parado) {
     void tocarSom("error", "avisos");
-    adicionar(conversaId, { autor: "agente", agenteId: agente, texto: mensagemDeErroIa(r.falha, r.trocas), detalhe: r.falha.slice(0, 600), erro: true, repetir: pedido });
+    adicionar(conversaId, { autor: "agente", agenteId: agente, texto: mensagemDeErroIa(r.falha, r.trocas), detalhe: r.falha.slice(0, 600), erro: true, repetir: pedido, analiseAnexo: apenasAnalise });
   }
   limpar();
 }
 
-export async function enviarAoTime(conversaId: string, texto: string, anexos: AnexoPronto[] = []) {
-  const limpo = texto.trim() || (anexos.length ? T.chat.anexos.semTexto : "");
+export async function enviarAoTime(conversaId: string, texto: string, anexos: AnexoPronto[] = [], opcoes: { acaoAnexo?: AcaoAnexo } = {}) {
+  const limpo = texto.trim() || (opcoes.acaoAnexo ? T.chat.anexos.pedidos[opcoes.acaoAnexo] : anexos.length ? T.chat.anexos.semTexto : "");
   if (!limpo || ocupado()) return;
+  useConversando.setState({ conversaId, fase: "escolhendo", agente: "organizador", parcial: "" });
   const enviada = useComunicacao.getState().adicionarMensagem(conversaId, { autor: "usuario", agenteId: "organizador", texto: limpo, anexos: anexos.length ? anexos.map((a) => a.anexo) : undefined });
   guardarImagens(enviada.id, anexos.flatMap((a) => (a.imagemCompleta ? [a.imagemCompleta] : [])));
   void tocarSom("send");
   const mencao = acharMencao(limpo);
   const semMencao = mencao ? limpo.replace(/^@\S+\s*/, "") : limpo;
+  if (opcoes.acaoAnexo) {
+    let pedido: string;
+    try { pedido = montarPedidoAnexo(opcoes.acaoAnexo, anexos.map((a) => a.anexo)); }
+    catch (erro) { await responder(conversaId, "tutor", (erro as Error).message); return; }
+    if (opcoes.acaoAnexo === "extrair") {
+      await responder(conversaId, "tutor", pedido.slice(pedido.indexOf(T.chat.anexos.delimitador) + T.chat.anexos.delimitador.length).trim());
+      return;
+    }
+    if (limiteAtingido()) { await responder(conversaId, "operador", T.chat.limiteAtingido); return; }
+    await perguntar(conversaId, `${pedido}${texto.trim() ? `\n\n${texto.trim()}` : ""}`, mencao ?? "tutor", true, [], undefined, true);
+    return;
+  }
+  const ultima = useComunicacao.getState().conversas.find((c) => c.id === conversaId)?.mensagens.at(-2);
+  const contextoPomodoro = ultima?.autor === "agente" && /pomodoro|foco|timer/i.test(ultima.texto) && (Boolean(ultima.acoes?.length) || ultima.texto.startsWith("Pomodoro:"));
+  const local = anexos.length ? null : detectarPedidoLocal(semMencao, contextoPomodoro);
+  if (local) {
+    if (local === "capacidades") await responder(conversaId, mencao ?? "organizador", textoCapacidades());
+    else if (local === "relatorio") await responder(conversaId, mencao ?? "organizador", textoRelatorioSemanal());
+    else if (local === "timer") await responder(conversaId, mencao ?? "organizador", textoPomodoro());
+    else {
+      const r = controlarPomodoro(local);
+      await responder(conversaId, mencao ?? "organizador", r.tipo === "dados" ? r.resumo : r.mensagem, r.tipo === "dados" ? { acoes: [r.resumo] } : {});
+    }
+    return;
+  }
   const intencao = anexos.length ? ({ tipo: "desconhecida", agente: escolherAgente(semMencao) } as const) : detectarIntencao(semMencao);
 
   if (intencao.tipo === "comando") {
     const r = executarComando(intencao.comando, { confirmar: intencao.confirmar });
-    await responder(conversaId, mencao ?? r.agente, r.resposta, { confirmacao: r.confirmacao });
+    await responder(conversaId, mencao ?? r.agente, r.resposta, { confirmacao: r.confirmacao, ...(r.ok && intencao.comando.startsWith("/pomodoro") ? { acoes: [r.resposta] } : {}) });
     if (r.confirmacao) void tocarSom("approval", "avisos");
     return;
   }
@@ -148,7 +185,7 @@ export async function enviarAoTime(conversaId: string, texto: string, anexos: An
     await responder(conversaId, "operador", T.chat.limiteAtingido);
     return;
   }
-  await perguntar(conversaId, semMencao, agente, Boolean(mencao));
+  await perguntar(conversaId, semMencao, agente, Boolean(mencao), undefined, enviada);
 }
 
 export async function tentarDeNovo(conversaId: string, mensagem: Mensagem) {
@@ -162,7 +199,7 @@ export async function tentarDeNovo(conversaId: string, mensagem: Mensagem) {
     await responder(conversaId, "operador", T.chat.limiteAtingido, {}, 0);
     return;
   }
-  await perguntar(conversaId, pedido, mensagem.agenteId, true, anteriores);
+  await perguntar(conversaId, pedido, mensagem.agenteId, true, anteriores, undefined, Boolean(mensagem.analiseAnexo));
 }
 
 export async function usarSugestao(conversaId: string, comando: string) {

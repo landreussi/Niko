@@ -72,5 +72,6 @@ const ASSUNTOS: [AgenteId, RegExp][] = [
 
 export function agentePeloAssunto(textoOriginal: string): AgenteId {
   const n = normalizarTexto(textoOriginal);
+  if (/\b(cloudflare|supabase|github|vercel|n8n|resend)\b/.test(n)) return "java";
   return ASSUNTOS.find(([, padrao]) => padrao.test(n))?.[0] ?? "organizador";
 }

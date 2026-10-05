@@ -21,6 +21,7 @@ interface EstadoPomodoro {
   continuar: () => void;
   alternar: () => void;
   reiniciar: () => void;
+  encerrar: () => void;
   pular: () => void;
   concluirEtapa: (situacao?: "concluida" | "interrompida") => EtapaPomodoro;
   escolherEtapa: (etapa: EtapaPomodoro) => void;
@@ -68,6 +69,13 @@ export const usePomodoro = create<EstadoPomodoro>()(
         else s.iniciar();
       },
       reiniciar: () => set({ rodando: false, terminaEm: null, restanteMs: null, inicioEtapa: null, duracaoMs: minutosDaEtapa(get().etapa) * 60000 }),
+      encerrar: () => {
+        const s = get();
+        if (!s.inicioEtapa) return;
+        const minutos = Math.round(Math.max(0, s.duracaoMs - restanteAtual(s, Date.now())) / 600) / 100;
+        const sessao: SessaoPomodoro = { id: gerarId(), etapa: s.etapa, inicio: s.inicioEtapa, minutos, materiaId: s.materiaId, tarefaId: s.tarefaId, situacao: "interrompida" };
+        set({ sessoes: [...s.sessoes, sessao].slice(-5000), rodando: false, terminaEm: null, restanteMs: null, inicioEtapa: null, duracaoMs: minutosDaEtapa(s.etapa) * 60000 });
+      },
       pular: () => {
         const s = get();
         const proxima = proximaEtapa(s.etapa, s.ciclo);

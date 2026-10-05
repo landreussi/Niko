@@ -8,12 +8,14 @@ import { useRotina, tarefasDoDia, habitoCumprido } from "../estado/rotina";
 import { useFinancas, gastosDoMes, parteDoUsuario, EU } from "../estado/financas";
 import { useEstudos, revisoesParaHoje } from "../estado/estudos";
 import { usePomodoro } from "../estado/pomodoro";
+import { useConfig } from "../estado/configuracoes";
 import { useOrganizacao } from "../estado/organizacao";
 import { useComunicacao } from "../estado/comunicacao";
 import { conexoesPonte } from "../ponte/conexoesReais";
 import { useAgentes } from "../estado/agentes";
 import { useInterface } from "../estado/interface";
 import { somar } from "./basicos";
+import { controlarPomodoro, textoPomodoro } from "./recursosChat";
 
 export interface ResultadoComando {
   agente: AgenteId;
@@ -320,10 +322,19 @@ export function executarComando(entrada: string, opcoes: { confirmar?: boolean }
       return { agente: "operador", resposta: T.chat.respostas.compra(itens.length, lista.nome), ok: true };
     }
     case "pomodoro": {
+      const acao = normalizarTexto(argumentos.trim());
+      if (acao === "status" || acao === "tempo") return { agente: "organizador", resposta: textoPomodoro(), ok: true };
+      if (["pausar", "continuar", "encerrar"].includes(acao)) {
+        const r = controlarPomodoro(acao);
+        return { agente: "organizador", resposta: r.tipo === "dados" ? r.resumo : r.mensagem, ok: r.tipo === "dados" };
+      }
       const { categoria, limpo } = extrairMarcadores(argumentos);
-      const minutos = Math.max(1, Math.min(180, Number(limpo.split(" ")[0]) || 25));
+      const minutos = limpo ? Number(limpo.split(" ")[0]) : useConfig.getState().pomodoro.foco;
+      if (!Number.isFinite(minutos) || minutos < 1 || minutos > 180) return { agente: "organizador", resposta: T.chat.recursos.minutosInvalidos, ok: false };
       const materia = acharPorNome(useEstudos.getState().materias, categoria);
+      if (categoria && !materia) return { agente: "organizador", resposta: T.chat.recursos.materiaInvalida, ok: false };
       const p = usePomodoro.getState();
+      if (p.inicioEtapa || p.rodando || p.restanteMs !== null) return { agente: "organizador", resposta: T.chat.recursos.timerAtivo, ok: false };
       p.escolherEtapa("foco");
       p.definirVinculo(materia?.id);
       p.iniciar(minutos);
