@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { PainelFuncoes } from "./PainelFuncoes";
-import { blocoLigado, funcaoLigada } from "../../utilitarios/funcoes";
+import { blocoLigado, conquistaLigada, funcaoLigada } from "../../utilitarios/funcoes";
 import { Plus, Timer, Wallet, Plug, Layers, Gauge, Trophy, CalendarDays, Users, ListTodo, SlidersHorizontal, ToggleRight, GripVertical, ChevronRight, Cpu, Play, Pause, RotateCcw, SkipForward } from "lucide-react";
 import { useMosaico } from "../../componentes/useMosaico";
 import { resumoPorAgente } from "../../utilitarios/contextoIa";
@@ -199,6 +199,7 @@ function BlocoHoje() {
 function BlocoFoco() {
   const sessoes = usePomodoro((s) => s.sessoes);
   const materias = useEstudos((s) => s.materias);
+  const comEstudos = useConfig((s) => funcaoLigada("estudos", s.funcoesDesligadas));
   const hoje = hojeISO();
   const doDia = sessoes.filter((s) => s.etapa === "foco" && s.situacao === "concluida" && diaDoMomento(s.inicio) === hoje);
   const minutos = somar(doDia, (s) => s.minutos);
@@ -221,7 +222,7 @@ function BlocoFoco() {
           <span className="texto-3" style={{ fontSize: 11 }}>{T.inicio.minutosFoco}</span>
         </div>
       </div>
-      {porMateria.size > 0 && (
+      {comEstudos && porMateria.size > 0 && (
         <BarrasHorizontais
           formatar={(v) => `${v} min`}
           barras={[...porMateria].map(([id, v]) => ({ rotulo: materias.find((m) => m.id === id)?.nome ?? T.pomodoro.semMateria, valor: v }))}
@@ -242,6 +243,7 @@ const ETAPAS: EtapaPomodoro[] = ["foco", "pausa_curta", "pausa_longa"];
 function Cronometro() {
   const p = usePomodoro();
   const materias = useEstudos((s) => s.materias);
+  const comEstudos = useConfig((s) => funcaoLigada("estudos", s.funcoesDesligadas));
   const ciclos = useConfig((s) => s.pomodoro.ciclos);
   const [agora, setAgora] = useState(() => Date.now());
   const iniciado = p.rodando || p.restanteMs != null;
@@ -274,7 +276,7 @@ function Cronometro() {
             </button>
           ))}
         </div>
-        {p.etapa === "foco" && (
+        {p.etapa === "foco" && comEstudos && (
           <select className="seletor" aria-label={T.pomodoro.materia} value={p.materiaId ?? ""} onChange={(e) => p.definirVinculo(e.target.value || undefined, p.tarefaId)}>
             <option value="">{T.pomodoro.semMateria}</option>
             {materias.map((m) => <option key={m.id} value={m.id}>{m.nome}</option>)}
@@ -589,10 +591,12 @@ function BlocoConsumo() {
 }
 
 function BlocoConquistas() {
-  const alcancadas = useConquistas((s) => s.alcancadas);
+  const todasAlcancadas = useConquistas((s) => s.alcancadas);
+  const desligadas = useConfig((s) => s.funcoesDesligadas);
+  const alcancadas = todasAlcancadas.filter((a) => conquistaLigada(a.codigo, desligadas));
   const irPara = useInterface((s) => s.irPara);
   const recentes = [...alcancadas].sort((a, b) => b.data.localeCompare(a.data)).slice(0, 10);
-  const proximas = CONQUISTAS.filter((c) => !alcancadas.some((a) => a.codigo === c.codigo)).slice(0, 10);
+  const proximas = CONQUISTAS.filter((c) => conquistaLigada(c.codigo, desligadas) && !alcancadas.some((a) => a.codigo === c.codigo)).slice(0, 10);
   return (
     <div className="coluna" style={{ gap: 8 }}>
       {recentes.map((a, i) => (

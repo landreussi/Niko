@@ -14,6 +14,8 @@ import { baixarArquivo, lerArquivoTexto } from "../../utilitarios/basicos";
 import { EVENTO_NOVO } from "../../janelas/area-de-trabalho/usarAtalhos";
 import type { Repeticao } from "../../tipos";
 import { itensDoCalendario, type FonteDoCalendario, type ItemDoCalendario } from "../../utilitarios/itensDoCalendario";
+import { useConfig } from "../../estado/configuracoes";
+import { funcaoLigada, type Funcao } from "../../utilitarios/funcoes";
 
 type Fonte = FonteDoCalendario;
 type Vista = "mes" | "semana" | "agenda";
@@ -28,6 +30,7 @@ const COR_FONTE: Record<Fonte, string> = {
 };
 
 const FONTES = Object.keys(T.calendario.fontes) as Fonte[];
+const FUNCAO_DA_FONTE: Record<Fonte, Funcao> = { eventos: "calendario", tarefas: "journal", estudos: "estudos", financas: "financas", metas: "metas" };
 
 function escaparIcs(t: string) {
   return t.replace(/\\/g, "\\\\").replace(/;/g, "\\;").replace(/,/g, "\\,").replace(/\n/g, "\\n");
@@ -185,7 +188,8 @@ export default function Calendario() {
   const inicioISO = paraISO(intervalo.inicio);
   const fimISO = paraISO(intervalo.fim);
 
-  const gerar = useMemo(() => (de: string, ate: string) => itensDoCalendario({ eventos, tarefas, datas, revisoes, metas, recorrentes }, de, ate).filter((i) => fontes[i.fonte]), [eventos, tarefas, datas, revisoes, metas, recorrentes, fontes]);
+  const desligadas = useConfig((s) => s.funcoesDesligadas);
+  const gerar = useMemo(() => (de: string, ate: string) => itensDoCalendario({ eventos, tarefas, datas, revisoes, metas, recorrentes }, de, ate).filter((i) => fontes[i.fonte]), [eventos, tarefas, datas, revisoes, metas, recorrentes, fontes, desligadas]);
   const itens = useMemo(() => gerar(inicioISO, fimISO), [gerar, inicioISO, fimISO]);
   const proximos = useMemo(() => gerar(hoje, paraISO(addDays(deISO(hoje), 6))).filter((i) => !repeteTodoDia(i)), [gerar, hoje]);
   const doDiaSelecionado = useMemo(() => gerar(diaSelecionado, diaSelecionado), [gerar, diaSelecionado]);
@@ -306,7 +310,7 @@ export default function Calendario() {
         </div>
         <Segmentado<Vista> rotulo={T.calendario.titulo} valor={vista} aoMudar={setVista} opcoes={(Object.keys(T.calendario.vistas) as Vista[]).map((v) => ({ valor: v, rotulo: T.calendario.vistas[v] }))} />
         <div className="cal-filtros" role="group" aria-label={T.calendario.mostrar}>
-          {FONTES.map((f) => (
+          {FONTES.filter((f) => funcaoLigada(FUNCAO_DA_FONTE[f], desligadas)).map((f) => (
             <button key={f} type="button" className="cal-filtro" style={corDa(f)} aria-pressed={fontes[f]} onClick={() => setFontes({ ...fontes, [f]: !fontes[f] })}>
               <span className="cal-filtro-ponto" />
               {T.calendario.fontes[f]}

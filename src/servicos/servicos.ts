@@ -23,7 +23,7 @@ import { rotuloJanela } from "../utilitarios/consumo";
 import { T } from "../textos/textos";
 import type { Evento, ServicoId } from "../tipos";
 import { addDays, addMonths, addWeeks } from "date-fns";
-import { funcaoLigada } from "../utilitarios/funcoes";
+import { conquistaLigada, funcaoLigada } from "../utilitarios/funcoes";
 
 function notificar(titulo: string, corpo: string) {
   try {
@@ -145,6 +145,7 @@ function verificarConquistas() {
   const nivelPor = (codigo: string, valor: number) => {
     const def = CONQUISTAS.find((c) => c.codigo === codigo);
     if (!def) return;
+    if (!conquistaLigada(codigo)) return;
     const nivel = [...def.niveis].reverse().find((n) => valor >= n);
     if (nivel && registrar(codigo, nivel)) alcancadas.push({ codigo, nivel });
   };

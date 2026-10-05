@@ -21,6 +21,7 @@ import { deISO, formatarData, hojeISO, paraISO, horarioRelativo } from "../../ut
 import { itensDoCalendario } from "../../utilitarios/itensDoCalendario";
 import { ConexaoNaIlha } from "./ConexaoNaIlha";
 import { EspacoDoPersonagem } from "./animacoes/PersonagemContinuo";
+import { funcaoLigada } from "../../utilitarios/funcoes";
 import { useFinancas } from "../../estado/financas";
 import { interpretarQuando } from "../../utilitarios/linguagem";
 import { capturar, tiposDeCapturaLigados, type TipoCaptura } from "../../utilitarios/captura";
@@ -325,6 +326,7 @@ export function VisaoMidia() {
 export function VisaoFoco() {
   const p = usePomodoro();
   const materias = useEstudos((s) => s.materias);
+  const comEstudos = useConfig((s) => funcaoLigada("estudos", s.funcoesDesligadas));
   const ciclos = useConfig((s) => s.pomodoro.ciclos);
   const [agora, setAgora] = useState(Date.now());
   useEffect(() => {
@@ -354,17 +356,19 @@ export function VisaoFoco() {
             ))}
           </div>
           <div className="linha">
-            <select
-              className="ilha-select"
-              aria-label={T.pomodoro.materia}
-              value={p.materiaId ?? ""}
-              onChange={(e) => p.definirVinculo(e.target.value || undefined, p.tarefaId)}
-            >
-              <option value="">{T.pomodoro.semMateria}</option>
-              {materias.map((m) => (
-                <option key={m.id} value={m.id}>{m.nome}</option>
-              ))}
-            </select>
+            {comEstudos && (
+              <select
+                className="ilha-select"
+                aria-label={T.pomodoro.materia}
+                value={p.materiaId ?? ""}
+                onChange={(e) => p.definirVinculo(e.target.value || undefined, p.tarefaId)}
+              >
+                <option value="">{T.pomodoro.semMateria}</option>
+                {materias.map((m) => (
+                  <option key={m.id} value={m.id}>{m.nome}</option>
+                ))}
+              </select>
+            )}
             <span className="ilha-mini numero">{T.pomodoro.ciclo(p.ciclo, ciclos)}</span>
           </div>
           <div className="linha">
@@ -549,7 +553,8 @@ export function VisaoCalendario() {
   const dias = useMemo(() => eachDayOfInterval({ start: startOfWeek(mes, { weekStartsOn: 1 }), end: endOfWeek(endOfMonth(mes), { weekStartsOn: 1 }) }), [mes]);
   const inicio = paraISO(dias[0]);
   const fim = paraISO(dias[dias.length - 1]);
-  const dados = useMemo(() => ({ eventos, metas, tarefas, datas, revisoes, recorrentes }), [eventos, metas, tarefas, datas, revisoes, recorrentes]);
+  const desligadas = useConfig((s) => s.funcoesDesligadas);
+  const dados = useMemo(() => ({ eventos, metas, tarefas, datas, revisoes, recorrentes }), [eventos, metas, tarefas, datas, revisoes, recorrentes, desligadas]);
   const comCompromisso = useMemo(() => new Set(itensDoCalendario(dados, inicio, fim).map((i) => i.data)), [dados, inicio, fim]);
   const deHoje = useMemo(() => itensDoCalendario(dados, hoje, hoje), [dados, hoje]);
   const C = T.ilha.calendario;

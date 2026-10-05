@@ -10,6 +10,7 @@ import { Botao, Tecla } from "../../componentes/basicos";
 import { useComunicacao } from "../../estado/comunicacao";
 import { useAgentes, AGENTES } from "../../estado/agentes";
 import { useConfig } from "../../estado/configuracoes";
+import { comandoDisponivel } from "../../utilitarios/funcoes";
 import { useInterface } from "../../estado/interface";
 import { useConversando, enviarAoTime, pararResposta, tentarDeNovo, usarSugestao } from "../../estado/conversando";
 import { T } from "../../textos/textos";
@@ -223,10 +224,11 @@ export default function Chat() {
     campo.current?.focus();
   };
 
+  const desligadas = useConfig((s) => s.funcoesDesligadas);
   const sugestoes = useMemo(() => {
     if (!texto.startsWith("/") || texto.includes(" ")) return [];
-    return T.chat.ajuda.filter((c) => c.startsWith(texto.split(" ")[0])).slice(0, 6);
-  }, [texto]);
+    return T.chat.ajuda.filter((c) => c.startsWith(texto.split(" ")[0]) && comandoDisponivel(c, desligadas)).slice(0, 6);
+  }, [texto, desligadas]);
 
   const enviar = (acaoAnexo?: AcaoAnexo) => {
     const limpo = texto.trim();

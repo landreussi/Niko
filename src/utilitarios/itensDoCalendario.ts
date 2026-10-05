@@ -7,6 +7,7 @@ import type { useOrganizacao } from "../estado/organizacao";
 import type { useRotina } from "../estado/rotina";
 import type { useEstudos } from "../estado/estudos";
 import type { useFinancas } from "../estado/financas";
+import { funcaoLigada, type Funcao } from "./funcoes";
 
 export type FonteDoCalendario = keyof typeof T.calendario.fontes;
 
@@ -42,7 +43,16 @@ export function ocorrencias(e: Evento, inicio: string, fim: string): string[] {
   return resultado;
 }
 
-export function itensDoCalendario(dados: DadosDoCalendario, de: string, ate: string): ItemDoCalendario[] {
+export function itensDoCalendario(todos: DadosDoCalendario, de: string, ate: string): ItemDoCalendario[] {
+  const ligada = (f: Funcao) => funcaoLigada(f);
+  const dados: DadosDoCalendario = {
+    eventos: ligada("calendario") ? todos.eventos : [],
+    tarefas: ligada("journal") ? todos.tarefas : [],
+    datas: ligada("estudos") ? todos.datas : [],
+    revisoes: ligada("estudos") ? todos.revisoes : [],
+    metas: ligada("metas") ? todos.metas : [],
+    recorrentes: ligada("financas") ? todos.recorrentes : [],
+  };
   const lista: ItemDoCalendario[] = [];
   for (const e of dados.eventos) for (const d of ocorrencias(e, de, ate)) lista.push({ id: `${e.id}-${d}`, titulo: e.titulo, data: d, hora: e.hora, fonte: "eventos", evento: e });
   for (const t of dados.tarefas) if (t.data && t.data >= de && t.data <= ate && t.status !== "cancelada") lista.push({ id: t.id, titulo: t.titulo, data: t.data, hora: t.hora, fonte: "tarefas" });

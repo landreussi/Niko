@@ -7,11 +7,13 @@ import { useConquistas, CONQUISTAS } from "../../estado/conquistas";
 import { useConfig } from "../../estado/configuracoes";
 import { T } from "../../textos/textos";
 import { formatar, diaDoMomento } from "../../utilitarios/datas";
+import { conquistaLigada } from "../../utilitarios/funcoes";
 
 export default function Conquistas() {
   const alcancadas = useConquistas((s) => s.alcancadas);
   const ativas = useConfig((s) => s.conquistasAtivas);
   const nomes = useConfig((s) => s.agentes.nomes);
+  const desligadas = useConfig((s) => s.funcoesDesligadas);
 
   return (
     <>
@@ -21,7 +23,7 @@ export default function Conquistas() {
         <MapaDeCalor />
       </Cartao>
       <div className="grade-conquistas">
-        {CONQUISTAS.map((c) => {
+        {CONQUISTAS.filter((c) => conquistaLigada(c.codigo, desligadas)).map((c) => {
           const a = alcancadas.find((x) => x.codigo === c.codigo);
           const item = T.conquistas.itens[c.codigo];
           const proximo = c.niveis.find((n) => !a || n > a.nivel);

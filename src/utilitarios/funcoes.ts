@@ -99,6 +99,26 @@ export function funcaoDoComando(comando: string, desligadas: readonly Funcao[] =
   return desligadaQueContem("comandos", comando, desligadas);
 }
 
+export function comandoDisponivel(linha: string, desligadas: readonly Funcao[] = funcoesDesligadas()): boolean {
+  const nome = /^\/(\w+)/.exec(linha.trim())?.[1]?.toLowerCase();
+  return !nome || !funcaoDoComando(nome, desligadas);
+}
+
+const FUNCAO_DA_CONQUISTA: Record<string, Funcao> = {
+  sequencia_habito: "journal",
+  revisor: "estudos",
+  prova_vencida: "estudos",
+  orcamento_em_dia: "financas",
+  meta_economia: "financas",
+  sem_pendencias: "financas",
+  meta_vida: "metas",
+};
+
+export function conquistaLigada(codigo: string, desligadas: readonly Funcao[] = funcoesDesligadas()): boolean {
+  const funcao = FUNCAO_DA_CONQUISTA[codigo];
+  return !funcao || funcaoLigada(funcao, desligadas);
+}
+
 export function funcaoDoCartao(tipo: CartaoConfirmacao["tipo"], desligadas: readonly Funcao[] = funcoesDesligadas()): Funcao | null {
   return desligadaQueContem("cartoes", tipo, desligadas);
 }

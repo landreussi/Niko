@@ -328,3 +328,15 @@ test("religar a função devolve tudo sem perder dados", () => {
   assert.ok(definicoesFerramentas().some((f) => f.nome === "ler_tarefas"));
   assert.equal(useRotina.getState().tarefas.length, 1);
 });
+
+test("ajuda e conquistas escondem o que pertence a funções desligadas", async () => {
+  const { conquistaLigada, abaLigada } = await servidor.ssrLoadModule("/src/utilitarios/funcoes.ts");
+  useConfig.setState({ funcoesDesligadas: ["financas", "journal", "calendario"] });
+  const ajuda = executarComando("/ajuda").resposta;
+  assert.ok(!ajuda.includes("/gasto"));
+  assert.ok(!ajuda.includes("/tarefa"));
+  assert.ok(!conquistaLigada("meta_economia"));
+  assert.ok(conquistaLigada("foco"));
+  for (const aba of ["hoje", "habitos", "calendario"]) assert.ok(!abaLigada(aba), aba);
+  assert.ok(abaLigada("midia"));
+});

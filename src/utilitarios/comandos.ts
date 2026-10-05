@@ -16,7 +16,7 @@ import { useAgentes } from "../estado/agentes";
 import { useInterface } from "../estado/interface";
 import { somar } from "./basicos";
 import { controlarPomodoro, textoPomodoro } from "./recursosChat";
-import { avisoDeFuncaoDesligada, funcaoDoCartao, funcaoDoComando, funcaoLigada } from "./funcoes";
+import { avisoDeFuncaoDesligada, comandoDisponivel, funcaoDoCartao, funcaoDoComando, funcaoLigada } from "./funcoes";
 
 export interface ResultadoComando {
   agente: AgenteId;
@@ -291,7 +291,7 @@ export function executarComando(entrada: string, opcoes: { confirmar?: boolean }
 
   switch (nome) {
     case "ajuda":
-      return { agente: "organizador", resposta: T.chat.ajuda.join("\n"), ok: true };
+      return { agente: "organizador", resposta: T.chat.ajuda.filter((linha) => comandoDisponivel(linha)).join("\n"), ok: true };
     case "tarefa": {
       if (!argumentos) return { agente: "organizador", resposta: T.chat.respostas.faltaTitulo, ok: false };
       const { categoria, limpo } = extrairMarcadores(argumentos);
