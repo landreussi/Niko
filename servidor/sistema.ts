@@ -1,7 +1,5 @@
 import { spawn } from "node:child_process";
-import { writeFileSync, existsSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { garantirScript } from "./scriptsTemporarios";
 
 const SCRIPT = String.raw`
 $ErrorActionPreference = 'Stop'
@@ -213,12 +211,10 @@ switch ($entrada.acao) {
 }
 `;
 
-const ARQUIVO = join(tmpdir(), "niko-sistema-v7.ps1");
 let tipoEmCache: Promise<{ notebook: boolean; bateria: boolean }> | null = null;
 
 function caminhoScript() {
-  if (!existsSync(ARQUIVO)) writeFileSync(ARQUIVO, SCRIPT, "utf8");
-  return ARQUIVO;
+  return garantirScript("niko-sistema", SCRIPT);
 }
 
 function executar<T>(entrada: Record<string, unknown>, limiteMs = 20000): Promise<T> {
@@ -257,13 +253,19 @@ export function tipoDoComputador() {
 
 export const estadoDoSistema = () => executar({ acao: "estado" });
 export const listarRedes = () => executar({ acao: "redes" }, 25000);
+function nomeDeRede(v: unknown) {
+  const ssid = texto(v, 64);
+  if (ssid.includes('"')) throw new Error("valor_invalido");
+  return ssid;
+}
+
 export const conectarRede = (dados: Record<string, unknown>) => {
-  const ssid = texto(dados.ssid, 64);
+  const ssid = nomeDeRede(dados.ssid);
   const senha = typeof dados.senha === "string" && dados.senha ? texto(dados.senha, 63) : "";
   if (senha && senha.length < 8) throw new Error("senha_curta");
   return executar({ acao: "conectar", ssid, senha }, 30000);
 };
-export const esquecerRede = (dados: Record<string, unknown>) => executar({ acao: "esquecer", ssid: texto(dados.ssid, 64) });
+export const esquecerRede = (dados: Record<string, unknown>) => executar({ acao: "esquecer", ssid: nomeDeRede(dados.ssid) });
 export const desconectarRede = () => executar({ acao: "desconectar" });
 export const definirBrilho = (dados: Record<string, unknown>) => {
   const nivel = Number(dados.nivel);

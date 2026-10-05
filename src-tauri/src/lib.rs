@@ -2,7 +2,7 @@ use std::collections::hash_map::RandomState;
 use std::collections::HashMap;
 use std::hash::{BuildHasher, Hasher};
 use std::process::{Child, Command};
-use std::sync::atomic::{AtomicIsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicIsize, Ordering};
 use std::sync::Mutex;
 use std::time::Duration;
 
@@ -187,7 +187,7 @@ fn sem_prefixo(caminho: std::path::PathBuf) -> std::path::PathBuf {
     }
 }
 
-fn iniciar_ponte(app: &AppHandle, token: &str) {
+fn iniciar_ponte(app: &AppHandle, token: &str, reinicio: bool) {
     if cfg!(debug_assertions) {
         return;
     }
@@ -205,7 +205,14 @@ fn iniciar_ponte(app: &AppHandle, token: &str) {
     let recursos = sem_prefixo(pasta.join("recursos"));
     let node = recursos.join("node.exe");
     let script = recursos.join("ponte.mjs");
-    let saida_erro = dados.as_ref().and_then(|p| std::fs::File::create(sem_prefixo(p.join("ponte.log"))).ok());
+    let saida_erro = dados.as_ref().and_then(|p| {
+        let caminho = sem_prefixo(p.join("ponte.log"));
+        if reinicio {
+            std::fs::OpenOptions::new().create(true).append(true).open(caminho).ok()
+        } else {
+            std::fs::File::create(caminho).ok()
+        }
+    });
     let mut comando = Command::new(&node);
     comando.current_dir(&recursos).stdin(std::process::Stdio::null()).stdout(std::process::Stdio::null());
     match saida_erro {
@@ -234,11 +241,54 @@ fn iniciar_ponte(app: &AppHandle, token: &str) {
 }
 
 fn parar_ponte(app: &AppHandle) {
+    ENCERRANDO.store(true, Ordering::Relaxed);
     if let Ok(mut ponte) = app.state::<Estado>().ponte.lock() {
         if let Some(mut filho) = ponte.take() {
             let _ = filho.kill();
         }
     }
+}
+
+static ENCERRANDO: AtomicBool = AtomicBool::new(false);
+const MAXIMO_REINICIOS_DA_PONTE: u32 = 5;
+
+fn vigiar_ponte(app: AppHandle, token: String) {
+    if cfg!(debug_assertions) {
+        return;
+    }
+    std::thread::spawn(move || {
+        let mut reinicios = 0u32;
+        let mut estavel_desde = std::time::Instant::now();
+        loop {
+            std::thread::sleep(Duration::from_secs(3));
+            if ENCERRANDO.load(Ordering::Relaxed) {
+                return;
+            }
+            let caiu = match app.state::<Estado>().ponte.lock() {
+                Ok(mut ponte) => match ponte.as_mut() {
+                    Some(filho) => matches!(filho.try_wait(), Ok(Some(_))),
+                    None => false,
+                },
+                Err(_) => false,
+            };
+            if !caiu {
+                if estavel_desde.elapsed() > Duration::from_secs(120) {
+                    reinicios = 0;
+                }
+                continue;
+            }
+            if reinicios >= MAXIMO_REINICIOS_DA_PONTE {
+                return;
+            }
+            reinicios += 1;
+            std::thread::sleep(Duration::from_secs(u64::from(reinicios) * 2));
+            if ENCERRANDO.load(Ordering::Relaxed) {
+                return;
+            }
+            iniciar_ponte(&app, &token, true);
+            estavel_desde = std::time::Instant::now();
+        }
+    });
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -280,7 +330,8 @@ pub fn run() {
         .setup(move |app| {
             let handle = app.handle().clone();
             barra_windows::restaurar(&handle);
-            iniciar_ponte(&handle, &token);
+            iniciar_ponte(&handle, &token, false);
+            vigiar_ponte(handle.clone(), token.clone());
 
             let monitor = app.primary_monitor()?.or(app.available_monitors()?.into_iter().next());
             let (mx, my, mw, mh) = match &monitor {
@@ -354,7 +405,8 @@ pub fn run() {
 
     app.run(|handle, evento| {
         if let RunEvent::Exit = evento {
-            barra_windows::reservar_espaco_do_dock(handle, false);            barra_windows::restaurar(handle);
+            barra_windows::reservar_espaco_do_dock(handle, false);
+            barra_windows::restaurar(handle);
             parar_ponte(handle);
         }
     });

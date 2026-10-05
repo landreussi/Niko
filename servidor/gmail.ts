@@ -18,7 +18,9 @@ function base64url(b: Buffer): string {
 
 function abrirNoNavegador(url: string) {
   if (process.platform !== "win32") throw new Error("somente_windows");
-  spawn("rundll32.exe", ["url.dll,FileProtocolHandler", url], { detached: true, stdio: "ignore", windowsHide: true }).unref();
+  const filho = spawn("rundll32.exe", ["url.dll,FileProtocolHandler", url], { detached: true, stdio: "ignore", windowsHide: true });
+  filho.on("error", () => undefined);
+  filho.unref();
 }
 
 export function lerCredencialGmail(texto: string): CredencialGmail {
@@ -36,7 +38,13 @@ export async function autorizarGmail(clienteId: string, segredo: string): Promis
     const servidor = createServer((req, res) => {
       const url = new URL(req.url ?? "/", "http://127.0.0.1");
       const codigoRecebido = url.searchParams.get("code");
-      const ok = codigoRecebido && url.searchParams.get("state") === estado;
+      const estadoConfere = url.searchParams.get("state") === estado;
+      if (url.pathname !== "/" || !estadoConfere || (!codigoRecebido && !url.searchParams.get("error"))) {
+        res.writeHead(404);
+        res.end();
+        return;
+      }
+      const ok = Boolean(codigoRecebido);
       res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
       res.end(`<!doctype html><meta charset="utf-8"><title>Niko</title><body style="font-family:system-ui;padding:40px;background:#0e0e10;color:#f1f2f4"><h2>${ok ? "Gmail conectado." : "Não deu certo."}</h2><p>${ok ? "Pode fechar esta aba e voltar ao Niko." : "Volte ao Niko e tente de novo."}</p></body>`);
       clearTimeout(relogio);
@@ -84,10 +92,19 @@ export async function autorizarGmail(clienteId: string, segredo: string): Promis
 }
 
 const acessos = new Map<string, { token: string; expira: number }>();
+const renovacoesEmAndamento = new Map<string, Promise<string>>();
 
-async function tokenDeAcesso(c: CredencialGmail): Promise<string> {
+function tokenDeAcesso(c: CredencialGmail): Promise<string> {
   const guardado = acessos.get(c.clienteId);
-  if (guardado && guardado.expira > Date.now()) return guardado.token;
+  if (guardado && guardado.expira > Date.now()) return Promise.resolve(guardado.token);
+  const emAndamento = renovacoesEmAndamento.get(c.clienteId);
+  if (emAndamento) return emAndamento;
+  const renovacao = renovarToken(c).finally(() => renovacoesEmAndamento.delete(c.clienteId));
+  renovacoesEmAndamento.set(c.clienteId, renovacao);
+  return renovacao;
+}
+
+async function renovarToken(c: CredencialGmail): Promise<string> {
   if (!c.refresh) throw new Error("sem_autorizacao");
   const r = await fetch("https://oauth2.googleapis.com/token", {
     method: "POST",

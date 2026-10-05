@@ -1,8 +1,4 @@
-import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
-import { writeFileSync, existsSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { createInterface } from "node:readline";
+import { criarProcessoPowerShell } from "./processoPowerShell";
 
 const CODIGO = String.raw`
 using System;
@@ -452,53 +448,8 @@ while ($true) {
 }
 `;
 
-const ARQUIVO = join(tmpdir(), "niko-controle-v6.ps1");
-let processo: ChildProcessWithoutNullStreams | null = null;
-let contador = 0;
-const esperando = new Map<number, { resolver: (v: unknown) => void; rejeitar: (e: Error) => void; relogio: NodeJS.Timeout }>();
-
-function iniciar() {
-  if (processo) return processo;
-  if (process.platform !== "win32") throw new Error("somente_windows");
-  if (!existsSync(ARQUIVO)) writeFileSync(ARQUIVO, SCRIPT, "utf8");
-  const p = spawn("powershell.exe", ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", ARQUIVO], { windowsHide: true });
-  createInterface({ input: p.stdout }).on("line", (linha) => {
-    try {
-      const r = JSON.parse(linha) as { id?: number; erro?: string };
-      const pendente = r.id ? esperando.get(r.id) : undefined;
-      if (!pendente) return;
-      esperando.delete(r.id!);
-      clearTimeout(pendente.relogio);
-      if (r.erro) pendente.rejeitar(new Error(r.erro));
-      else pendente.resolver(r);
-    } catch {
-      return;
-    }
-  });
-  p.on("exit", () => {
-    processo = null;
-    for (const [id, e] of esperando) {
-      clearTimeout(e.relogio);
-      e.rejeitar(new Error("controle_encerrado"));
-      esperando.delete(id);
-    }
-  });
-  processo = p;
-  return p;
-}
-
-function pedir(pedido: Record<string, unknown>, limiteMs = 15000): Promise<unknown> {
-  const p = iniciar();
-  const id = ++contador;
-  return new Promise((resolver, rejeitar) => {
-    const relogio = setTimeout(() => {
-      esperando.delete(id);
-      rejeitar(new Error("tempo_esgotado"));
-    }, limiteMs);
-    esperando.set(id, { resolver, rejeitar, relogio });
-    p.stdin.write(`${JSON.stringify({ ...pedido, id })}\n`);
-  });
-}
+const controle = criarProcessoPowerShell("niko-controle", SCRIPT, "controle_encerrado");
+const pedir = controle.pedir;
 
 const FLUXOS = { saida: 0, entrada: 1 } as const;
 const FERRAMENTAS = ["captura", "teclado", "iniciar", "papelDeParede"] as const;
@@ -547,6 +498,5 @@ export const lerBandeja = () => pedir({ acao: "bandeja" }, 20000);
 export const abrirDaBandeja = (d: Record<string, unknown>) => pedir({ acao: "abrirDaBandeja", caminho: caminhoDeApp(d.caminho) });
 
 export function encerrarControle() {
-  processo?.kill();
-  processo = null;
+  controle.encerrar();
 }

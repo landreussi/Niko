@@ -1,13 +1,13 @@
 import type { IncomingMessage } from "node:http";
 import { execFile } from "node:child_process";
-import { existsSync, rmSync, writeFileSync, createWriteStream } from "node:fs";
+import { rmSync, createWriteStream } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
+import { garantirScript } from "./scriptsTemporarios";
 
 const LIMITE_IMAGEM = 25 * 1024 * 1024;
 const TEMPO_LIMITE = 60_000;
-const ARQUIVO_SCRIPT = join(tmpdir(), "niko-ocr-v1.ps1");
 
 const SCRIPT = String.raw`
 param([string]$Caminho)
@@ -48,10 +48,6 @@ export interface ResultadoOcr {
   idioma: string;
 }
 
-function garantirScript() {
-  if (!existsSync(ARQUIVO_SCRIPT)) writeFileSync(ARQUIVO_SCRIPT, `﻿${SCRIPT}`, "utf8");
-}
-
 function receberImagem(req: IncomingMessage, destino: string): Promise<void> {
   return new Promise((resolver, rejeitar) => {
     let tamanho = 0;
@@ -73,11 +69,11 @@ function receberImagem(req: IncomingMessage, destino: string): Promise<void> {
 
 function rodarOcr(caminho: string): Promise<ResultadoOcr> {
   if (process.platform !== "win32") return Promise.reject(new Error("ocr_indisponivel"));
-  garantirScript();
+  const script = garantirScript("niko-ocr", `﻿${SCRIPT}`);
   return new Promise((resolver, rejeitar) => {
     execFile(
       "powershell.exe",
-      ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", ARQUIVO_SCRIPT, "-Caminho", caminho],
+      ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", script, "-Caminho", caminho],
       { windowsHide: true, timeout: TEMPO_LIMITE, maxBuffer: 16 * 1024 * 1024, encoding: "utf8" },
       (erro, saida) => {
         if (erro && !saida) return rejeitar(new Error(erro.killed ? "tempo_ocr" : "falha_ocr"));

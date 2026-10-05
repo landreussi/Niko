@@ -288,16 +288,27 @@ const LEITORES: Record<Servico, Leitor> = {
 };
 
 const cacheDados = new Map<Servico, { quando: number; dados: unknown }>();
+const leiturasEmAndamento = new Map<Servico, Promise<unknown>>();
 
-export async function lerConexao(servico: Servico, forcar = false) {
-  const anterior = cacheDados.get(servico);
-  if (!forcar && anterior && Date.now() - anterior.quando < 20000) return anterior.dados;
+async function buscarConexao(servico: Servico, aindaValida: () => boolean) {
   const config = lerConfig()[servico];
   const chave = config?.temChave ? await lerSegredo(`conexao-${servico}`) : null;
   if (!chave) throw new Error("sem_chave");
   const dados = await LEITORES[servico](chave, config?.url);
-  cacheDados.set(servico, { quando: Date.now(), dados });
+  if (aindaValida()) cacheDados.set(servico, { quando: Date.now(), dados });
   return dados;
+}
+
+export async function lerConexao(servico: Servico, forcar = false) {
+  const anterior = cacheDados.get(servico);
+  if (!forcar && anterior && Date.now() - anterior.quando < 20000) return anterior.dados;
+  const emAndamento = leiturasEmAndamento.get(servico);
+  if (emAndamento) return emAndamento;
+  const leitura: Promise<unknown> = buscarConexao(servico, () => leiturasEmAndamento.get(servico) === leitura).finally(() => {
+    if (leiturasEmAndamento.get(servico) === leitura) leiturasEmAndamento.delete(servico);
+  });
+  leiturasEmAndamento.set(servico, leitura);
+  return leitura;
 }
 
 export async function chaveDe(servico: Servico): Promise<string> {
@@ -316,6 +327,7 @@ export async function salvarChaveConexao(servico: Servico, dados: { chave?: unkn
     c.gmail = { temChave: true };
     salvarConfig(c);
     cacheDados.delete("gmail");
+    leiturasEmAndamento.delete("gmail");
     return { ok: true };
   }
   const chave = typeof dados.chave === "string" ? dados.chave.trim() : "";
@@ -327,6 +339,7 @@ export async function salvarChaveConexao(servico: Servico, dados: { chave?: unkn
   c[servico] = { temChave: true, url };
   salvarConfig(c);
   cacheDados.delete(servico);
+  leiturasEmAndamento.delete(servico);
   return { ok: true };
 }
 
@@ -336,5 +349,6 @@ export async function removerChaveConexao(servico: Servico) {
   delete c[servico];
   salvarConfig(c);
   cacheDados.delete(servico);
+  leiturasEmAndamento.delete(servico);
   return { ok: true };
 }

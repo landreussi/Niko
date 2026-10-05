@@ -209,8 +209,19 @@ function lerSessaoAtual(): SessaoAtual | null {
   return sessao;
 }
 
-export async function lerConsumo(forcar = false): Promise<Consumo> {
-  if (!forcar && cache && Date.now() - cache.em < 60000) return cache.valor;
+let leituraEmAndamento: Promise<Consumo> | null = null;
+
+export function lerConsumo(forcar = false): Promise<Consumo> {
+  if (!forcar && cache && Date.now() - cache.em < 60000) return Promise.resolve(cache.valor);
+  if (leituraEmAndamento) return leituraEmAndamento;
+  const leitura = calcularConsumo().finally(() => {
+    if (leituraEmAndamento === leitura) leituraEmAndamento = null;
+  });
+  leituraEmAndamento = leitura;
+  return leitura;
+}
+
+async function calcularConsumo(): Promise<Consumo> {
   const [claude, codex] = await Promise.all([lerClaude(), lerCodex()]);
   let sessao: SessaoAtual | null = null;
   try {

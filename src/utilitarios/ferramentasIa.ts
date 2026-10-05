@@ -395,7 +395,7 @@ const FERRAMENTAS: FerramentaNiko[] = [
       if (!c?.chaveSalva) return { tipo: "erro", mensagem: `${servico} não está conectado. Diga ao usuário para conectar em Conexões.` };
       try {
         const dados = await conexoesPonte.ler(servico);
-        return { tipo: "dados", conteudo: JSON.parse(JSON.stringify(dados).slice(0, 14000).replace(/,[^,]*$/, "]}").length > 0 ? JSON.stringify(dados) : "{}") };
+        return { tipo: "dados", conteudo: dados };
       } catch (e) {
         return { tipo: "erro", mensagem: (e as Error).message };
       }

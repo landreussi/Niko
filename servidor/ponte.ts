@@ -47,6 +47,17 @@ function responder(res: ServerResponse, status: number, dados: unknown) {
   res.end(JSON.stringify(dados));
 }
 
+const HOSTS_LOCAIS = new Set(["localhost", "127.0.0.1", "[::1]"]);
+
+function hostLocal(req: IncomingMessage): boolean {
+  const host = req.headers.host ?? "";
+  try {
+    return HOSTS_LOCAIS.has(new URL(`http://${host}`).hostname);
+  } catch {
+    return false;
+  }
+}
+
 function origemConfiavel(req: IncomingMessage): boolean {
   if (req.headers["x-niko"] !== "1") return false;
   const token = process.env.NIKO_TOKEN;
@@ -64,6 +75,7 @@ function origemConfiavel(req: IncomingMessage): boolean {
 export const rotas: Connect.NextHandleFunction = async (req, res, proximo) => {
   const url = new URL(req.url ?? "/", "http://localhost");
   if (!url.pathname.startsWith("/ponte/")) return proximo();
+  if (!hostLocal(req)) return responder(res, 403, { erro: "host_nao_permitido" });
   if (ehRotaDoGancho(url.pathname) && req.method === "POST") return receberEventoDoGancho(req, res);
   if (!origemConfiavel(req)) return responder(res, 403, { erro: "origem_nao_permitida" });
   const caminho = url.pathname.slice("/ponte".length);

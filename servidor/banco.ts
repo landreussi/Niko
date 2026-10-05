@@ -10,13 +10,15 @@ export function caminhoBanco(nome = "") {
   return join(pastaDados(), nome ? `niko-${nome}.db` : "niko.db");
 }
 
-function fazerBackup(arquivo: string) {
+function fazerBackup(arquivo: string, banco = "") {
   if (!existsSync(arquivo)) return;
   const pasta = join(pastaDados(), "backups");
   mkdirSync(pasta, { recursive: true });
-  const nome = `niko-${new Date().toISOString().replace(/[:.]/g, "-")}.db`;
+  const prefixo = banco ? `niko-${banco}--` : "niko-";
+  const ehDesteBanco = (n: string) => n.startsWith(prefixo) && n.endsWith(".db") && (banco !== "" || !n.includes("--"));
+  const nome = `${prefixo}${new Date().toISOString().replace(/[:.]/g, "-")}.db`;
   copyFileSync(arquivo, join(pasta, nome));
-  const antigos = readdirSync(pasta).filter((n) => n.startsWith("niko-") && n.endsWith(".db")).sort();
+  const antigos = readdirSync(pasta).filter(ehDesteBanco).sort();
   for (const velho of antigos.slice(0, Math.max(0, antigos.length - 10))) unlinkSync(join(pasta, velho));
 }
 
@@ -31,7 +33,7 @@ function abrir(nome = ""): DatabaseSync {
   db.exec("CREATE TABLE IF NOT EXISTS meta (chave TEXT PRIMARY KEY, valor TEXT NOT NULL)");
   const versao = Number((db.prepare("SELECT valor FROM meta WHERE chave = 'versao'").get() as { valor?: string } | undefined)?.valor ?? 0);
   if (versao < VERSAO) {
-    if (versao > 0) fazerBackup(arquivo);
+    if (versao > 0) fazerBackup(arquivo, nome);
     db.exec("CREATE TABLE IF NOT EXISTS dados (chave TEXT PRIMARY KEY, valor TEXT NOT NULL, atualizado INTEGER NOT NULL)");
     db.prepare("INSERT INTO meta (chave, valor) VALUES ('versao', ?) ON CONFLICT(chave) DO UPDATE SET valor = excluded.valor").run(String(VERSAO));
   }
@@ -69,7 +71,7 @@ export function gravar(itens: Record<string, string | null>, nome = "") {
 export function zerarBanco(nome = ""): string {
   const db = abrir(nome);
   db.exec("PRAGMA wal_checkpoint(TRUNCATE)");
-  fazerBackup(caminhoBanco(nome));
+  fazerBackup(caminhoBanco(nome), nome);
   db.exec("DELETE FROM dados");
   db.exec("VACUUM");
   return join(pastaDados(), "backups");

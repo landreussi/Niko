@@ -189,7 +189,9 @@ function caminhoLivre(pasta: string, nome: string) {
 
 function abrirNoWindows(argumentos: string[]) {
   if (process.platform !== "win32") return;
-  spawn("explorer.exe", argumentos, { detached: true, stdio: "ignore", windowsHide: false }).unref();
+  const filho = spawn("explorer.exe", argumentos, { detached: true, stdio: "ignore", windowsHide: false });
+  filho.on("error", () => undefined);
+  filho.unref();
 }
 
 export async function baixarArquivo(banco: string, materia: string, id: string) {

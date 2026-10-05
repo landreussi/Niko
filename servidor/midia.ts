@@ -1,8 +1,4 @@
-import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
-import { writeFileSync, existsSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { createInterface } from "node:readline";
+import { criarProcessoPowerShell } from "./processoPowerShell";
 
 const SCRIPT = String.raw`
 $ErrorActionPreference = 'Stop'
@@ -94,56 +90,12 @@ while ($true) {
 }
 `;
 
-const ARQUIVO = join(tmpdir(), "niko-midia-v2.ps1");
-let processo: ChildProcessWithoutNullStreams | null = null;
-let contador = 0;
-const esperando = new Map<number, { resolver: (v: unknown) => void; rejeitar: (e: Error) => void; relogio: NodeJS.Timeout }>();
-
-function iniciar() {
-  if (processo) return processo;
-  if (process.platform !== "win32") throw new Error("somente_windows");
-  if (!existsSync(ARQUIVO)) writeFileSync(ARQUIVO, SCRIPT, "utf8");
-  const p = spawn("powershell.exe", ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", ARQUIVO], { windowsHide: true });
-  const leitor = createInterface({ input: p.stdout });
-  leitor.on("line", (linha) => {
-    try {
-      const r = JSON.parse(linha) as { id?: number; erro?: string };
-      const pendente = r.id ? esperando.get(r.id) : undefined;
-      if (!pendente) return;
-      esperando.delete(r.id!);
-      clearTimeout(pendente.relogio);
-      if (r.erro) pendente.rejeitar(new Error(r.erro));
-      else pendente.resolver(r);
-    } catch {
-      return;
-    }
-  });
-  p.on("exit", () => {
-    processo = null;
-    for (const [id, e] of esperando) {
-      clearTimeout(e.relogio);
-      e.rejeitar(new Error("midia_encerrada"));
-      esperando.delete(id);
-    }
-  });
-  processo = p;
-  return p;
-}
+const midia = criarProcessoPowerShell("niko-midia", SCRIPT, "midia_encerrada");
 
 export function pedirMidia(acao: "estado" | "alternar" | "proxima" | "anterior" | "posicao", segundos?: number): Promise<unknown> {
-  const p = iniciar();
-  const id = ++contador;
-  return new Promise((resolver, rejeitar) => {
-    const relogio = setTimeout(() => {
-      esperando.delete(id);
-      rejeitar(new Error("tempo_esgotado"));
-    }, 15000);
-    esperando.set(id, { resolver, rejeitar, relogio });
-    p.stdin.write(`${JSON.stringify({ id, acao, segundos: Number(segundos) || 0 })}\n`);
-  });
+  return midia.pedir({ acao, segundos: Number(segundos) || 0 });
 }
 
 export function encerrarMidia() {
-  processo?.kill();
-  processo = null;
+  midia.encerrar();
 }

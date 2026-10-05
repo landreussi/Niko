@@ -24,6 +24,7 @@ const ALTURA_DA_ABA = 30;
 const RAIO_DAS_ORELHAS = 10;
 const PASSO_DA_RODA = 2;
 const MARGEM_DOS_POPS = 6;
+const INTERVALO_LEITURA_INICIAR_MS = 400;
 
 type Pop = { tipo: "painel" } | { tipo: "personalizar" } | { tipo: "bandeja"; direita: number } | null;
 
@@ -51,7 +52,7 @@ function LadoEsquerdo({ pop, alternarPersonalizacao, aoAbrirAba }: { pop: Pop; a
   const prepararIniciar = () => {
     iniciar.current.preparar();
     window.clearInterval(relogioIniciar.current);
-    relogioIniciar.current = window.setInterval(() => iniciar.current.preparar(), 100);
+    relogioIniciar.current = window.setInterval(() => iniciar.current.preparar(), INTERVALO_LEITURA_INICIAR_MS);
   };
   const tarefas = useRotina((s) => s.tarefas);
   const doDia = tarefasDoDia(tarefas, hojeISO()).filter((t) => t.status !== "cancelada");

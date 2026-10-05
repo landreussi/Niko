@@ -1,7 +1,5 @@
 import { spawn } from "node:child_process";
-import { writeFileSync, existsSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { garantirScript } from "./scriptsTemporarios";
 
 const CODIGO = `
 using System;
@@ -56,23 +54,28 @@ $resultado | ConvertTo-Json -Compress
 `;
 
 const PREFIXO = "Niko/";
-const ARQUIVO_SCRIPT = join(tmpdir(), "niko-credencial-v1.ps1");
+const TEMPO_LIMITE_MS = 20000;
 
-function caminhoScript(): string {
-  if (!existsSync(ARQUIVO_SCRIPT)) writeFileSync(ARQUIVO_SCRIPT, SCRIPT, "utf8");
-  return ARQUIVO_SCRIPT;
-}
 const cache = new Map<string, string | null>();
+const leiturasEmAndamento = new Map<string, Promise<string | null>>();
 
 function executar(entrada: Record<string, string>): Promise<{ ok?: boolean; valor?: string | null }> {
   return new Promise((resolver, rejeitar) => {
-    const processo = spawn("powershell.exe", ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", caminhoScript()], { windowsHide: true });
+    const processo = spawn("powershell.exe", ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", garantirScript("niko-credencial", SCRIPT)], { windowsHide: true });
     let saida = "";
     let erro = "";
+    const relogio = setTimeout(() => {
+      processo.kill();
+      rejeitar(new Error("tempo_credencial"));
+    }, TEMPO_LIMITE_MS);
     processo.stdout.on("data", (d) => (saida += d.toString()));
     processo.stderr.on("data", (d) => (erro += d.toString()));
-    processo.on("error", rejeitar);
+    processo.on("error", (e) => {
+      clearTimeout(relogio);
+      rejeitar(e);
+    });
     processo.on("close", (codigo) => {
+      clearTimeout(relogio);
       if (codigo !== 0) return rejeitar(new Error(erro.trim().split("\n")[0] || "falha_credencial"));
       try {
         resolver(JSON.parse(saida.trim().split("\n").pop() ?? "{}"));
@@ -94,6 +97,7 @@ export async function gravarSegredo(id: string, segredo: string) {
   if (process.platform !== "win32") throw new Error("somente_windows");
   const r = await executar({ acao: "gravar", alvo: PREFIXO + id, segredo });
   if (!r.ok) throw new Error("falha_ao_gravar");
+  leiturasEmAndamento.delete(id);
   cache.set(id, segredo);
 }
 
@@ -101,15 +105,25 @@ export async function lerSegredo(id: string): Promise<string | null> {
   validarId(id);
   if (cache.has(id)) return cache.get(id) ?? null;
   if (process.platform !== "win32") return null;
-  const r = await executar({ acao: "ler", alvo: PREFIXO + id });
-  const valor = r.valor ?? null;
-  cache.set(id, valor);
-  return valor;
+  const emAndamento = leiturasEmAndamento.get(id);
+  if (emAndamento) return emAndamento;
+  const leitura = executar({ acao: "ler", alvo: PREFIXO + id })
+    .then((r) => {
+      const valor = r.valor ?? null;
+      if (leiturasEmAndamento.get(id) === leitura) cache.set(id, valor);
+      return valor;
+    })
+    .finally(() => {
+      if (leiturasEmAndamento.get(id) === leitura) leiturasEmAndamento.delete(id);
+    });
+  leiturasEmAndamento.set(id, leitura);
+  return leitura;
 }
 
 export async function apagarSegredo(id: string) {
   validarId(id);
   cache.delete(id);
+  leiturasEmAndamento.delete(id);
   if (process.platform !== "win32") return;
   await executar({ acao: "apagar", alvo: PREFIXO + id });
 }

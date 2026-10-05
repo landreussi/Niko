@@ -1,8 +1,4 @@
-import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
-import { writeFileSync, existsSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { createInterface } from "node:readline";
+import { criarProcessoPowerShell } from "./processoPowerShell";
 
 const CODIGO = String.raw`
 using System;
@@ -126,56 +122,13 @@ while ($true) {
 }
 `;
 
-const ARQUIVO = join(tmpdir(), "niko-janelas-v4.ps1");
-let processo: ChildProcessWithoutNullStreams | null = null;
-let contador = 0;
-const esperando = new Map<number, { resolver: (v: unknown) => void; rejeitar: (e: Error) => void; relogio: NodeJS.Timeout }>();
-
-function iniciar() {
-  if (processo) return processo;
-  if (process.platform !== "win32") throw new Error("somente_windows");
-  if (!existsSync(ARQUIVO)) writeFileSync(ARQUIVO, SCRIPT, "utf8");
-  const p = spawn("powershell.exe", ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", ARQUIVO], { windowsHide: true });
-  createInterface({ input: p.stdout }).on("line", (linha) => {
-    try {
-      const r = JSON.parse(linha) as { id?: number; erro?: string };
-      const pendente = r.id ? esperando.get(r.id) : undefined;
-      if (!pendente) return;
-      esperando.delete(r.id!);
-      clearTimeout(pendente.relogio);
-      if (r.erro) pendente.rejeitar(new Error(r.erro));
-      else pendente.resolver(r);
-    } catch {
-      return;
-    }
-  });
-  p.on("exit", () => {
-    processo = null;
-    for (const [id, e] of esperando) {
-      clearTimeout(e.relogio);
-      e.rejeitar(new Error("janelas_encerrado"));
-      esperando.delete(id);
-    }
-  });
-  processo = p;
-  return p;
-}
+const janelas = criarProcessoPowerShell("niko-janelas", SCRIPT, "janelas_encerrado");
 
 export function pedirJanelas(acao: "listar" | "focar" | "minimizar" | "fechar", janela?: string): Promise<unknown> {
   if (janela !== undefined && !/^\d{1,20}$/.test(janela)) return Promise.reject(new Error("janela_invalida"));
-  const p = iniciar();
-  const id = ++contador;
-  return new Promise((resolver, rejeitar) => {
-    const relogio = setTimeout(() => {
-      esperando.delete(id);
-      rejeitar(new Error("tempo_esgotado"));
-    }, 20000);
-    esperando.set(id, { resolver, rejeitar, relogio });
-    p.stdin.write(`${JSON.stringify({ id, acao, janela })}\n`);
-  });
+  return janelas.pedir({ acao, janela }, 20000);
 }
 
 export function encerrarJanelas() {
-  processo?.kill();
-  processo = null;
+  janelas.encerrar();
 }
