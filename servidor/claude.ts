@@ -1,5 +1,6 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
+import { spawn } from "node:child_process";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
@@ -41,10 +42,33 @@ export interface EventoClaude {
   pedidoId?: string;
 }
 
+interface RegraSugerida {
+  toolName: string;
+  ruleContent: string;
+}
+
 interface Pendente {
   res: ServerResponse;
   temporizador: NodeJS.Timeout;
   sessao: string;
+  sugestoes: RegraSugerida[];
+}
+
+const projetosConhecidos = new Set<string>();
+
+function regrasSugeridas(dados: Record<string, unknown>): RegraSugerida[] {
+  const lista = Array.isArray(dados.permission_suggestions) ? dados.permission_suggestions : [];
+  const regras: RegraSugerida[] = [];
+  for (const s of lista) {
+    if (!s || typeof s !== "object") continue;
+    const sugestao = s as { type?: unknown; behavior?: unknown; rules?: unknown };
+    if (sugestao.type !== "allow" || sugestao.behavior !== "allow" || !Array.isArray(sugestao.rules)) continue;
+    for (const r of sugestao.rules) {
+      const m = typeof r === "string" ? /^([A-Za-z0-9_.:-]{1,64})\((.{1,300})\)$/.exec(r.trim()) : null;
+      if (m && !regras.some((x) => x.toolName === m[1] && x.ruleContent === m[2])) regras.push({ toolName: m[1], ruleContent: m[2] });
+    }
+  }
+  return regras.slice(0, 4);
 }
 
 const historico: EventoClaude[] = [];
@@ -298,6 +322,10 @@ export async function receberEventoDoGancho(req: IncomingMessage, res: ServerRes
     cwd: typeof corpo.cwd === "string" ? corpo.cwd : "",
     dados,
   };
+  if (evento.cwd && evento.cwd.length < 500) {
+    projetosConhecidos.add(evento.cwd);
+    if (projetosConhecidos.size > 50) projetosConhecidos.delete(projetosConhecidos.values().next().value as string);
+  }
   if (nome !== "PermissionRequest" || ouvintes.size === 0) {
     responderVazio(res);
     transmitir(evento);
@@ -306,14 +334,14 @@ export async function receberEventoDoGancho(req: IncomingMessage, res: ServerRes
   const pedidoId = randomUUID();
   evento.pedidoId = pedidoId;
   const temporizador = setTimeout(() => encerrarPedido(pedidoId, null, "expirou"), ESPERA_DECISAO_MS);
-  pendentes.set(pedidoId, { res, temporizador, sessao: evento.sessao });
+  pendentes.set(pedidoId, { res, temporizador, sessao: evento.sessao, sugestoes: regrasSugeridas(corpo) });
   res.on("close", () => {
     if (pendentes.has(pedidoId)) encerrarPedido(pedidoId, null, "cancelado");
   });
   transmitir(evento);
 }
 
-function encerrarPedido(pedidoId: string, decisao: "allow" | "deny" | null, motivo: string) {
+function encerrarPedido(pedidoId: string, decisao: "allow" | "deny" | null, motivo: string, regra?: RegraSugerida) {
   const pendente = pendentes.get(pedidoId);
   if (!pendente) return false;
   pendentes.delete(pedidoId);
@@ -323,7 +351,12 @@ function encerrarPedido(pedidoId: string, decisao: "allow" | "deny" | null, moti
       const corpo = {
         hookSpecificOutput: {
           hookEventName: "PermissionRequest",
-          decision: decisao === "allow" ? { behavior: "allow" } : { behavior: "deny", message: "Negado pelo Niko." },
+          decision:
+            decisao === "deny"
+              ? { behavior: "deny" }
+              : regra
+                ? { behavior: "allow", updatedPermissions: [{ type: "allow", toolName: regra.toolName, ruleContent: regra.ruleContent, behavior: "allow", mode: "local", directories: [] }] }
+                : { behavior: "allow" },
         },
       };
       pendente.res.statusCode = 200;
@@ -339,7 +372,39 @@ export function decidirPedido(corpo: Record<string, unknown>) {
   const pedidoId = typeof corpo.pedidoId === "string" ? corpo.pedidoId : "";
   const decisao = corpo.decisao === "allow" || corpo.decisao === "deny" ? corpo.decisao : corpo.decisao === "terminal" ? null : undefined;
   if (decisao === undefined) throw new Error("decisao_invalida");
-  if (!encerrarPedido(pedidoId, decisao, decisao ? "decidido" : "terminal")) throw new Error("pedido_expirou");
+  let regra: RegraSugerida | undefined;
+  if (corpo.regra && typeof corpo.regra === "object") {
+    if (decisao !== "allow") throw new Error("decisao_invalida");
+    const pedida = corpo.regra as Partial<RegraSugerida>;
+    regra = pendentes.get(pedidoId)?.sugestoes.find((s) => s.toolName === pedida.toolName && s.ruleContent === pedida.ruleContent);
+    if (!regra) throw new Error("regra_invalida");
+  }
+  if (!encerrarPedido(pedidoId, decisao, decisao ? "decidido" : "terminal", regra)) throw new Error("pedido_expirou");
+  return { ok: true };
+}
+
+function caminhoDoVsCode(): string | null {
+  const candidatos = [
+    join(process.env.LOCALAPPDATA ?? "", "Programs", "Microsoft VS Code", "Code.exe"),
+    join(process.env.ProgramFiles ?? "C:\\Program Files", "Microsoft VS Code", "Code.exe"),
+    join(process.env["ProgramFiles(x86)"] ?? "C:\\Program Files (x86)", "Microsoft VS Code", "Code.exe"),
+  ];
+  for (const pasta of (process.env.PATH ?? "").split(";")) {
+    if (/microsoft vs code[\\/]bin$/i.test(pasta.trim())) candidatos.push(join(pasta.trim(), "..", "Code.exe"));
+  }
+  return candidatos.find((c) => c && existsSync(c)) ?? null;
+}
+
+export function abrirProjeto(corpo: Record<string, unknown>) {
+  const cwd = typeof corpo.cwd === "string" ? corpo.cwd : "";
+  if (!projetosConhecidos.has(cwd) || !existsSync(cwd) || !statSync(cwd).isDirectory()) throw new Error("projeto_desconhecido");
+  if (corpo.como === "vscode") {
+    const code = caminhoDoVsCode();
+    if (!code) throw new Error("vscode_nao_encontrado");
+    spawn(code, [cwd], { detached: true, stdio: "ignore", windowsHide: false }).unref();
+  } else if (corpo.como === "pasta") {
+    spawn("explorer.exe", [cwd], { detached: true, stdio: "ignore", windowsHide: false }).unref();
+  } else throw new Error("acao_invalida");
   return { ok: true };
 }
 

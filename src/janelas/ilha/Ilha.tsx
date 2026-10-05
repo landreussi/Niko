@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import {
-  ListTodo, Zap, Music, Timer, Repeat, CalendarClock, CalendarDays, MessageCircle, Plug, Bell, Volume2, VolumeX, AppWindow, ChevronUp, Check, CircleAlert, Download, SquareTerminal, ShieldAlert, LoaderCircle,
+  ListTodo, Zap, Music, Timer, Repeat, CalendarDays, MessageCircle, Plug, Bell, Volume2, VolumeX, AppWindow, ChevronUp, Check, CircleAlert, Download, SquareTerminal, ShieldAlert, LoaderCircle,
   type LucideIcon,
 } from "lucide-react";
 import { useConfig, type AbaIlha } from "../../estado/configuracoes";
@@ -16,7 +16,7 @@ import { Anel } from "../../componentes/Graficos";
 import { T } from "../../textos/textos";
 import { tocarSom } from "../../ponte/sons";
 import {
-  VisaoHoje, VisaoCaptura, VisaoMidia, VisaoFoco, VisaoHabitos, VisaoAgenda, VisaoConexoes, VisaoCalendario, VisaoAvisos,
+  VisaoHoje, VisaoCaptura, VisaoMidia, VisaoFoco, VisaoHabitos, VisaoConexoes, VisaoCalendario, VisaoAvisos,
 } from "./Visoes";
 import { alguemCobre } from "../geometria";
 import { VisaoChat } from "./VisaoChat";
@@ -39,8 +39,7 @@ const ICONE_ABA: Record<AbaIlha, LucideIcon> = {
   midia: Music,
   foco: Timer,
   habitos: Repeat,
-  agenda: CalendarClock,
-  chat: MessageCircle,
+ chat: MessageCircle,
   conexoes: Plug,
   calendario: CalendarDays,
   avisos: Bell,
@@ -53,8 +52,7 @@ const VISAO_ABA: Record<AbaIlha, () => React.JSX.Element> = {
   midia: VisaoMidia,
   foco: VisaoFoco,
   habitos: VisaoHabitos,
-  agenda: VisaoAgenda,
-  chat: VisaoChat,
+ chat: VisaoChat,
   conexoes: VisaoConexoes,
   calendario: VisaoCalendario,
   avisos: VisaoAvisos,
@@ -67,8 +65,7 @@ const ALTURA_ABA: Record<AbaIlha, number> = {
   midia: 156,
   foco: 176,
   habitos: 230,
-  agenda: 220,
-  chat: 300,
+ chat: 300,
   conexoes: 350,
   calendario: 286,
   avisos: 178,
@@ -82,7 +79,7 @@ function estadoCalmo(e: EstadoAgente): EstadoAgente {
 }
 const LARGURA_EXPANDIDA = 660;
 const ALTURA_COMPACTA = 30;
-const AGENTE_DA_ABA: Partial<Record<AbaIlha, AgenteId>> = { hoje: "organizador", agenda: "organizador", foco: "tutor", conexoes: "java", claude: "java" };
+const AGENTE_DA_ABA: Partial<Record<AbaIlha, AgenteId>> = { hoje: "organizador", foco: "tutor", conexoes: "java", claude: "java" };
 const RODIZIO_MS = 8 * 60_000;
 
 function agenteDoRodizio(favorito: AgenteId, agora: number): AgenteId {
@@ -554,7 +551,7 @@ export function Ilha() {
                         aria-label={T.ilha.abrirSistema}
                         title={T.ilha.abrirSistema}
                         onClick={() => {
-                          const rota = { hoje: "journal", captura: "inicio", midia: "inicio", foco: "estudos", habitos: "journal", agenda: "calendario", chat: "chat", conexoes: "conexoes", calendario: "calendario", avisos: "inicio", claude: "configuracoes" } as const;
+                          const rota = { hoje: "journal", captura: "inicio", midia: "inicio", foco: "estudos", habitos: "journal", chat: "chat", conexoes: "conexoes", calendario: "calendario", avisos: "inicio", claude: "configuracoes" } as const;
                           irPara(rota[abaAtual]);
                           recolher();
                           void tocarSom("open");

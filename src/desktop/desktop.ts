@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { emitTo, listen } from "@tauri-apps/api/event";
 import type { Rota, ServicoId } from "../tipos";
 
 export type NomeJanela = "sistema" | "ilha" | "dock";
@@ -19,14 +20,31 @@ export type Comando =
   | { tipo: "abrirBusca" }
   | { tipo: "abrirCaptura" };
 
-const canal = typeof BroadcastChannel !== "undefined" ? new BroadcastChannel("niko-comandos") : null;
+const canal = !NATIVO && typeof BroadcastChannel !== "undefined" ? new BroadcastChannel("niko-comandos") : null;
 
 export function enviarComando(c: Comando) {
-  canal?.postMessage(c);
+  if (NATIVO) {
+    void emitTo("sistema", "niko-comandos", c).catch((erro) => console.error("Falha ao enviar comando para a janela do Niko", erro));
+  } else canal?.postMessage(c);
   void mostrarSistema();
 }
 
 export function ouvirComandos(fn: (c: Comando) => void): () => void {
+  if (NATIVO) {
+    let ativo = true;
+    let desligar: () => void = () => undefined;
+    void listen<Comando>("niko-comandos", (e) => {
+      if (ativo) fn(e.payload);
+    }, { target: { kind: "WebviewWindow", label: "sistema" } }).then((f) => {
+      if (ativo) desligar = f;
+      else f();
+    }).catch((erro) => console.error("Falha ao receber comandos na janela do Niko", erro));
+    return () => {
+      if (!ativo) return;
+      ativo = false;
+      desligar();
+    };
+  }
   if (!canal) return () => undefined;
   const aoReceber = (e: MessageEvent<Comando>) => fn(e.data);
   canal.addEventListener("message", aoReceber);
@@ -222,6 +240,32 @@ export interface EstadoDaFrente {
 }
 
 const FRENTE_LIVRE: EstadoDaFrente = { cobre: false, telaCheia: false, maximizada: false, frente: "area_de_trabalho" };
+
+export async function permitirNotificacoes(): Promise<boolean> {
+  if (!NATIVO) return false;
+  try {
+    const { isPermissionGranted, requestPermission } = await import("@tauri-apps/plugin-notification");
+    if (await isPermissionGranted()) return true;
+    return (await requestPermission()) === "granted";
+  } catch {
+    return false;
+  }
+}
+
+export async function notificarWindows(titulo: string, corpo: string): Promise<void> {
+  if (!NATIVO) return;
+  try {
+    const { isPermissionGranted, sendNotification } = await import("@tauri-apps/plugin-notification");
+    if (await isPermissionGranted()) sendNotification({ title: titulo, body: corpo });
+  } catch {
+    return;
+  }
+}
+
+export async function frenteCobreAIlha(): Promise<boolean> {
+  const r = await invocar<EstadoDaFrente>("frente_cobre_tela");
+  return Boolean(r?.cobre);
+}
 
 export async function frenteEmTelaCheia(): Promise<boolean> {
   const r = await invocar<EstadoDaFrente>("frente_cobre_tela");

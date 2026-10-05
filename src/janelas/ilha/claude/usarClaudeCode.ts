@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { claudeCode, ouvirClaudeCode, type EventoClaude } from "../../../ponte/claudeCode";
-import { frenteEmTelaCheia } from "../../../desktop/desktop";
+import { frenteCobreAIlha, frenteEmTelaCheia, notificarWindows } from "../../../desktop/desktop";
 import { useClaudeCode } from "../../../estado/claudeCode";
 import { useIlha } from "../../../estado/ilha";
 import { useConfig } from "../../../estado/configuracoes";
@@ -12,6 +12,14 @@ const TOLERANCIA_MS = 1500;
 function garantirAba() {
   const cfg = useConfig.getState();
   if (!cfg.ilha.blocos.claude) cfg.definirIlha({ blocos: { ...cfg.ilha.blocos, claude: true } });
+}
+
+async function notificarSeEscondida(corpo: string) {
+  if (!useConfig.getState().notificarClaude) return;
+  const ilha = useIlha.getState();
+  if (ilha.estado === "expandida" && ilha.aba === "claude") return;
+  if (ilha.estado !== "escondida" && !(await frenteCobreAIlha())) return;
+  await notificarWindows(T.app.nome, corpo);
 }
 
 function devolverAoTerminal(pedidoId: string) {
@@ -42,6 +50,7 @@ function reagir(e: EventoClaude) {
         garantirAba();
         useClaudeCode.getState().focar(e.sessao);
         void tocarSom("approval", "avisos");
+        void notificarSeEscondida(T.ilha.claude.notificacao.permissao(projeto));
         const ilhaAgora = useIlha.getState();
         if (ilhaAgora.estado === "escondida") ilhaAgora.definirEstado("compacta");
       });
@@ -52,11 +61,13 @@ function reagir(e: EventoClaude) {
       if (silencio) return;
       estado.focar(e.sessao);
       void tocarSom("finish", "avisos");
+      void notificarSeEscondida(T.ilha.claude.notificacao.terminou(projeto));
       if (ilha.estado !== "expandida") ilha.revelar({ texto: T.ilha.claude.terminouAviso(projeto), tipo: "sucesso", marca: "claudecode", aba: "claude" }, 7000, "normal");
       return;
     case "StopFailure":
       garantirAba();
       void tocarSom("error", "avisos");
+      void notificarSeEscondida(T.ilha.claude.notificacao.erro(projeto));
       ilha.revelar({ texto: T.ilha.claude.erroAviso(projeto), tipo: "alerta", marca: "claudecode", aba: "claude" }, 6000);
       return;
     case "Notification":

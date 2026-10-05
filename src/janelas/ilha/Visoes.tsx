@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import {
   Check, Play, Pause, SkipBack, SkipForward, RotateCcw, FastForward, Plus, Minus, ArrowUpRight, CornerDownLeft,
-  CalendarClock, GraduationCap, ListTodo, BellRing, Bell, ChevronLeft, ChevronRight, Music,
+  Bell, ChevronLeft, ChevronRight, Music,
 } from "lucide-react";
 import { useRotina, tarefasDoDia, habitoCumprido } from "../../estado/rotina";
 import { useMidia, posicaoAtual, capaDaFaixa, fundoDaCapa } from "../../estado/midia";
@@ -26,7 +26,7 @@ import { capturar, TIPOS_CAPTURA, type TipoCaptura } from "../../utilitarios/cap
 import { confirmarComando } from "../../utilitarios/comandos";
 import { formatarDinheiro } from "../../utilitarios/dinheiro";
 import { tocarSom } from "../../ponte/sons";
-import { addDays, addMonths, eachDayOfInterval, endOfMonth, endOfWeek, isSameMonth, startOfMonth, startOfWeek } from "date-fns";
+import { addMonths, eachDayOfInterval, endOfMonth, endOfWeek, isSameMonth, startOfMonth, startOfWeek } from "date-fns";
 import type { CartaoConfirmacao, EtapaPomodoro } from "../../tipos";
 
 function Cartao({ veu, children }: { veu?: string; children: React.ReactNode }) {
@@ -420,51 +420,6 @@ export function VisaoHabitos() {
               </div>
             );
           })
-        )}
-      </div>
-    </Cartao>
-  );
-}
-
-export function VisaoAgenda() {
-  const eventos = useOrganizacao((s) => s.eventos);
-  const tarefas = useRotina((s) => s.tarefas);
-  const datas = useEstudos((s) => s.datas);
-  const materias = useEstudos((s) => s.materias);
-  const itens = useMemo(() => {
-    const agora = new Date();
-    const limite = new Date(agora.getTime() + 24 * 3600000);
-    const hoje = paraISO(agora);
-    const amanha = paraISO(addDays(agora, 1));
-    const dentro = (data: string, hora?: string) => {
-      const quando = new Date(`${data}T${hora ?? "23:59"}:00`);
-      return quando >= new Date(agora.getTime() - 3600000) && quando <= limite;
-    };
-    const lista: { id: string; titulo: string; data: string; hora?: string; icone: React.ReactNode }[] = [];
-    for (const e of eventos) if ((e.data === hoje || e.data === amanha) && dentro(e.data, e.hora)) lista.push({ id: e.id, titulo: e.titulo, data: e.data, hora: e.hora, icone: e.tipo === "lembrete" ? <BellRing size={13} /> : <CalendarClock size={13} /> });
-    for (const t of tarefas) if (t.data && t.status !== "concluida" && t.status !== "cancelada" && (t.data === hoje || t.data === amanha) && dentro(t.data, t.hora)) lista.push({ id: t.id, titulo: t.titulo, data: t.data, hora: t.hora, icone: <ListTodo size={13} /> });
-    for (const d of datas) if (!d.concluida && (d.data === hoje || d.data === amanha)) lista.push({ id: d.id, titulo: `${d.titulo} (${materias.find((m) => m.id === d.materiaId)?.nome ?? ""})`, data: d.data, icone: <GraduationCap size={13} /> });
-    return lista.sort((a, b) => `${a.data}${a.hora ?? "99"}`.localeCompare(`${b.data}${b.hora ?? "99"}`));
-  }, [eventos, tarefas, datas, materias]);
-  const hoje = hojeISO();
-
-  return (
-    <Cartao>
-      <span className="ilha-titulo">{T.ilha.proximas24h}</span>
-      <div className="ilha-rolagem">
-        {itens.length === 0 ? (
-          <span className="ilha-sub">{T.ilha.semAgenda}</span>
-        ) : (
-          itens.map((i) => (
-            <div key={i.id} className="ilha-linha">
-              <span style={{ color: "var(--i-dim-2)", display: "grid" }}>{i.icone}</span>
-              <span className="cortar privado">{i.titulo}</span>
-              <span className="ilha-mini numero">
-                {i.data === hoje ? "" : `${T.geral.amanha} `}
-                {i.hora ?? ""}
-              </span>
-            </div>
-          ))
         )}
       </div>
     </Cartao>

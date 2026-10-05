@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  Bell, Bot, Check, CircleCheck, CircleX, Copy, FilePen, FileText, FolderSearch, Globe, ListChecks, LoaderCircle, MessageSquare, Search, Settings, ShieldAlert, SquareTerminal, X, type LucideIcon,
+  Bell, Bot, Check, ChevronRight, CircleCheck, CircleX, Code2, Copy, FilePen, FileText, FolderOpen, FolderSearch, Globe, ListChecks, LoaderCircle, MessageSquare, Search, Settings, ShieldAlert, SquareTerminal, X, type LucideIcon,
 } from "lucide-react";
 import { useClaudeCode, type PassoClaude, type SessaoClaude, type PedidoDePermissao } from "../../../estado/claudeCode";
-import { claudeCode, type EstadoDaInstalacao } from "../../../ponte/claudeCode";
-import { useInterface } from "../../../estado/interface";
+import { claudeCode, type EstadoDaInstalacao, type RegraSugerida } from "../../../ponte/claudeCode";
+import { contarMudancas } from "../../../utilitarios/diff";
+import { DiffCompacto } from "./DiffCompacto";
+import { UsoDasIas } from "./UsoDasIas";
 import { useIlha } from "../../../estado/ilha";
 import { tocarSom } from "../../../ponte/sons";
 import { Marca } from "../../../marcas/Marca";
@@ -12,6 +14,7 @@ import { TextoRico } from "../../../componentes/TextoRico";
 import { T } from "../../../textos/textos";
 import "./claude.css";
 import { EtapasAnimadas } from "../animacoes/EtapasAnimadas";
+import { abrirConfiguracoesClaude } from "./navegacao";
 
 const ESPERA_MS = 110_000;
 const C = T.ilha.claude;
@@ -61,15 +64,23 @@ function usarAgora(intervalo: number) {
   return agora;
 }
 
+function abrirProjeto(cwd: string, como: "vscode" | "pasta") {
+  claudeCode.abrir(cwd, como).catch((e: Error) => {
+    useIlha.getState().revelar({ texto: C.abrirFalhou[e.message] ?? C.abrirFalhou.outro, tipo: "alerta", marca: "claudecode", aba: "claude" }, 4500);
+  });
+}
+
 function Permissao({ pedido, fila }: { pedido: PedidoDePermissao; fila: number }) {
   const agora = usarAgora(1000);
   const [enviando, setEnviando] = useState(false);
   const restante = Math.max(0, Math.ceil((Date.parse(pedido.recebidoEm) + ESPERA_MS - agora) / 1000));
-  const decidir = (decisao: "allow" | "deny" | "terminal") => {
+  const regra = pedido.sugestoes[0];
+  const textoRegra = regra ? `${regra.toolName}(${regra.ruleContent})` : "";
+  const decidir = (decisao: "allow" | "deny" | "terminal", comRegra?: RegraSugerida) => {
     if (enviando) return;
     setEnviando(true);
     claudeCode
-      .decidir(pedido.pedidoId, decisao)
+      .decidir(pedido.pedidoId, decisao, comRegra)
       .then(() => {
         useClaudeCode.getState().removerPedido(pedido.pedidoId);
         void tocarSom(decisao === "allow" ? "approve" : decisao === "deny" ? "slap" : "close", "avisos");
@@ -87,7 +98,7 @@ function Permissao({ pedido, fila }: { pedido: PedidoDePermissao; fila: number }
         <span>{C.querPermissao(pedido.ferramenta)}</span>
         <span className="vsc-chip">{pedido.projeto}</span>
       </div>
-      <pre className="vsc-codigo">{pedido.entrada}</pre>
+      {pedido.alteracao ? <DiffCompacto alteracao={pedido.alteracao} maximo={80} /> : <pre className="vsc-codigo">{pedido.entrada}</pre>}
       <div className="vsc-permissao-rodape">
         <span className="vsc-dim">
           {C.expiraEm(restante)}
@@ -100,6 +111,12 @@ function Permissao({ pedido, fila }: { pedido: PedidoDePermissao; fila: number }
         <button type="button" className="vsc-botao" disabled={enviando} onClick={() => decidir("deny")}>
           {C.negar}
         </button>
+        {regra && (
+          <button type="button" className="vsc-botao vsc-botao-regra" disabled={enviando} title={C.sempreDica(textoRegra)} onClick={() => decidir("allow", regra)}>
+            {C.sempre}
+            <code>{textoRegra}</code>
+          </button>
+        )}
         <button type="button" className="vsc-botao vsc-botao-primario" disabled={enviando} onClick={() => decidir("allow")}>
           {enviando ? <LoaderCircle size={13} className="girando" /> : <Check size={13} />}
           {C.permitir}
@@ -112,6 +129,14 @@ function Permissao({ pedido, fila }: { pedido: PedidoDePermissao; fila: number }
 function Atividade({ sessao }: { sessao: SessaoClaude }) {
   const lista = useRef<HTMLDivElement>(null);
   const noFim = useRef(true);
+  const [abertos, setAbertos] = useState<Set<string>>(new Set());
+  const alternar = (id: string) =>
+    setAbertos((atual) => {
+      const novo = new Set(atual);
+      if (novo.has(id)) novo.delete(id);
+      else novo.add(id);
+      return novo;
+    });
   useEffect(() => {
     const el = lista.current;
     if (el && noFim.current) el.scrollTop = el.scrollHeight;
@@ -128,12 +153,39 @@ function Atividade({ sessao }: { sessao: SessaoClaude }) {
     >
       {sessao.passos.map((p) => {
         const Icone = iconeDoPasso(p);
-        return (
-          <div key={p.id} className="vsc-linha" data-tipo={p.tipo}>
+        const contagem = p.alteracao ? contarMudancas(p.alteracao) : null;
+        const aberto = abertos.has(p.id);
+        const conteudo = (
+          <>
             <span className="vsc-hora">{hora(p.hora)}</span>
             <Icone size={13} className="vsc-icone" />
             <span className="vsc-rotulo">{p.rotulo}</span>
             {p.detalhe && <span className="vsc-detalhe">{p.detalhe}</span>}
+            {contagem && (
+              <span className="vsc-contagem">
+                <span className="vsc-diff-mais">+{contagem.mais}</span>
+                <span className="vsc-diff-menos">-{contagem.menos}</span>
+                <ChevronRight size={12} className="vsc-seta" data-aberto={aberto || undefined} />
+              </span>
+            )}
+          </>
+        );
+        return (
+          <div key={p.id}>
+            {p.alteracao ? (
+              <button type="button" className="vsc-linha vsc-linha-botao" data-tipo={p.tipo} aria-expanded={aberto} title={C.verAlteracao} onClick={() => alternar(p.id)}>
+                {conteudo}
+              </button>
+            ) : (
+              <div className="vsc-linha" data-tipo={p.tipo}>
+                {conteudo}
+              </div>
+            )}
+            {aberto && p.alteracao && (
+              <div className="vsc-linha-diff">
+                <DiffCompacto alteracao={p.alteracao} />
+              </div>
+            )}
           </div>
         );
       })}
@@ -185,7 +237,6 @@ function Resposta({ sessao }: { sessao: SessaoClaude }) {
 }
 
 function SemSessoes({ instalacao }: { instalacao: EstadoDaInstalacao | null }) {
-  const irPara = useInterface((s) => s.irPara);
   const conectado = instalacao?.instalado;
   return (
     <div className="vsc-vazio">
@@ -193,8 +244,8 @@ function SemSessoes({ instalacao }: { instalacao: EstadoDaInstalacao | null }) {
       <b>{conectado ? C.semSessoes : C.naoConectado}</b>
       <span className="vsc-dim">{conectado ? C.semSessoesDica : C.naoConectadoDica}</span>
       {!conectado && (
-        <button type="button" className="vsc-botao vsc-botao-primario" onClick={() => irPara("configuracoes", { secao: "claude" })}>
-          {C.conectar}
+        <button type="button" className="vsc-botao vsc-botao-primario" onClick={abrirConfiguracoesClaude}>
+          {C.abrirConfiguracoes}
         </button>
       )}
     </div>
@@ -208,7 +259,6 @@ export function VisaoClaude() {
   const focada = useClaudeCode((s) => s.focada);
   const focar = useClaudeCode((s) => s.focar);
   const fechar = useClaudeCode((s) => s.fechar);
-  const irPara = useInterface((s) => s.irPara);
   const agora = usarAgora(30000);
   const [instalacao, setInstalacao] = useState<EstadoDaInstalacao | null>(null);
   const sessao = sessoes[focada ?? ""] ?? sessoes[ordem[0]];
@@ -245,9 +295,21 @@ export function VisaoClaude() {
             </div>
           );
         })}
-        <button type="button" className="vsc-icone-botao vsc-configurar" aria-label={C.configurar} title={C.configurar} onClick={() => irPara("configuracoes", { secao: "claude" })}>
-          <Settings size={13} />
-        </button>
+        <span className="vsc-acoes-abas">
+          {sessao?.cwd && (
+            <>
+              <button type="button" className="vsc-icone-botao" aria-label={C.abrirVsCode} title={C.abrirVsCode} onClick={() => abrirProjeto(sessao.cwd, "vscode")}>
+                <Code2 size={13} />
+              </button>
+              <button type="button" className="vsc-icone-botao" aria-label={C.abrirPasta} title={C.abrirPasta} onClick={() => abrirProjeto(sessao.cwd, "pasta")}>
+                <FolderOpen size={13} />
+              </button>
+            </>
+          )}
+          <button type="button" className="vsc-icone-botao" aria-label={C.configurar} title={C.configurar} onClick={abrirConfiguracoesClaude}>
+            <Settings size={13} />
+          </button>
+        </span>
       </div>
 
       <div className="vsc-corpo">
@@ -273,19 +335,19 @@ export function VisaoClaude() {
         )}
       </div>
 
-      {sessao && (
-        <div className="vsc-status" data-estado={pedido ? "aprovacao" : sessao.estado}>
+      <div className="vsc-status" data-estado={!sessao ? "ociosa" : pedido ? "aprovacao" : sessao.estado}>
+        {sessao && (
           <span className="vsc-status-item">
             {sessao.estado === "trabalhando" || sessao.estado === "pensando" ? <LoaderCircle size={12} className="girando" /> : pedido ? <ShieldAlert size={12} /> : sessao.estado === "erro" ? <CircleX size={12} /> : <CircleCheck size={12} />}
             {pedido ? C.estados.aprovacao : C.estados[sessao.estado]}
           </span>
-          {ultimo && sessao.estado === "trabalhando" && <span className="vsc-status-item vsc-status-passo">{ultimo.rotulo} {ultimo.detalhe}</span>}
-          <span className="vsc-status-espaco" />
-          {sessao.modo && <span className="vsc-status-item">{C.modos[sessao.modo] ?? sessao.modo}</span>}
-          {sessao.modelo && <span className="vsc-status-item">{sessao.modelo}</span>}
-          <span className="vsc-status-item">{quandoFoi(sessao.atualizadaEm, agora)}</span>
-        </div>
-      )}
+        )}
+        {sessao && ultimo && sessao.estado === "trabalhando" && <span className="vsc-status-item vsc-status-passo">{ultimo.rotulo} {ultimo.detalhe}</span>}
+        <span className="vsc-status-espaco" />
+        <UsoDasIas />
+        {sessao?.modo && <span className="vsc-status-item vsc-status-opcional">{C.modos[sessao.modo] ?? sessao.modo}</span>}
+        {sessao && <span className="vsc-status-item">{quandoFoi(sessao.atualizadaEm, agora)}</span>}
+      </div>
     </div>
   );
 }

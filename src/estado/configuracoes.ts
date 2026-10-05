@@ -10,9 +10,9 @@ const DESTAQUE_ESCURO_PADRAO = "#a78bfa";
 export type Tema = "claro" | "escuro" | "sistema";
 export type Paleta = "padrao" | "areia" | "grafite" | "floresta" | "oceano";
 export type ModoBorda = "fixo" | "esconder" | "inteligente";
-export type AbaIlha = "calendario" | "hoje" | "captura" | "midia" | "foco" | "habitos" | "agenda" | "chat" | "conexoes" | "avisos" | "claude";
+export type AbaIlha = "calendario" | "hoje" | "captura" | "midia" | "foco" | "habitos" | "chat" | "conexoes" | "avisos" | "claude";
 
-export const ABAS_ILHA: AbaIlha[] = ["calendario", "claude", "conexoes", "chat", "hoje", "captura", "midia", "foco", "habitos", "agenda", "avisos"];
+export const ABAS_ILHA: AbaIlha[] = ["calendario", "claude", "conexoes", "chat", "hoje", "captura", "midia", "foco", "habitos", "avisos"];
 export type RepousoIlha = "nada" | "relogio" | "midia" | "agente";
 export type BlocoInicio =
   | "time" | "hoje" | "foco" | "financas" | "conexoes" | "revisoes" | "consumo" | "mapa" | "conquistas";
@@ -124,6 +124,7 @@ export interface Configuracoes {
   appsEsconder: string;
   receberStripe: boolean;
   primeiraExecucaoFeita: boolean;
+  notificarClaude: boolean;
 }
 
 export const CONFIG_PADRAO: Configuracoes = {
@@ -144,7 +145,7 @@ export const CONFIG_PADRAO: Configuracoes = {
   ilha: {
     ativa: true,
     modo: "inteligente",
-    blocos: { calendario: true, hoje: true, captura: true, midia: true, foco: true, habitos: true, agenda: true, chat: true, conexoes: true, avisos: true, claude: true },
+    blocos: { calendario: true, hoje: true, captura: true, midia: true, foco: true, habitos: true, chat: true, conexoes: true, avisos: true, claude: true },
     ordemAbas: ABAS_ILHA,
     repouso: "agente",
     tamanho: "media",
@@ -181,6 +182,7 @@ export const CONFIG_PADRAO: Configuracoes = {
   appsEsconder: "",
   receberStripe: false,
   primeiraExecucaoFeita: false,
+  notificarClaude: false,
 };
 
 interface AcoesConfig {
@@ -200,7 +202,7 @@ export const useConfig = create<Configuracoes & AcoesConfig>()(
     {
       name: chave("configuracoes"),
       storage: armazenamento,
-      version: 8,
+      version: 9,
       migrate: (salvo, versao) => {
         const s = (salvo ?? {}) as Partial<Configuracoes>;
         if (versao < 2) {
@@ -242,6 +244,10 @@ export const useConfig = create<Configuracoes & AcoesConfig>()(
           }
         }
         if (versao < 8 && s.ilha) s.ilha = { ...s.ilha, blocos: { ...(s.ilha.blocos ?? {}), claude: true } as Configuracoes["ilha"]["blocos"] };
+        if (versao < 9 && s.ilha) {
+          const { agenda: _agenda, ...blocos } = (s.ilha.blocos ?? {}) as Record<string, boolean>;
+          s.ilha = { ...s.ilha, ordemAbas: ((s.ilha.ordemAbas as string[] | undefined) ?? []).filter((a) => a !== "agenda") as AbaIlha[], blocos: blocos as Configuracoes["ilha"]["blocos"] };
+        }
         if (s.ia) s.ia = { ...s.ia, reservas: s.ia.reservas ?? [], modelos: s.ia.modelos ?? (s.ia.provedorId && s.ia.modelo ? { [s.ia.provedorId]: s.ia.modelo } : {}) };
         return s as Configuracoes & AcoesConfig;
       },

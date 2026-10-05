@@ -144,13 +144,15 @@ export const useInterface = create<EstadoInterface>()((set, get) => ({
   irParaLocal: (rota, parametros = {}) => {
     if (NATIVO) void mostrarSistema();
     const atual = get();
-    if (atual.rota === rota && JSON.stringify(parametros) === JSON.stringify(atual.parametros)) return;
+    const mesmoDestino = atual.rota === rota && JSON.stringify(parametros) === JSON.stringify(atual.parametros);
     set({
       rota,
-      parametros,
-      historico: [...atual.historico.slice(-30), atual.rota],
+      parametros: { ...parametros },
+      historico: mesmoDestino ? atual.historico : [...atual.historico.slice(-30), atual.rota],
       sistemaAberto: true,
       sistemaMinimizado: false,
+      zSistema: atual.proximoZ,
+      proximoZ: atual.proximoZ + 1,
     });
   },
   voltar: () => {

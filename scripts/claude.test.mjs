@@ -196,6 +196,42 @@ test("devolver ao terminal responde vazio para o Claude Code perguntar lá", asy
   controle.abort();
 });
 
+test("sempre permitir só aceita a regra sugerida pelo Claude Code", async () => {
+  const controle = new AbortController();
+  const fluxo = await fetch(`${base}/ponte/claude/eventos`, { signal: controle.signal });
+  const leitor = fluxo.body.getReader();
+  let buffer = "";
+  const sugestoes = [{ type: "allow", rules: ["Bash(npm *)"], toolName: "Bash", behavior: "allow" }];
+  const resposta = enviar({ hook_event_name: "PermissionRequest", session_id: "s6", tool_name: "Bash", tool_input: { command: "npm test" }, permission_suggestions: sugestoes }, { "x-niko-gancho": segredo() });
+  let pedido;
+  while (!pedido) {
+    buffer += new TextDecoder().decode((await leitor.read()).value);
+    pedido = buffer.split("\n").filter(Boolean).map((l) => JSON.parse(l)).find((e) => e.sessao === "s6" && e.pedidoId);
+  }
+  assert.throws(() => claude.decidirPedido({ pedidoId: pedido.pedidoId, decisao: "allow", regra: { toolName: "Bash", ruleContent: "*" } }), /regra_invalida/);
+  assert.throws(() => claude.decidirPedido({ pedidoId: pedido.pedidoId, decisao: "deny", regra: { toolName: "Bash", ruleContent: "npm *" } }), /decisao_invalida/);
+  claude.decidirPedido({ pedidoId: pedido.pedidoId, decisao: "allow", regra: { toolName: "Bash", ruleContent: "npm *" } });
+  assert.deepEqual(await (await resposta).json(), {
+    hookSpecificOutput: { hookEventName: "PermissionRequest", decision: { behavior: "allow", updatedPermissions: [{ type: "allow", toolName: "Bash", ruleContent: "npm *", behavior: "allow", mode: "local", directories: [] }] } },
+  });
+  controle.abort();
+});
+
+test("abrir projeto recusa pastas que não vieram de uma sessão", () => {
+  assert.throws(() => claude.abrirProjeto({ cwd: "C:\\Windows", como: "pasta" }), /projeto_desconhecido/);
+  assert.throws(() => claude.abrirProjeto({ cwd: raizTemporaria, como: "pasta" }), /projeto_desconhecido/);
+});
+
+test("diff marca linhas removidas e adicionadas", async () => {
+  const { linhasDoDiff, alteracaoDaFerramenta, contarMudancas } = await vite.ssrLoadModule("/src/utilitarios/diff.ts");
+  const linhas = linhasDoDiff("a\nb\nc", "a\nB\nc\nd");
+  assert.deepEqual(linhas.map((l) => `${l.tipo}:${l.texto}`), ["igual:a", "menos:b", "mais:B", "igual:c", "mais:d"]);
+  const alteracao = alteracaoDaFerramenta("Edit", { file_path: "C:\\p\\a.ts", old_string: "x", new_string: "y\nz" });
+  assert.deepEqual(contarMudancas(alteracao), { mais: 2, menos: 1 });
+  assert.equal(alteracaoDaFerramenta("Write", { file_path: "b.ts", content: "1\n2" }).novo, true);
+  assert.equal(alteracaoDaFerramenta("Bash", { command: "ls" }), undefined);
+});
+
 test("evento repetido numa reconexão não duplica a atividade", () => {
   const evento = { id: "evento-unico", recebidoEm: new Date().toISOString(), evento: "PreToolUse", sessao: "s5", cwd: "C:\\projetos\\app", dados: { tool_name: "Bash", tool_input: { command: "npm test" } } };
   useClaudeCode.getState().aplicar(evento);

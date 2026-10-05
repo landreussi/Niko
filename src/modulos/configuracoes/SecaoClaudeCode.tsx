@@ -6,6 +6,7 @@ import { useConfig } from "../../estado/configuracoes";
 import { useInterface } from "../../estado/interface";
 import { claudeCode, type EstadoDaInstalacao, type PreviaDaInstalacao } from "../../ponte/claudeCode";
 import { tocarSom } from "../../ponte/sons";
+import { permitirNotificacoes } from "../../desktop/desktop";
 import { T } from "../../textos/textos";
 
 const C = T.configuracoes.claudeCode;
@@ -25,6 +26,8 @@ export function SecaoClaudeCode() {
   const avisar = useInterface((s) => s.avisar);
   const ilha = useConfig((s) => s.ilha);
   const definirIlha = useConfig((s) => s.definirIlha);
+  const definir = useConfig((s) => s.definir);
+  const notificar = useConfig((s) => s.notificarClaude);
   const [estado, setEstado] = useState<EstadoDaInstalacao | null>(null);
   const [previa, setPrevia] = useState<{ acao: "instalar" | "remover"; dados: PreviaDaInstalacao } | null>(null);
   const [trabalhando, setTrabalhando] = useState(false);
@@ -104,6 +107,20 @@ export function SecaoClaudeCode() {
       </div>
 
       <LinhaAlternador rotulo={C.mostrarAba} ligado={ilha.blocos.claude} aoMudar={(v) => definirIlha({ blocos: { ...ilha.blocos, claude: v } })} />
+      <div className="coluna" style={{ gap: 4 }}>
+        <LinhaAlternador
+          rotulo={C.notificar}
+          ligado={notificar}
+          aoMudar={(v) => {
+            if (!v) return definir({ notificarClaude: false });
+            void permitirNotificacoes().then((ok) => {
+              definir({ notificarClaude: ok });
+              if (!ok) setErro(C.notificarNegado);
+            });
+          }}
+        />
+        <span className="campo-dica">{C.notificarDica}</span>
+      </div>
 
       <Modal aberto={!!previa} titulo={previa?.acao === "remover" ? C.previaRemover : C.previaConectar} aoFechar={() => setPrevia(null)} largo>
         {previa && (

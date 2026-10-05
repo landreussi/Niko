@@ -264,7 +264,7 @@ export default function Configuracoes() {
   const [secao, setSecao] = useState<Secao>(parametros.secao && parametros.secao in T.configuracoes.secoes ? (parametros.secao as Secao) : "geral");
   useEffect(() => {
     if (parametros.secao && parametros.secao in T.configuracoes.secoes) setSecao(parametros.secao as Secao);
-  }, [parametros.secao]);
+  }, [parametros]);
   const [previaVisual, setPreviaVisual] = useState<ReturnType<typeof validarVisual>>(null);
   const [erroVisual, setErroVisual] = useState("");
   const [novoFato, setNovoFato] = useState("");

@@ -20,6 +20,11 @@ export interface EstadoDaInstalacao {
   conectado: boolean;
 }
 
+export interface RegraSugerida {
+  toolName: string;
+  ruleContent: string;
+}
+
 export interface PreviaDaInstalacao {
   caminho: string;
   atual: string | null;
@@ -40,7 +45,8 @@ export const claudeCode = {
   previa: (acao: "instalar" | "remover") => pedir<PreviaDaInstalacao>(`previa?acao=${acao}`),
   instalar: () => pedir<{ caminho: string; copia: string | null }>("instalar", { method: "POST", body: JSON.stringify({ confirmacao: "INSTALAR" }) }),
   remover: () => pedir<{ caminho: string; copia: string | null }>("remover", { method: "POST", body: JSON.stringify({ confirmacao: "REMOVER" }) }),
-  decidir: (pedidoId: string, decisao: "allow" | "deny" | "terminal") => pedir<{ ok: boolean }>("decisao", { method: "POST", body: JSON.stringify({ pedidoId, decisao }) }),
+  decidir: (pedidoId: string, decisao: "allow" | "deny" | "terminal", regra?: RegraSugerida) => pedir<{ ok: boolean }>("decisao", { method: "POST", body: JSON.stringify({ pedidoId, decisao, regra }) }),
+  abrir: (cwd: string, como: "vscode" | "pasta") => pedir<{ ok: boolean }>("abrir", { method: "POST", body: JSON.stringify({ cwd, como }) }),
 };
 
 export function ouvirClaudeCode(aoReceber: (e: EventoClaude) => void, aoMudarConexao: (ligado: boolean) => void): () => void {

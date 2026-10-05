@@ -1,5 +1,6 @@
 import { create } from "zustand";
-import type { EventoClaude } from "../ponte/claudeCode";
+import type { EventoClaude, RegraSugerida } from "../ponte/claudeCode";
+import { alteracaoDaFerramenta, type AlteracaoDeArquivo } from "../utilitarios/diff";
 import { T } from "../textos/textos";
 
 export type EstadoSessao = keyof typeof T.ilha.claude.estados;
@@ -11,6 +12,7 @@ export interface PassoClaude {
   rotulo: string;
   detalhe?: string;
   hora: string;
+  alteracao?: AlteracaoDeArquivo;
 }
 
 export interface SessaoClaude {
@@ -37,6 +39,8 @@ export interface PedidoDePermissao {
   alvo: string;
   entrada: string;
   recebidoEm: string;
+  alteracao?: AlteracaoDeArquivo;
+  sugestoes: RegraSugerida[];
 }
 
 const MAXIMO_PASSOS = 80;
@@ -69,6 +73,20 @@ function encurtarCaminho(valor: string): string {
   if (!/[\\/]/.test(valor) || /\s/.test(valor.trim())) return valor;
   const partes = valor.split(/[\\/]+/).filter(Boolean);
   return partes.length > 2 ? `…/${partes.slice(-2).join("/")}` : valor;
+}
+
+function sugestoesDoEvento(d: Record<string, unknown>): RegraSugerida[] {
+  const lista = Array.isArray(d.permission_suggestions) ? d.permission_suggestions : [];
+  const regras: RegraSugerida[] = [];
+  for (const s of lista) {
+    const sugestao = (s ?? {}) as { type?: unknown; behavior?: unknown; rules?: unknown };
+    if (sugestao.type !== "allow" || sugestao.behavior !== "allow" || !Array.isArray(sugestao.rules)) continue;
+    for (const r of sugestao.rules) {
+      const m = typeof r === "string" ? /^([A-Za-z0-9_.:-]{1,64})\((.{1,300})\)$/.exec(r.trim()) : null;
+      if (m && !regras.some((x) => x.toolName === m[1] && x.ruleContent === m[2])) regras.push({ toolName: m[1], ruleContent: m[2] });
+    }
+  }
+  return regras.slice(0, 4);
 }
 
 function formatarEntrada(entrada: Record<string, unknown>): string {
@@ -172,7 +190,9 @@ export const useClaudeCode = create<EstadoClaude>((set, get) => ({
           const entrada = (d.tool_input ?? {}) as Record<string, unknown>;
           sessao.estado = "trabalhando";
           sessao.ferramentasUsadas += 1;
-          passos.push(novoPasso(e, "ferramenta", rotuloDaFerramenta(ferramenta), encurtarCaminho(alvoDaFerramenta(entrada)).slice(0, 300), ferramenta));
+          const passo = novoPasso(e, "ferramenta", rotuloDaFerramenta(ferramenta), encurtarCaminho(alvoDaFerramenta(entrada)).slice(0, 300), ferramenta);
+          passo.alteracao = alteracaoDaFerramenta(ferramenta, entrada);
+          passos.push(passo);
           break;
         }
         case "PostToolUseFailure": {
@@ -185,7 +205,7 @@ export const useClaudeCode = create<EstadoClaude>((set, get) => ({
           const ferramenta = texto(d.tool_name) || "Tool";
           const entrada = (d.tool_input ?? {}) as Record<string, unknown>;
           sessao.estado = "aprovacao";
-          pedidos = [...pedidos.filter((p) => p.pedidoId !== e.pedidoId), { pedidoId: e.pedidoId, sessao: e.sessao, projeto: sessao.projeto, ferramenta, alvo: alvoDaFerramenta(entrada), entrada: formatarEntrada(entrada), recebidoEm: e.recebidoEm }];
+          pedidos = [...pedidos.filter((p) => p.pedidoId !== e.pedidoId), { pedidoId: e.pedidoId, sessao: e.sessao, projeto: sessao.projeto, ferramenta, alvo: alvoDaFerramenta(entrada), entrada: formatarEntrada(entrada), recebidoEm: e.recebidoEm, alteracao: alteracaoDaFerramenta(ferramenta, entrada), sugestoes: sugestoesDoEvento(d) }];
           break;
         }
         case "Notification": {
