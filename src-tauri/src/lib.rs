@@ -1,6 +1,4 @@
-use std::collections::hash_map::RandomState;
 use std::collections::HashMap;
-use std::hash::{BuildHasher, Hasher};
 use std::process::{Child, Command};
 use std::sync::atomic::{AtomicBool, AtomicIsize, Ordering};
 use std::sync::Mutex;
@@ -35,14 +33,11 @@ struct Estado {
 }
 
 fn gerar_token() -> String {
-    let mut texto = String::new();
-    for _ in 0..4 {
-        let mut h = RandomState::new().build_hasher();
-        h.write_u128(std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0));
-        h.write_u32(std::process::id());
-        texto.push_str(&format!("{:016x}", h.finish()));
-    }
-    texto
+    use windows::Win32::Security::Cryptography::{BCryptGenRandom, BCRYPT_USE_SYSTEM_PREFERRED_RNG};
+    let mut bytes = [0u8; 32];
+    let status = unsafe { BCryptGenRandom(None, &mut bytes, BCRYPT_USE_SYSTEM_PREFERRED_RNG) };
+    assert!(status.is_ok(), "falha ao gerar o token da ponte");
+    bytes.iter().map(|b| format!("{:02x}", b)).collect()
 }
 
 #[tauri::command]
@@ -119,7 +114,21 @@ fn abrir_link(url: String) -> Result<(), String> {
 
 #[tauri::command]
 fn sair(app: AppHandle) {
-    app.exit(0);
+    sair_salvando(&app);
+}
+
+const ESPERA_PARA_SALVAR: Duration = Duration::from_millis(700);
+
+fn sair_salvando(app: &AppHandle) {
+    if ENCERRANDO.swap(true, Ordering::Relaxed) {
+        return;
+    }
+    let _ = app.emit("niko://saindo", ());
+    let app = app.clone();
+    std::thread::spawn(move || {
+        std::thread::sleep(ESPERA_PARA_SALVAR);
+        app.exit(0);
+    });
 }
 
 fn mostrar(app: &AppHandle) {
@@ -387,7 +396,7 @@ pub fn run() {
             bandeja
                 .on_menu_event(|app, evento| match evento.id.as_ref() {
                     "abrir" => mostrar(app),
-                    "sair" => app.exit(0),
+                    "sair" => sair_salvando(app),
                     _ => {}
                 })
                 .on_tray_icon_event(|bandeja, evento| {

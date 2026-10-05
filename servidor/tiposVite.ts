@@ -8,4 +8,5 @@ export interface Plugin {
   name: string;
   configureServer?: (servidor: { middlewares: { use: (fn: Connect.NextHandleFunction) => void } }) => void;
   configurePreviewServer?: (servidor: { middlewares: { use: (fn: Connect.NextHandleFunction) => void } }) => void;
+  transformIndexHtml?: { order?: "pre" | "post"; handler: (html: string, contexto: { server?: unknown }) => string };
 }

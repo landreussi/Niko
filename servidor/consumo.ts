@@ -1,4 +1,5 @@
-import { readFileSync, readdirSync, statSync, existsSync, openSync, readSync, closeSync } from "node:fs";
+import { readFileSync, readdirSync, existsSync, type Dirent } from "node:fs";
+import { open, readdir, stat } from "node:fs/promises";
 import { join, basename } from "node:path";
 import { homedir } from "node:os";
 
@@ -127,46 +128,49 @@ async function lerCodex(): Promise<UsoFerramenta> {
   }
 }
 
-function arquivoMaisRecente(pasta: string, profundidade = 2): { caminho: string; modificado: number } | null {
+async function arquivoMaisRecente(pasta: string, profundidade = 2): Promise<{ caminho: string; modificado: number } | null> {
   let melhor: { caminho: string; modificado: number } | null = null;
-  const visitar = (dir: string, nivel: number) => {
-    let itens: string[] = [];
+  const visitar = async (dir: string, nivel: number): Promise<void> => {
+    let itens: Dirent[] = [];
     try {
-      itens = readdirSync(dir);
+      itens = await readdir(dir, { withFileTypes: true });
     } catch {
       return;
     }
-    for (const nome of itens) {
-      const caminho = join(dir, nome);
-      let info;
+    for (const item of itens) {
+      const caminho = join(dir, item.name);
+      if (item.isDirectory()) {
+        if (nivel < profundidade) await visitar(caminho, nivel + 1);
+        continue;
+      }
+      if (!item.name.endsWith(".jsonl")) continue;
       try {
-        info = statSync(caminho);
+        const info = await stat(caminho);
+        if (!melhor || info.mtimeMs > melhor.modificado) melhor = { caminho, modificado: info.mtimeMs };
       } catch {
         continue;
       }
-      if (info.isDirectory() && nivel < profundidade) visitar(caminho, nivel + 1);
-      else if (nome.endsWith(".jsonl") && (!melhor || info.mtimeMs > melhor.modificado)) melhor = { caminho, modificado: info.mtimeMs };
     }
   };
-  visitar(pasta, 0);
+  await visitar(pasta, 0);
   return melhor;
 }
 
-function lerFinal(caminho: string, limite = 8 * 1024 * 1024): string {
-  const tamanho = statSync(caminho).size;
-  const inicio = Math.max(0, tamanho - limite);
-  const buffer = Buffer.alloc(tamanho - inicio);
-  const fd = openSync(caminho, "r");
+async function lerFinal(caminho: string, limite = 8 * 1024 * 1024): Promise<string> {
+  const arquivo = await open(caminho, "r");
   try {
-    readSync(fd, buffer, 0, buffer.length, inicio);
+    const { size } = await arquivo.stat();
+    const inicio = Math.max(0, size - limite);
+    const buffer = Buffer.alloc(size - inicio);
+    await arquivo.read(buffer, 0, buffer.length, inicio);
+    return buffer.toString("utf8");
   } finally {
-    closeSync(fd);
+    await arquivo.close();
   }
-  return buffer.toString("utf8");
 }
 
-function lerSessaoAtual(): SessaoAtual | null {
-  const recente = arquivoMaisRecente(join(homedir(), ".claude", "projects"));
+async function lerSessaoAtual(): Promise<SessaoAtual | null> {
+  const recente = await arquivoMaisRecente(join(homedir(), ".claude", "projects"));
   if (!recente) return null;
   const sessao: SessaoAtual = {
     projeto: basename(join(recente.caminho, "..")).replace(/^[A-Za-z]--/, "").replace(/-/g, "\\"),
@@ -179,7 +183,7 @@ function lerSessaoAtual(): SessaoAtual | null {
     cacheLido: 0,
   };
   const vistos = new Set<string>();
-  for (const linha of lerFinal(recente.caminho).split("\n")) {
+  for (const linha of (await lerFinal(recente.caminho)).split("\n")) {
     if (!linha.includes('"usage"')) {
       if (!sessao.inicio && linha.includes('"timestamp"')) {
         const m = /"timestamp":"([^"]+)"/.exec(linha);
@@ -225,7 +229,7 @@ async function calcularConsumo(): Promise<Consumo> {
   const [claude, codex] = await Promise.all([lerClaude(), lerCodex()]);
   let sessao: SessaoAtual | null = null;
   try {
-    sessao = lerSessaoAtual();
+    sessao = await lerSessaoAtual();
   } catch {
     sessao = null;
   }

@@ -108,10 +108,7 @@ export async function ouvirEvento(nome: string, fn: () => void): Promise<() => v
   return listen(nome, fn);
 }
 
-export async function prepararPonte() {
-  if (!NATIVO || window.location.hostname !== "tauri.localhost") return;
-  const [token, porta] = await Promise.all([invocar<string>("token_ponte"), invocar<number>("porta_ponte")]);
-  const base = `http://127.0.0.1:${porta ?? 47831}`;
+function enviarPelaPonte(base: string, token: string | null) {
   const original = window.fetch.bind(window);
   window.fetch = (entrada: RequestInfo | URL, opcoes?: RequestInit) => {
     if (typeof entrada === "string" && entrada.startsWith("/ponte")) {
@@ -121,6 +118,16 @@ export async function prepararPonte() {
     }
     return original(entrada, opcoes);
   };
+}
+
+export async function prepararPonte() {
+  if (NATIVO && window.location.hostname === "tauri.localhost") {
+    const [token, porta] = await Promise.all([invocar<string>("token_ponte"), invocar<number>("porta_ponte")]);
+    enviarPelaPonte(`http://127.0.0.1:${porta ?? 47831}`, token);
+    return;
+  }
+  const tokenDeDesenvolvimento = document.querySelector<HTMLMetaElement>('meta[name="niko-token"]')?.content;
+  if (tokenDeDesenvolvimento) enviarPelaPonte("", tokenDeDesenvolvimento);
 }
 
 export async function sincronizarInicioComWindows(ligado: boolean) {
@@ -135,12 +142,16 @@ export async function sincronizarInicioComWindows(ligado: boolean) {
   }
 }
 
+const INTERVALO_SEGURANCA_AREA_MS = 1000;
+
 export function usarAreaInterativa(seletores: string[]) {
   const chaveSeletores = seletores.join(",");
   useEffect(() => {
     if (!NATIVO) return;
     let anterior = "";
+    let quadro = 0;
     const medir = () => {
+      quadro = 0;
       const retangulos = [...document.querySelectorAll(chaveSeletores)]
         .map((el) => el.getBoundingClientRect())
         .filter((r) => r.width > 0 && r.height > 0)
@@ -150,9 +161,33 @@ export function usarAreaInterativa(seletores: string[]) {
       anterior = atual;
       void informarAreaInterativa(retangulos);
     };
+    const agendar = () => {
+      if (!quadro) quadro = window.requestAnimationFrame(medir);
+    };
+    const atributos = new MutationObserver(agendar);
+    const observarAlvos = () => {
+      atributos.disconnect();
+      for (const el of document.querySelectorAll(chaveSeletores)) {
+        for (let no: Element | null = el; no && no !== document.body; no = no.parentElement) atributos.observe(no, { attributes: true, attributeFilter: ["style", "class"] });
+      }
+    };
+    const estrutura = new MutationObserver(() => {
+      observarAlvos();
+      agendar();
+    });
+    observarAlvos();
     medir();
-    const t = window.setInterval(medir, 90);
-    return () => window.clearInterval(t);
+    estrutura.observe(document.body, { subtree: true, childList: true });
+    const eventos = ["resize", "transitionend", "animationend"] as const;
+    for (const e of eventos) window.addEventListener(e, agendar, true);
+    const seguranca = window.setInterval(agendar, INTERVALO_SEGURANCA_AREA_MS);
+    return () => {
+      atributos.disconnect();
+      estrutura.disconnect();
+      for (const e of eventos) window.removeEventListener(e, agendar, true);
+      window.clearInterval(seguranca);
+      window.cancelAnimationFrame(quadro);
+    };
   }, [chaveSeletores]);
 }
 

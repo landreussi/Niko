@@ -1,5 +1,6 @@
 import type { Plugin, Connect } from "./tiposVite";
 import type { IncomingMessage, ServerResponse } from "node:http";
+import { randomBytes } from "node:crypto";
 import { listarProvedores, salvarProvedor, removerProvedor, testarProvedor, conversar, validarMensagens, validarFerramentas } from "./ia";
 import { lerConsumo } from "./consumo";
 import { lerUltimaVersao } from "./atualizacoes";
@@ -228,7 +229,12 @@ export function ponteLocal(): Plugin {
   return {
     name: "niko-ponte-local",
     configureServer(servidor) {
+      process.env.NIKO_TOKEN ||= randomBytes(32).toString("hex");
       servidor.middlewares.use(rotas);
+    },
+    transformIndexHtml: {
+      order: "pre",
+      handler: (html, contexto) => (contexto.server && process.env.NIKO_TOKEN ? html.replace("<head>", `<head>\n    <meta name="niko-token" content="${process.env.NIKO_TOKEN}" />`) : html),
     },
     configurePreviewServer(servidor) {
       servidor.middlewares.use(rotas);

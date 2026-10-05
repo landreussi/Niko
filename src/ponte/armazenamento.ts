@@ -180,6 +180,7 @@ export async function iniciarArmazenamento(): Promise<ModoArmazenamento> {
     if (tauriDisponivel()) {
       const { listen } = await import("@tauri-apps/api/event");
       await listen<MudancaDeDados>(EVENTO_DADOS, (e) => receberDeFora(e.payload));
+      await listen("niko://saindo", () => void enviarPendentes());
     }
     window.addEventListener("focus", () => void recarregarDaPonte());
     window.addEventListener("pagehide", () => void enviarPendentes(true));

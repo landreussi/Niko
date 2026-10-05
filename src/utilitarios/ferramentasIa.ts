@@ -21,6 +21,8 @@ import { extrairTexto, mensagemDeLeitura } from "./leitorDeArquivos";
 
 type Argumentos = Record<string, unknown>;
 
+const ERROS = T.chat.ferramentas.erros;
+
 export type ResultadoFerramenta =
   | { tipo: "dados"; conteudo: unknown; resumo?: string; textoVerificado?: string }
   | { tipo: "confirmar"; cartao: CartaoConfirmacao; agente: AgenteId }
@@ -161,9 +163,9 @@ async function lerArquivoDaMateria(a: Argumentos): Promise<ResultadoFerramenta> 
 const SERVICOS_IA: ServicoId[] = ["stripe", "github", "vercel", "gmail", "supabase", "cloudflare", "resend", "notion", "calcom", "n8n"];
 
 function cartaoEmail(tipo: "rascunho" | "email", a: Argumentos): ResultadoFerramenta {
-  if (!useComunicacao.getState().conexoes.find((x) => x.id === "gmail")?.chaveSalva) return { tipo: "erro", mensagem: "Gmail não está conectado." };
+  if (!useComunicacao.getState().conexoes.find((x) => x.id === "gmail")?.chaveSalva) return { tipo: "erro", mensagem: ERROS.gmailDesconectado };
   const para = texto(a.para, 200);
-  if (!/^[^\s@<>,;]+@[^\s@<>,;]+\.[^\s@<>,;]+$/.test(para)) return { tipo: "erro", mensagem: "Endereço de e-mail inválido." };
+  if (!/^[^\s@<>,;]+@[^\s@<>,;]+\.[^\s@<>,;]+$/.test(para)) return { tipo: "erro", mensagem: ERROS.emailInvalido };
   return { tipo: "confirmar", agente: "organizador", cartao: { tipo, situacao: "pendente", dados: { para, assunto: texto(a.assunto, 300), corpo: texto(a.corpo, 8000) } } };
 }
 
@@ -206,7 +208,7 @@ const FERRAMENTAS: FerramentaNiko[] = [
     },
     executar: (a) => {
       const area = AREAS_BANCO[texto(a.area, 40)];
-      if (!area) return { tipo: "erro", mensagem: `Área desconhecida. Use: ${Object.keys(AREAS_BANCO).join(", ")}` };
+      if (!area) return { tipo: "erro", mensagem: ERROS.areaDesconhecida(Object.keys(AREAS_BANCO).join(", ")) };
       if (area.financeira && useConfig.getState().nuncaFinanceiro) return { tipo: "erro", mensagem: T.chat.ferramentas.financeiroBloqueado };
       const busca = normalizarTexto(texto(a.busca, 80));
       const de = dataValida(a.de);
@@ -390,9 +392,9 @@ const FERRAMENTAS: FerramentaNiko[] = [
     },
     assincrona: async (a) => {
       const servico = SERVICOS_IA.find((s) => s === a.servico);
-      if (!servico) return { tipo: "erro", mensagem: "Serviço desconhecido." };
+      if (!servico) return { tipo: "erro", mensagem: ERROS.servicoDesconhecido };
       const c = useComunicacao.getState().conexoes.find((x) => x.id === servico);
-      if (!c?.chaveSalva) return { tipo: "erro", mensagem: `${servico} não está conectado. Diga ao usuário para conectar em Conexões.` };
+      if (!c?.chaveSalva) return { tipo: "erro", mensagem: ERROS.servicoDesconectado(servico) };
       try {
         const dados = await conexoesPonte.ler(servico);
         return { tipo: "dados", conteudo: dados };
@@ -409,7 +411,7 @@ const FERRAMENTAS: FerramentaNiko[] = [
       parametros: { type: "object", properties: { busca: { type: "string" } }, required: ["busca"] },
     },
     assincrona: async (a) => {
-      if (!useComunicacao.getState().conexoes.find((x) => x.id === "gmail")?.chaveSalva) return { tipo: "erro", mensagem: "Gmail não está conectado." };
+      if (!useComunicacao.getState().conexoes.find((x) => x.id === "gmail")?.chaveSalva) return { tipo: "erro", mensagem: ERROS.gmailDesconectado };
       try {
         return { tipo: "dados", conteudo: await conexoesPonte.buscarEmails(texto(a.busca, 300)) };
       } catch (e) {
@@ -441,7 +443,7 @@ const FERRAMENTAS: FerramentaNiko[] = [
     },
     executar: (a) => {
       const tela = TELAS.find((t) => t === a.tela);
-      if (!tela) return { tipo: "erro", mensagem: "Tela desconhecida." };
+      if (!tela) return { tipo: "erro", mensagem: ERROS.telaDesconhecida };
       useInterface.getState().irPara(tela);
       return { tipo: "dados", conteudo: { aberta: tela }, resumo: T.chat.ferramentas.abriu(T.rotas[tela]) };
     },
@@ -474,7 +476,7 @@ const FERRAMENTAS: FerramentaNiko[] = [
     },
     executar: (a) => {
       const titulo = texto(a.titulo);
-      if (!titulo) return { tipo: "erro", mensagem: "Falta o título." };
+      if (!titulo) return { tipo: "erro", mensagem: ERROS.semTitulo };
       return { tipo: "confirmar", agente: "organizador", cartao: { tipo: "tarefa", situacao: "pendente", dados: { titulo, data: dataValida(a.data) ?? "", hora: horaValida(a.hora) ?? "" } } };
     },
   },
@@ -486,7 +488,7 @@ const FERRAMENTAS: FerramentaNiko[] = [
     },
     executar: (a) => {
       const tarefa = useRotina.getState().tarefas.find((t) => t.id === a.id);
-      if (!tarefa) return { tipo: "erro", mensagem: "Tarefa não encontrada. Use ler_tarefas para pegar o id." };
+      if (!tarefa) return { tipo: "erro", mensagem: ERROS.tarefaNaoEncontrada };
       return { tipo: "confirmar", agente: "organizador", cartao: { tipo: "concluir", situacao: "pendente", dados: { id: tarefa.id, titulo: tarefa.titulo } } };
     },
   },
@@ -499,7 +501,7 @@ const FERRAMENTAS: FerramentaNiko[] = [
     executar: (a) => {
       const titulo = texto(a.titulo);
       const data = dataValida(a.data);
-      if (!titulo || !data) return { tipo: "erro", mensagem: "Falta o título ou a data." };
+      if (!titulo || !data) return { tipo: "erro", mensagem: ERROS.semTituloOuData };
       return { tipo: "confirmar", agente: "organizador", cartao: { tipo: "lembrete", situacao: "pendente", dados: { titulo, data, hora: horaValida(a.hora) ?? "" } } };
     },
   },
@@ -512,7 +514,7 @@ const FERRAMENTAS: FerramentaNiko[] = [
     executar: (a) => {
       const titulo = texto(a.titulo);
       const data = dataValida(a.data);
-      if (!titulo || !data) return { tipo: "erro", mensagem: "Falta o título ou a data." };
+      if (!titulo || !data) return { tipo: "erro", mensagem: ERROS.semTituloOuData };
       return { tipo: "confirmar", agente: "organizador", cartao: { tipo: "evento", situacao: "pendente", dados: { titulo, data, hora: horaValida(a.hora) ?? "" } } };
     },
   },
@@ -530,7 +532,7 @@ const FERRAMENTAS: FerramentaNiko[] = [
       const fin = useFinancas.getState();
       fin.garantirCategorias();
       const valor = Math.round(Number(a.valor) * 100);
-      if (!Number.isFinite(valor) || valor <= 0) return { tipo: "erro", mensagem: "Valor inválido." };
+      if (!Number.isFinite(valor) || valor <= 0) return { tipo: "erro", mensagem: ERROS.valorInvalido };
       const contas = fin.contas.filter((c) => !c.arquivada);
       if (contas.length === 0) return { tipo: "erro", mensagem: T.chat.respostas.semConta };
       const tipo = a.tipo === "receita" ? "receita" : "gasto";
@@ -550,7 +552,7 @@ const FERRAMENTAS: FerramentaNiko[] = [
     executar: (a) => {
       const r = useRotina.getState();
       const habito = r.habitos.find((h) => h.id === a.id) ?? acharPorNome(r.habitos.filter((h) => !h.arquivado), texto(a.id, 60));
-      if (!habito) return { tipo: "erro", mensagem: "Hábito não encontrado. Use ler_habitos." };
+      if (!habito) return { tipo: "erro", mensagem: ERROS.habitoNaoEncontrado };
       const data = dataValida(a.data) ?? hojeISO();
       const valor = habito.tipo === "sim_nao" ? 1 : Math.max(1, Math.round(Number(a.valor) || habito.meta));
       return { tipo: "confirmar", agente: "organizador", cartao: { tipo: "habito", situacao: "pendente", dados: { id: habito.id, nome: habito.nome, valor, data } } };
@@ -564,7 +566,7 @@ const FERRAMENTAS: FerramentaNiko[] = [
     },
     executar: (a) => {
       const itens = (Array.isArray(a.itens) ? a.itens : []).map((i) => texto(i, 80)).filter(Boolean).slice(0, 30);
-      if (itens.length === 0) return { tipo: "erro", mensagem: "Nenhum item." };
+      if (itens.length === 0) return { tipo: "erro", mensagem: ERROS.semItens };
       return { tipo: "confirmar", agente: "operador", cartao: { tipo: "compra", situacao: "pendente", dados: { itens } } };
     },
   },
@@ -576,7 +578,7 @@ const FERRAMENTAS: FerramentaNiko[] = [
     },
     executar: (a) => {
       const fato = texto(a.texto, 300);
-      if (!fato) return { tipo: "erro", mensagem: "Falta o texto." };
+      if (!fato) return { tipo: "erro", mensagem: ERROS.semTexto };
       return { tipo: "confirmar", agente: "organizador", cartao: { tipo: "memoria", situacao: "pendente", dados: { texto: fato } } };
     },
   },
@@ -621,7 +623,7 @@ export function textoCapacidadesResumido(): string {
 
 export async function executarFerramenta(nome: string, argumentos: Argumentos): Promise<ResultadoFerramenta> {
   const ferramenta = FERRAMENTAS.find((f) => f.definicao.nome === normalizarTexto(nome));
-  if (!ferramenta) return { tipo: "erro", mensagem: `Ferramenta desconhecida: ${nome}` };
+  if (!ferramenta) return { tipo: "erro", mensagem: ERROS.ferramentaDesconhecida(nome) };
   try {
     if (ferramenta.assincrona) return await ferramenta.assincrona(argumentos ?? {});
     return ferramenta.executar(argumentos ?? {});

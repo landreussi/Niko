@@ -99,6 +99,11 @@ export function registrarUso(uso: { entrada: number; saida: number; provedor: st
   useComunicacao.getState().definirUsoIa([...lista, { id: gerarId(), data: hojeISO(), provedor: uso.provedor, modelo: uso.modelo, agenteId: agente, entrada: uso.entrada, saida: uso.saida }]);
 }
 
+export function textoAteUltimaFrase(texto: string): string {
+  const fim = Math.max(...[". ", "! ", "? ", ".\n", "!\n", "?\n", ":\n", "\n\n"].map((m) => texto.lastIndexOf(m)));
+  return fim < 0 ? "" : texto.slice(0, fim + 1).trimEnd();
+}
+
 export async function perguntarAssistente(opcoes: {
   agente: AgenteId;
   historico: MensagemPonteIa[];
@@ -125,6 +130,28 @@ export async function perguntarAssistente(opcoes: {
   const tentativas = new Map<number, number>();
   const usados = new Set(fila.map((f) => `${f.provedor.id}|${f.modelo}`));
 
+  const nomesDosAgentes = [...Object.values(useConfig.getState().agentes.nomes), ...AGENTES, "Rubi", "Nanquim", "Sol", "Java"];
+  let exibicaoLiberada = Boolean(opcoes.aoTexto);
+  let ultimoExibido = "";
+  const exibirParcial = (texto: string) => {
+    if (!exibicaoLiberada) return;
+    const completo = textoAteUltimaFrase(texto);
+    if (!opcoes.apenasAnalise && afirmaExecucao(completo)) {
+      exibicaoLiberada = false;
+      if (ultimoExibido) opcoes.aoTexto?.("");
+      return;
+    }
+    const limpo = removerPrefixoDeAgente(completo, nomesDosAgentes);
+    if (limpo === ultimoExibido) return;
+    ultimoExibido = limpo;
+    opcoes.aoTexto?.(limpo);
+  };
+  const encerrarExibicao = () => {
+    if (!exibicaoLiberada) return;
+    exibicaoLiberada = false;
+    if (ultimoExibido) opcoes.aoTexto?.("");
+  };
+
   for (let passo = 0; passo < 8; passo++) {
     let textoPasso = "";
     let chamadas: ChamadaFerramenta[] = [];
@@ -143,7 +170,11 @@ export async function perguntarAssistente(opcoes: {
         for await (const ev of conversarIa({ provedorId: provedor.id, modelo: modelo || undefined, sistema, mensagens, ferramentas: semFerramentas.has(chave) ? undefined : definicoes }, opcoes.sinal)) {
           if (ev.tipo === "texto" && ev.texto) {
             textoPasso += ev.texto;
-          } else if (ev.tipo === "ferramenta" && ev.chamada) chamadas.push(ev.chamada);
+            if (passo === 0 && chamadas.length === 0) exibirParcial(textoPasso);
+          } else if (ev.tipo === "ferramenta" && ev.chamada) {
+            chamadas.push(ev.chamada);
+            encerrarExibicao();
+          }
           else if (ev.tipo === "aviso" && (ev.texto === "cortado" || ev.texto === "so_raciocinio")) resposta.cortada = ev.texto;
           else if (ev.tipo === "aviso" && ev.texto === "sem_ferramentas") {
             semFerramentas.add(chave);
@@ -234,7 +265,7 @@ export async function perguntarAssistente(opcoes: {
     if (!continuar) break;
   }
 
-  resposta.texto = removerPrefixoDeAgente(resposta.texto, [...Object.values(useConfig.getState().agentes.nomes), ...AGENTES, "Rubi", "Nanquim", "Sol", "Java"]);
+  resposta.texto = removerPrefixoDeAgente(resposta.texto, nomesDosAgentes);
   if (analiseBloqueada) resposta.texto = T.chat.confianca.analiseBloqueada;
   else if (textosVerificados.length || resposta.acoes.length || resposta.confirmacoes.length || errosFerramenta.length) {
     resposta.texto = [

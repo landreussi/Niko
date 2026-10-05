@@ -162,6 +162,23 @@ test("não apresenta uma execução inventada pelo modelo", async () => {
   assert.ok(exibidos.every((t) => !t.includes("Enviei")));
 });
 
+test("resposta comum aparece aos poucos, só com frases completas", async () => {
+  await provedorFalso([[{ tipo: "texto", texto: "A prova é na sexta. " }, { tipo: "texto", texto: "Revise o capítulo" }, { tipo: "texto", texto: " três hoje." }]]);
+  const exibidos = [];
+  const r = await perguntarAssistente({ agente: "tutor", historico: [{ papel: "usuario", texto: "Quando é a prova?" }], sinal: new AbortController().signal, aoTexto: (t) => exibidos.push(t) });
+  assert.ok(exibidos.includes("A prova é na sexta."));
+  assert.ok(exibidos.every((t) => !t.endsWith("capítulo")));
+  assert.equal(exibidos.at(-1), r.texto);
+});
+
+test("texto parcial some quando o modelo decide usar uma ferramenta", async () => {
+  await provedorFalso([[{ tipo: "texto", texto: "Vou olhar suas tarefas. " }, { tipo: "ferramenta", chamada: { id: "c1", nome: "ler_tarefas", argumentos: {} } }], [{ tipo: "texto", texto: "Você não tem tarefas." }]]);
+  const exibidos = [];
+  await perguntarAssistente({ agente: "organizador", historico: [{ papel: "usuario", texto: "Quais tarefas?" }], sinal: new AbortController().signal, aoTexto: (t) => exibidos.push(t) });
+  const depoisDaFerramenta = exibidos.slice(exibidos.indexOf("Vou olhar suas tarefas.") + 1);
+  assert.equal(depoisDaFerramenta[0], "");
+});
+
 test("cartão pendente não é anunciado como tarefa salva", async () => {
   await provedorFalso([[{ tipo: "texto", texto: "Criei sua tarefa." }, { tipo: "ferramenta", chamada: { id: "t1", nome: "criar_tarefa", argumentos: { titulo: "Estudar" } } }]]);
   const r = await perguntarAssistente({ agente: "organizador", historico: [{ papel: "usuario", texto: "Crie uma tarefa para estudar" }], sinal: new AbortController().signal });
