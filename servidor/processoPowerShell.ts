@@ -8,7 +8,7 @@ interface Espera {
   relogio: NodeJS.Timeout;
 }
 
-export function criarProcessoPowerShell(prefixo: string, script: string, erroAoEncerrar: string) {
+export function criarProcessoPowerShell(prefixo: string, script: string, erroAoEncerrar: string, argumentos: string[] = []) {
   let processo: ChildProcessWithoutNullStreams | null = null;
   let contador = 0;
   const esperando = new Map<number, Espera>();
@@ -30,7 +30,7 @@ export function criarProcessoPowerShell(prefixo: string, script: string, erroAoE
   const iniciar = () => {
     if (processo) return processo;
     if (process.platform !== "win32") throw new Error("somente_windows");
-    const p = spawn("powershell.exe", ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", garantirScript(prefixo, script)], { windowsHide: true });
+    const p = spawn("powershell.exe", ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", garantirScript(prefixo, script), ...argumentos], { windowsHide: true });
     createInterface({ input: p.stdout }).on("line", (linha) => {
       try {
         const r = JSON.parse(linha) as { id?: number; erro?: string };

@@ -65,7 +65,7 @@ export const useControleRapido = create<EstadoControleRapido>()((set, get) => ({
     try {
       set({ rede: await sistema.estado() });
     } catch {
-      set({ rede: null });
+      return;
     } finally {
       lendoRede = false;
     }

@@ -62,7 +62,7 @@ const VISAO_ABA: Record<AbaIlha, () => React.JSX.Element> = {
 const ALTURA_ABA: Record<AbaIlha, number> = {
   hoje: 250,
   captura: 168,
-  midia: 156,
+  midia: 184,
   foco: 176,
   habitos: 230,
  chat: 300,
@@ -81,6 +81,7 @@ const LARGURA_EXPANDIDA = 660;
 const ALTURA_COMPACTA = 30;
 const AGENTE_DA_ABA: Partial<Record<AbaIlha, AgenteId>> = { hoje: "organizador", foco: "tutor", conexoes: "java", claude: "java" };
 const RODIZIO_MS = 8 * 60_000;
+const ABAS_SEM_LATERAL: AbaIlha[] = ["chat", "midia"];
 
 function agenteDoRodizio(favorito: AgenteId, agora: number): AgenteId {
   const ordem: AgenteId[] = [favorito, ...AGENTES.filter((a) => a !== favorito)];
@@ -270,7 +271,7 @@ export function Ilha() {
 
   const VisaoAtual = VISAO_ABA[abaAtual];
   const agenteLateral: AgenteId = abaAtual === "avisos" && alertas[0] ? alertas[0].agenteId : AGENTE_DA_ABA[abaAtual] ?? (trabalhando[0] as AgenteId | undefined) ?? agenteDaVez;
-  const agenteCompacto = ["agente", "pomodoro", "midia", "relogio", "nada"].includes(compacta.tipo) ? agenteDaVez : compacta.tipo === "trabalho" ? trabalhando[0] : compacta.tipo === "revelacao" && !revelacao?.marca ? revelacao?.agente : undefined;
+  const agenteCompacto = ["agente", "pomodoro", "relogio", "nada"].includes(compacta.tipo) ? agenteDaVez : compacta.tipo === "trabalho" ? trabalhando[0] : compacta.tipo === "revelacao" && !revelacao?.marca ? revelacao?.agente : undefined;
   const agenteContinuo = estadoEfetivo === "expandida" ? agenteLateral : agenteCompacto ?? agenteDaVez;
   const restantePomodoro = restanteAtual(pomodoro, agora);
   const barraVisivel = cfg.laterais && estadoEfetivo !== "escondida" && lateraisLivres;
@@ -336,7 +337,7 @@ export function Ilha() {
         return (
           <>
             <div className="ilha-compacta-lado">
-              <span className="ilha-capa" style={{ width: 20, height: 20, background: fundoDaCapa(midia.faixa) }} />
+              <span className="ilha-capa" style={{ width: 24, height: 24, background: fundoDaCapa(midia.faixa) }} />
             </div>
             <span className="ilha-compacta-texto privado">{midia.faixa?.titulo ?? ""}</span>
             <div className="ilha-compacta-lado">
@@ -494,7 +495,7 @@ export function Ilha() {
                   }}
                   onPointerLeave={() => window.clearTimeout(relogioHover.current)}
                 >
-                  {["pomodoro", "midia", "relogio", "nada"].includes(compacta.tipo) && (
+                  {["pomodoro", "relogio", "nada"].includes(compacta.tipo) && (
                     <div className="ilha-compacta-lado">
                       <EspacoDoPersonagem agente={agenteDaVez} tamanho={22} posicao="compacta" />
                     </div>
@@ -570,7 +571,7 @@ export function Ilha() {
                     </div>
                   </div>
                   <div className="ilha-miolo">
-                  {abaAtual !== "chat" && <motion.div className="ilha-lateral" initial={{ opacity: 0 }} animate={{ opacity: 1, transition: { delay: 0.2, duration: 0.2 } }}>
+                  {!ABAS_SEM_LATERAL.includes(abaAtual) && <motion.div className="ilha-lateral" initial={{ opacity: 0 }} animate={{ opacity: 1, transition: { delay: 0.2, duration: 0.2 } }}>
                     <EspacoDoPersonagem agente={agenteLateral} tamanho={ALTURA_ABA[abaAtual] < 200 ? 50 : 70} posicao="expandida" />
                     <span className="ilha-lateral-nome cortar">{nomes[agenteLateral]}</span>
                     <span className="ilha-lateral-cargo" title={cargos[agenteLateral]}>{cargos[agenteLateral]}</span>

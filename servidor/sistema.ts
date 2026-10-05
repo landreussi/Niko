@@ -1,10 +1,11 @@
 import { spawn } from "node:child_process";
 import { garantirScript } from "./scriptsTemporarios";
+import { criarProcessoPowerShell } from "./processoPowerShell";
 
 const SCRIPT = String.raw`
+param([switch]$Continuo)
 $ErrorActionPreference = 'Stop'
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
-$entrada = [Console]::In.ReadToEnd() | ConvertFrom-Json
 
 $script:metodoTarefa = $null
 function Esperar($tarefa, $tipo) {
@@ -90,6 +91,7 @@ function AparelhosBluetooth {
   return @($lista | Sort-Object -Property @{ Expression = 'ativo'; Descending = $true }, nome)
 }
 
+function Executar($entrada) {
 switch ($entrada.acao) {
   'tipo' {
     $b = Get-CimInstance Win32_Battery -ErrorAction SilentlyContinue
@@ -209,6 +211,25 @@ switch ($entrada.acao) {
     @{ ok = $true } | ConvertTo-Json -Compress
   }
 }
+}
+
+if ($Continuo) {
+  while ($true) {
+    $linha = [Console]::In.ReadLine()
+    if ($null -eq $linha) { break }
+    if (-not $linha.Trim()) { continue }
+    $pedido = $null
+    try {
+      $pedido = $linha | ConvertFrom-Json
+      $saida = Executar $pedido | Select-Object -Last 1
+      [Console]::Out.WriteLine('{"id":' + [int]$pedido.id + ',"r":' + $saida + '}')
+    } catch {
+      [Console]::Out.WriteLine((@{ id = $(if ($pedido) { $pedido.id } else { 0 }); erro = $_.Exception.Message } | ConvertTo-Json -Compress))
+    }
+  }
+} else {
+  Executar ([Console]::In.ReadToEnd() | ConvertFrom-Json)
+}
 `;
 
 let tipoEmCache: Promise<{ notebook: boolean; bateria: boolean }> | null = null;
@@ -251,7 +272,13 @@ export function tipoDoComputador() {
   return tipoEmCache;
 }
 
-export const estadoDoSistema = () => executar({ acao: "estado" });
+const leitorContinuo = criarProcessoPowerShell("niko-sistema", SCRIPT, "sistema_encerrado", ["-Continuo"]);
+
+export const estadoDoSistema = async () => ((await leitorContinuo.pedir({ acao: "estado" }, 20000)) as { r: unknown }).r;
+
+export function encerrarSistema() {
+  leitorContinuo.encerrar();
+}
 export const listarRedes = () => executar({ acao: "redes" }, 25000);
 function nomeDeRede(v: unknown) {
   const ssid = texto(v, 64);

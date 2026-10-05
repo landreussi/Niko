@@ -155,6 +155,12 @@ export function BarraDoTopo({ visivel, escala, larguraDaIlha, aparencia, aoAbrir
   usarCursorFora(useCallback(() => setSobre(false), []));
 
   useEffect(() => {
+    const { audio, rede, sincronizarAudio, sincronizarRede } = useControleRapido.getState();
+    if (!audio) void sincronizarAudio();
+    if (!rede) void sincronizarRede();
+  }, []);
+
+  useEffect(() => {
     if (!visivel) setPop(null);
   }, [visivel]);
 

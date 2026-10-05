@@ -20,6 +20,7 @@ import { T } from "../../textos/textos";
 import { deISO, formatarData, hojeISO, paraISO, horarioRelativo } from "../../utilitarios/datas";
 import { itensDoCalendario } from "../../utilitarios/itensDoCalendario";
 import { ConexaoNaIlha } from "./ConexaoNaIlha";
+import { EspacoDoPersonagem } from "./animacoes/PersonagemContinuo";
 import { useFinancas } from "../../estado/financas";
 import { interpretarQuando } from "../../utilitarios/linguagem";
 import { capturar, TIPOS_CAPTURA, type TipoCaptura } from "../../utilitarios/captura";
@@ -249,8 +250,11 @@ export function VisaoMidia() {
 
   return (
     <Cartao veu={c1}>
-      <div className="linha" style={{ gap: 14, flex: 1 }}>
-        <div className="ilha-capa" style={{ width: 76, height: 76, background: fundoDaCapa(faixa), boxShadow: `0 8px 24px ${c1}55` }} />
+      <div className="linha" style={{ gap: 26, flex: 1 }}>
+        <div className="ilha-capa-com-personagem">
+          <div className="ilha-capa" style={{ width: 96, height: 96, borderRadius: 10, background: fundoDaCapa(faixa), boxShadow: `0 8px 24px ${c1}55` }} />
+          <EspacoDoPersonagem tamanho={38} posicao="expandida" flutuar className="ilha-capa-personagem" />
+        </div>
         <div className="coluna" style={{ gap: 6, flex: 1, minWidth: 0 }}>
           <div className="coluna" style={{ gap: 0 }}>
             <span className="ilha-titulo cortar privado">{faixa.titulo}</span>
