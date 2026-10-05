@@ -11,6 +11,10 @@ const bancoDeTeste = (() => {
 })();
 const CABECALHOS: Record<string, string> = { "x-niko": "1", "content-type": "application/json", ...(bancoDeTeste ? { "x-niko-banco": bancoDeTeste } : {}) };
 
+export function cabecalhoDoBanco(): Record<string, string> {
+  return bancoDeTeste ? { "x-niko-banco": bancoDeTeste } : {};
+}
+
 export type ModoArmazenamento = "banco" | "local";
 
 let modo: ModoArmazenamento = "local";
@@ -19,6 +23,59 @@ const pendentes = new Map<string, string | null>();
 let temporizador = 0;
 const canal = typeof BroadcastChannel !== "undefined" ? new BroadcastChannel("niko-dados") : null;
 const ouvintesDeFora = new Set<(chave: string) => void>();
+const ORIGEM = Math.random().toString(36).slice(2);
+const EVENTO_DADOS = "niko-dados";
+const avisosPendentes = new Map<string, string | null>();
+let temporizadorAviso = 0;
+
+interface MudancaDeDados {
+  origem: string;
+  chave: string;
+  valor: string | null;
+}
+
+function tauriDisponivel(): boolean {
+  return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+}
+
+function avisarOutrasJanelas(chave: string, valor: string | null) {
+  canal?.postMessage({ origem: ORIGEM, chave, valor } satisfies MudancaDeDados);
+  if (!tauriDisponivel()) return;
+  avisosPendentes.set(chave, valor);
+  if (temporizadorAviso) return;
+  temporizadorAviso = window.setTimeout(async () => {
+    temporizadorAviso = 0;
+    const itens = [...avisosPendentes];
+    avisosPendentes.clear();
+    try {
+      const { emit } = await import("@tauri-apps/api/event");
+      for (const [c, v] of itens) await emit(EVENTO_DADOS, { origem: ORIGEM, chave: c, valor: v } satisfies MudancaDeDados);
+    } catch {
+      return;
+    }
+  }, 120);
+}
+
+function receberDeFora(m: MudancaDeDados) {
+  if (!m || m.origem === ORIGEM || pendentes.has(m.chave)) return;
+  const atual = cache.get(m.chave) ?? null;
+  if (atual === m.valor) return;
+  if (m.valor === null) cache.delete(m.chave);
+  else cache.set(m.chave, m.valor);
+  ouvintesDeFora.forEach((f) => f(m.chave));
+}
+
+async function recarregarDaPonte() {
+  if (modo !== "banco") return;
+  try {
+    const r = await fetch("/ponte/dados", { headers: CABECALHOS });
+    if (!r.ok) return;
+    const { dados } = (await r.json()) as { dados: Record<string, string> };
+    for (const [k, v] of Object.entries(dados)) receberDeFora({ origem: "ponte", chave: k, valor: v });
+  } catch {
+    return;
+  }
+}
 
 function localSeguro<T>(fn: () => T, reserva: T): T {
   try {
@@ -58,7 +115,7 @@ const armazenamentoSeguro: StateStorage = {
       cache.set(nome, valor);
       pendentes.set(nome, valor);
       agendar();
-      canal?.postMessage({ chave: nome, valor });
+      avisarOutrasJanelas(nome, valor);
       return;
     }
     try {
@@ -74,7 +131,7 @@ const armazenamentoSeguro: StateStorage = {
       cache.delete(nome);
       pendentes.set(nome, null);
       agendar();
-      canal?.postMessage({ chave: nome, valor: null });
+      avisarOutrasJanelas(nome, null);
       return;
     }
     localSeguro(() => localStorage.removeItem(nome), undefined);
@@ -119,14 +176,16 @@ export async function iniciarArmazenamento(): Promise<ModoArmazenamento> {
       await enviarPendentes();
       if (pendentes.size === 0) localSeguro(() => localStorage.setItem(`${PREFIXO}migrado`, new Date().toISOString()), undefined);
     }
-    canal?.addEventListener("message", (e: MessageEvent<{ chave: string; valor: string | null }>) => {
-      if (e.data.valor === null) cache.delete(e.data.chave);
-      else cache.set(e.data.chave, e.data.valor);
-      ouvintesDeFora.forEach((f) => f(e.data.chave));
-    });
+    canal?.addEventListener("message", (e: MessageEvent<MudancaDeDados>) => receberDeFora(e.data));
+    if (tauriDisponivel()) {
+      const { listen } = await import("@tauri-apps/api/event");
+      await listen<MudancaDeDados>(EVENTO_DADOS, (e) => receberDeFora(e.payload));
+    }
+    window.addEventListener("focus", () => void recarregarDaPonte());
     window.addEventListener("pagehide", () => void enviarPendentes(true));
     document.addEventListener("visibilitychange", () => {
       if (document.visibilityState === "hidden") void enviarPendentes(true);
+      else void recarregarDaPonte();
     });
   } catch {
     modo = "local";

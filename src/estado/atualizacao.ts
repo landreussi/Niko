@@ -1,44 +1,86 @@
 import { create } from "zustand";
 import { NATIVO } from "../desktop/desktop";
 import { tocarSom } from "../ponte/sons";
+import { T } from "../textos/textos";
+import { versaoMaisNova } from "../utilitarios/versoes";
+import manifesto from "../../package.json";
+import type { Update } from "@tauri-apps/plugin-updater";
 
 type Fase = "nada" | "disponivel" | "baixando" | "instalando" | "erro";
+type Verificacao = "nada" | "verificando" | "atualizado" | "sem_versoes" | "disponivel" | "erro";
 
 interface EstadoAtualizacao {
   fase: Fase;
+  verificacao: Verificacao;
+  versaoAtual: string;
+  ultimaVerificacao: string;
+  automatica: boolean;
   versao: string;
   notas: string;
   progresso: number;
   erro: string;
-  verificar: () => Promise<void>;
+  carregarVersao: () => Promise<void>;
+  verificar: (manual?: boolean) => Promise<void>;
   instalar: () => Promise<void>;
   dispensar: () => void;
 }
 
-let pendente: { downloadAndInstall: (aoEvento?: (e: { event: string; data?: { contentLength?: number; chunkLength?: number } }) => void) => Promise<void> } | null = null;
+let pendente: Update | null = null;
 
 export const useAtualizacao = create<EstadoAtualizacao>()((set, get) => ({
   fase: "nada",
+  verificacao: "nada",
+  versaoAtual: manifesto.version,
+  ultimaVerificacao: "",
+  automatica: false,
   versao: "",
   notas: "",
   progresso: 0,
   erro: "",
-  verificar: async () => {
-    if (!NATIVO || get().fase === "baixando" || get().fase === "instalando") return;
+  carregarVersao: async () => {
+    if (!NATIVO) return;
     try {
-      const { check } = await import("@tauri-apps/plugin-updater");
-      const atualizacao = await check();
-      if (!atualizacao) return;
-      pendente = atualizacao;
-      if (get().fase !== "disponivel") void tocarSom("peek", "avisos");
-      set({ fase: "disponivel", versao: atualizacao.version, notas: atualizacao.body ?? "", erro: "" });
+      const { getVersion } = await import("@tauri-apps/api/app");
+      set({ versaoAtual: await getVersion() });
     } catch {
-      return;
+      set({ versaoAtual: "", erro: T.atualizacao.versaoFalhou });
+    }
+  },
+  verificar: async (manual = false) => {
+    if ((!NATIVO && !manual) || get().verificacao === "verificando" || get().fase === "baixando" || get().fase === "instalando") return;
+    set({ verificacao: "verificando", erro: "" });
+    try {
+      await get().carregarVersao();
+      if (!get().versaoAtual) throw new Error("versao_indisponivel");
+      const resposta = await fetch("/ponte/atualizacao", { headers: { "x-niko": "1" }, signal: AbortSignal.timeout(20000) });
+      if (!resposta.ok) throw new Error(`http_${resposta.status}`);
+      const dados = await resposta.json() as { versao: string | null; notas: string };
+      if (dados.versao !== null && typeof dados.versao !== "string") throw new Error("versao_invalida");
+      const anterior = pendente;
+      pendente = null;
+      await anterior?.close().catch(() => undefined);
+      const ultimaVerificacao = new Date().toISOString();
+      if (!dados.versao || !versaoMaisNova(dados.versao, get().versaoAtual)) {
+        set({ fase: "nada", verificacao: dados.versao ? "atualizado" : "sem_versoes", automatica: false, versao: dados.versao ?? "", notas: dados.notas, ultimaVerificacao });
+        return;
+      }
+      if (NATIVO) {
+        try {
+          const { check } = await import("@tauri-apps/plugin-updater");
+          pendente = await check({ timeout: 15000 });
+        } catch {
+          pendente = null;
+        }
+      }
+      if (pendente && get().fase !== "disponivel") void tocarSom("peek", "avisos");
+      set({ fase: pendente ? "disponivel" : "nada", verificacao: "disponivel", automatica: Boolean(pendente), versao: pendente?.version ?? dados.versao, notas: pendente?.body ?? dados.notas, ultimaVerificacao });
+    } catch {
+      set({ verificacao: "erro", erro: get().versaoAtual ? T.atualizacao.erroVerificacao : T.atualizacao.versaoFalhou });
     }
   },
   instalar: async () => {
-    if (!pendente || get().fase === "baixando") return;
-    set({ fase: "baixando", progresso: 0 });
+    if (!pendente || get().verificacao === "verificando" || get().fase === "baixando" || get().fase === "instalando") return;
+    set({ fase: "baixando", progresso: 0, erro: "" });
     let total = 0;
     let baixado = 0;
     try {
@@ -53,8 +95,8 @@ export const useAtualizacao = create<EstadoAtualizacao>()((set, get) => ({
       void tocarSom("approve", "avisos");
       const { relaunch } = await import("@tauri-apps/plugin-process");
       await relaunch();
-    } catch (e) {
-      set({ fase: "erro", erro: (e as Error).message ?? String(e) });
+    } catch {
+      set({ fase: "erro", erro: T.atualizacao.erroInstalacao });
       void tocarSom("error", "avisos");
     }
   },

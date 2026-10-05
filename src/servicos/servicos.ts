@@ -99,8 +99,12 @@ async function verificarLimitesPlanos() {
     for (const f of dados.ferramentas) {
       if (f.situacao !== "ok") continue;
       for (const j of f.janelas) {
-        if (j.usado < 80 || !marcarSeNovo(`limite-${f.id}-${j.id}-${j.reiniciaEm ?? hojeISO()}`)) continue;
+        if (j.usado < 80) continue;
+        const nivel = j.usado >= 100 ? 100 : 80;
+        const reinicio = j.reiniciaEm ? Math.round(new Date(j.reiniciaEm).getTime() / 3600000) : hojeISO();
+        if (!marcarSeNovo(`limite-${f.id}-${j.id}-${reinicio}-${nivel}`)) continue;
         const texto = T.consumo.alertaLimite(f.nome, rotuloJanela(j.rotulo), Math.round(j.usado));
+        if (useAgentes.getState().alertas.some((a) => a.texto === texto)) continue;
         useAgentes.getState().alertar("operador", texto, "consumo", "rate");
       }
     }

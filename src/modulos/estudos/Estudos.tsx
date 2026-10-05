@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { DndContext, PointerSensor, KeyboardSensor, useDraggable, useDroppable, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
 import {
-  Plus, FileText, Kanban, CalendarClock, Layers, Link2, BarChart3, Trash2, CheckCircle2, GraduationCap, ExternalLink, Pencil, BookCheck, Flag, ListChecks, LayoutDashboard, ChevronDown, Timer,
+  Plus, FileText, Kanban, CalendarClock, Layers, Link2, BarChart3, Trash2, CheckCircle2, GraduationCap, ExternalLink, Pencil, BookCheck, Flag, ListChecks, LayoutDashboard, ChevronDown, Timer, FolderOpen, Ellipsis, Search,
 } from "lucide-react";
 import { addDays } from "date-fns";
 import { CabecalhoAba } from "../../componentes/CabecalhoAba";
@@ -19,6 +19,8 @@ import { gerarId, urlSegura } from "../../utilitarios/basicos";
 import { minutosEstudoPorDia, sequenciaDias } from "../../utilitarios/estatisticas";
 import { tocarSom } from "../../ponte/sons";
 import { EVENTO_NOVO } from "../../janelas/area-de-trabalho/usarAtalhos";
+import { excluirArquivosDaMateria } from "../../ponte/arquivos";
+import { Arquivos } from "./Arquivos";
 import type { EstadoLink, Materia, Prioridade, Tarefa, TipoArea, TipoDataImportante } from "../../tipos";
 
 type Aba = keyof typeof T.estudos.abas;
@@ -29,6 +31,7 @@ const ICONES_ABA: Record<Aba, React.ReactNode> = {
   datas: <CalendarClock size={14} />,
   revisoes: <Layers size={14} />,
   links: <Link2 size={14} />,
+  arquivos: <FolderOpen size={14} />,
   estatisticas: <BarChart3 size={14} />,
 };
 
@@ -799,59 +802,130 @@ function NavMaterias({ materiaId, aoEscolher, aoNovaMateria, aoNovaArea, aoExclu
   const materias = useEstudos((s) => s.materias);
   const cartoes = useEstudos((s) => s.cartoes);
   const datas = useEstudos((s) => s.datas);
-  const [fechadas, setFechadas] = useState<string[]>([]);
+  const [areaId, setAreaId] = useState(materias.find((m) => m.id === materiaId)?.areaId);
+  const [busca, setBusca] = useState("");
+  const [largura, setLargura] = useState(0);
+  const navegacao = useRef<HTMLElement>(null);
+  const linhaMaterias = useRef<HTMLDivElement>(null);
+  const areaDaMateria = materias.find((m) => m.id === materiaId)?.areaId;
+  const area = areas.find((a) => a.id === (areaDaMateria ?? areaId));
+  const lista = materias.filter((m) => m.areaId === area?.id);
+  const capacidade = Math.max(1, Math.floor((largura - 110) / 174));
+  const visiveis = lista.slice(0, capacidade);
+  const selecionada = lista.find((m) => m.id === materiaId);
+  if (selecionada && !visiveis.includes(selecionada)) visiveis[visiveis.length - 1] = selecionada;
+  const termo = busca.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("pt-BR").trim();
+  const resultados = lista.filter((m) => m.nome.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("pt-BR").includes(termo));
   const vencidos = cartoesVencidos(cartoes);
   const hoje = hojeISO();
   const totalHoje = vencidos.length;
 
-  return (
-    <nav className="estudos-nav" aria-label={T.estudos.areas}>
-      <button type="button" className="estudos-nav-item estudos-nav-geral" aria-current={!materiaId} onClick={() => aoEscolher(undefined)}>
-        <LayoutDashboard size={15} />
-        <span className="cortar">{T.estudos.visaoGeral}</span>
-        {totalHoje > 0 && <span className="estudos-badge">{totalHoje}</span>}
+  useEffect(() => {
+    if (areaDaMateria) setAreaId(areaDaMateria);
+  }, [areaDaMateria]);
+
+  useEffect(() => {
+    const linha = linhaMaterias.current;
+    if (!linha) return;
+    const observador = new ResizeObserver(([entrada]) => setLargura(entrada.contentRect.width));
+    observador.observe(linha);
+    return () => observador.disconnect();
+  }, [area?.id]);
+
+  useEffect(() => {
+    const fecharMenus = (e: PointerEvent) => {
+      navegacao.current?.querySelectorAll<HTMLDetailsElement>("details[open]").forEach((menu) => {
+        if (e.target instanceof Node && !menu.contains(e.target)) menu.open = false;
+      });
+    };
+    const aoTeclar = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      const menu = navegacao.current?.querySelector<HTMLDetailsElement>("details[open]");
+      if (!menu) return;
+      e.stopPropagation();
+      menu.open = false;
+      menu.querySelector("summary")?.focus();
+    };
+    document.addEventListener("pointerdown", fecharMenus);
+    document.addEventListener("keydown", aoTeclar, true);
+    return () => {
+      document.removeEventListener("pointerdown", fecharMenus);
+      document.removeEventListener("keydown", aoTeclar, true);
+    };
+  }, []);
+
+  const fecharMenus = () => navegacao.current?.querySelectorAll<HTMLDetailsElement>("details[open]").forEach((menu) => { menu.open = false; });
+  const escolherMateria = (id: string) => {
+    fecharMenus();
+    setBusca("");
+    aoEscolher(id);
+  };
+
+  const botaoMateria = (m: Materia) => {
+    const pendentes = vencidos.filter((c) => c.materiaId === m.id).length;
+    const prova = datas.filter((d) => d.materiaId === m.id && !d.concluida && d.data >= hoje).sort((x, y) => x.data.localeCompare(y.data))[0];
+    return (
+      <button key={m.id} type="button" className="estudos-nav-item" aria-current={m.id === materiaId} title={m.nome} onClick={() => escolherMateria(m.id)}>
+        <span className="coluna" style={{ gap: 0, minWidth: 0, flex: 1 }}>
+          <span className="cortar">{m.nome}</span>
+          {prova && <span className="estudos-nav-prova cortar"><Flag size={10} />{descreverDistancia(prova.data)}</span>}
+        </span>
+        {pendentes > 0 && <span className="estudos-badge" title={T.estudos.revisarAgora(pendentes)}>{pendentes}</span>}
       </button>
-      {areas.map((a) => {
-        const lista = materias.filter((m) => m.areaId === a.id);
-        const fechada = fechadas.includes(a.id);
-        return (
-          <div key={a.id} className="estudos-nav-area" style={{ ["--cor-area" as string]: a.cor }}>
-            <div className="estudos-nav-area-topo">
-              <button type="button" className="estudos-nav-area-nome" aria-expanded={!fechada} onClick={() => setFechadas((f) => (fechada ? f.filter((x) => x !== a.id) : [...f, a.id]))}>
-                <ChevronDown size={13} className="estudos-seta" />
-                <span className="ponto-cor" style={{ background: a.cor }} />
-                <span className="cortar" title={T.estudos.tipos[a.tipo]}>{a.nome}</span>
-              </button>
-              <Botao pequeno soIcone variante="fantasma" icone={<Plus size={12} />} aria-label={T.estudos.novaMateria} title={T.estudos.novaMateria} onClick={() => aoNovaMateria(a.id)} />
-              <Botao pequeno soIcone variante="fantasma" icone={<Trash2 size={12} />} aria-label={T.estudos.excluirAreaRotulo} title={T.estudos.excluirAreaRotulo} onClick={() => aoExcluirArea(a.id)} />
+    );
+  };
+
+  return (
+    <nav ref={navegacao} className="estudos-nav" aria-label={T.estudos.areas} style={{ ["--cor-area" as string]: area?.cor ?? "var(--destaque)" }}>
+      <div className="estudos-nav-topo">
+        <div className="estudos-nav-areas">
+          <button type="button" className="estudos-nav-item estudos-nav-geral" aria-current={!area && !materiaId} onClick={() => { fecharMenus(); setAreaId(undefined); aoEscolher(undefined); }}>
+            <LayoutDashboard size={15} />
+            <span>{T.estudos.visaoGeral}</span>
+            {totalHoje > 0 && <span className="estudos-badge">{totalHoje}</span>}
+          </button>
+          {areas.map((a) => (
+            <button key={a.id} type="button" className="estudos-nav-item estudos-nav-area-nome" aria-current={a.id === area?.id} title={a.nome} style={{ ["--cor-area" as string]: a.cor }} onClick={() => {
+              fecharMenus();
+              setBusca("");
+              setAreaId(a.id);
+              if (areaDaMateria !== a.id) aoEscolher(materias.find((m) => m.areaId === a.id)?.id);
+            }}>
+              <span className="ponto-cor" style={{ background: a.cor }} />
+              <span className="cortar">{a.nome}</span>
+            </button>
+          ))}
+        </div>
+        <Botao pequeno soIcone variante="fantasma" icone={<Plus size={15} />} aria-label={T.estudos.novaArea} title={T.estudos.novaArea} onClick={aoNovaArea} />
+        {area && (
+          <details className="estudos-menu" key={area.id}>
+            <summary className="botao botao-fantasma botao-pequeno botao-icone" aria-label={T.estudos.acoesArea} title={T.estudos.acoesArea}><Ellipsis size={17} /></summary>
+            <div className="estudos-menu-painel estudos-menu-acoes">
+              <button type="button" onClick={() => { fecharMenus(); aoNovaMateria(area.id); }}><Plus size={14} />{T.estudos.novaMateria}</button>
+              <button type="button" className="estudos-menu-excluir" onClick={() => { fecharMenus(); aoExcluirArea(area.id); }}><Trash2 size={14} />{T.estudos.excluirAreaRotulo}</button>
             </div>
-            {!fechada && (
-              <div className="estudos-nav-materias">
-                {lista.length === 0 && (
-                  <button type="button" className="estudos-nav-vazio" onClick={() => aoNovaMateria(a.id)}>
-                    <Plus size={12} />
-                    {T.estudos.novaMateria}
-                  </button>
-                )}
-                {lista.map((m) => {
-                  const pendentes = vencidos.filter((c) => c.materiaId === m.id).length;
-                  const prova = datas.filter((d) => d.materiaId === m.id && !d.concluida && d.data >= hoje).sort((x, y) => x.data.localeCompare(y.data))[0];
-                  return (
-                    <button key={m.id} type="button" className="estudos-nav-item" aria-current={m.id === materiaId} onClick={() => aoEscolher(m.id)}>
-                      <span className="coluna" style={{ gap: 0, minWidth: 0, flex: 1 }}>
-                        <span className="cortar">{m.nome}</span>
-                        {prova && <span className="estudos-nav-prova cortar"><Flag size={10} />{descreverDistancia(prova.data)}</span>}
-                      </span>
-                      {pendentes > 0 && <span className="estudos-badge" title={T.estudos.revisarAgora(pendentes)}>{pendentes}</span>}
-                    </button>
-                  );
-                })}
+          </details>
+        )}
+      </div>
+      {area && (
+        <div ref={linhaMaterias} className="estudos-nav-materias">
+          {lista.length === 0 ? (
+            <button type="button" className="estudos-nav-vazio" onClick={() => aoNovaMateria(area.id)}><Plus size={13} />{T.estudos.novaMateria}</button>
+          ) : visiveis.map(botaoMateria)}
+          {lista.length > capacidade && (
+            <details className="estudos-menu estudos-menu-mais" key={area.id}>
+              <summary className="botao botao-secundario botao-pequeno">{T.estudos.maisMaterias(lista.length - visiveis.length)}<ChevronDown size={13} /></summary>
+              <div className="estudos-menu-painel">
+                <label className="estudos-nav-busca"><Search size={14} /><input className="campo" value={busca} placeholder={T.estudos.buscarMateria} aria-label={T.estudos.buscarMateria} onChange={(e) => setBusca(e.target.value)} /></label>
+                <div className="estudos-menu-resultados">
+                  {resultados.map(botaoMateria)}
+                  {resultados.length === 0 && <p className="texto-3">{T.estudos.semResultadoBusca}</p>}
+                </div>
               </div>
-            )}
-          </div>
-        );
-      })}
-      <Botao pequeno variante="fantasma" icone={<Plus size={13} />} onClick={aoNovaArea}>{T.estudos.novaArea}</Botao>
+            </details>
+          )}
+        </div>
+      )}
     </nav>
   );
 }
@@ -912,7 +986,7 @@ function CabecalhoMateria({ materia, aba, aoAba, aoExcluir }: { materia: Materia
   );
 }
 
-const ABAS_MATERIA: Aba[] = ["anotacoes", "quadro", "datas", "revisoes", "links"];
+const ABAS_MATERIA: Aba[] = ["anotacoes", "quadro", "datas", "revisoes", "arquivos", "links"];
 const ABAS_GERAIS: Aba[] = ["estatisticas", "revisoes", "links"];
 
 export default function Estudos() {
@@ -959,6 +1033,8 @@ export default function Estudos() {
         return materia && <Datas materia={materia} />;
       case "revisoes":
         return <Revisoes materia={materia} sessaoInicial={sessaoInicial} key={`${materia?.id}-${sessaoInicial}`} />;
+      case "arquivos":
+        return materia && <Arquivos materia={materia} />;
       case "links":
         return <Links materia={materia} />;
       case "estatisticas":
@@ -968,34 +1044,16 @@ export default function Estudos() {
 
   return (
     <>
-      <CabecalhoAba
-        titulo={T.estudos.titulo}
-        subtitulo={T.estudos.subtitulo}
-        agente="tutor"
-        acoes={
-          <>
-            <Botao pequeno icone={<Plus size={13} />} onClick={() => setCriandoArea(true)}>{T.estudos.novaArea}</Botao>
-            <Botao pequeno variante="primario" icone={<Plus size={13} />} disabled={areas.length === 0} title={areas.length === 0 ? T.estudos.crieAreaAntes : undefined} onClick={() => setCriandoMateria(undefined)}>{T.estudos.novaMateria}</Botao>
-          </>
-        }
-      />
+      <div className="estudos-cabecalho">
+        <CabecalhoAba titulo={T.estudos.titulo} subtitulo={T.estudos.subtitulo} agente="tutor" />
+      </div>
       {areas.length === 0 ? (
         <Cartao>
           <Vazio icone={<GraduationCap size={28} />} titulo={T.estudos.semMaterias} texto={T.estudos.semMateriasDica} acao={<Botao variante="primario" onClick={() => setCriandoArea(true)}>{T.estudos.novaArea}</Botao>} />
         </Cartao>
       ) : (
         <div className="estudos-layout">
-          <aside className="estudos-lateral">
-            <select className="seletor estudos-seletor-compacto" aria-label={T.estudos.areas} value={materiaId ?? ""} onChange={(e) => escolher(e.target.value || undefined)}>
-              <option value="">{T.estudos.visaoGeral}</option>
-              {areas.map((a) => (
-                <optgroup key={a.id} label={a.nome}>
-                  {materias.filter((m) => m.areaId === a.id).map((m) => <option key={m.id} value={m.id}>{m.nome}</option>)}
-                </optgroup>
-              ))}
-            </select>
-            <NavMaterias materiaId={materiaId} aoEscolher={escolher} aoNovaMateria={(id) => setCriandoMateria(id)} aoNovaArea={() => setCriandoArea(true)} aoExcluirArea={(id) => setConfirmar({ tipo: "area", id })} />
-          </aside>
+          <NavMaterias materiaId={materiaId} aoEscolher={escolher} aoNovaMateria={(id) => setCriandoMateria(id)} aoNovaArea={() => setCriandoArea(true)} aoExcluirArea={(id) => setConfirmar({ tipo: "area", id })} />
           <section className="estudos-area">
             {materia ? (
               <CabecalhoMateria materia={materia} aba={abaValida} aoAba={setAba} aoExcluir={() => setConfirmar({ tipo: "materia", id: materia.id })} />
@@ -1030,8 +1088,10 @@ export default function Estudos() {
         aoFechar={() => setConfirmar(null)}
         aoConfirmar={() => {
           if (!confirmar) return;
+          const materiasApagadas = confirmar.tipo === "area" ? materias.filter((m) => m.areaId === confirmar.id).map((m) => m.id) : [confirmar.id];
           if (confirmar.tipo === "area") excluirArea(confirmar.id);
           else excluirMateria(confirmar.id);
+          for (const id of materiasApagadas) void excluirArquivosDaMateria(id).catch(() => undefined);
           if (confirmar.id === materiaId || (confirmar.tipo === "area" && materia?.areaId === confirmar.id)) escolher(undefined);
         }}
       />

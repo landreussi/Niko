@@ -31,7 +31,7 @@ interface FerramentaNiko {
 
 const DATA = { type: "string", description: "Data no formato AAAA-MM-DD" };
 const HORA = { type: "string", description: "Hora no formato HH:MM, 24 horas" };
-const TELAS: Rota[] = ["inicio", "chat", "escritorio", "conexoes", "journal", "estudos", "financas", "metas", "calendario", "ia", "consumo", "conquistas", "configuracoes"];
+const TELAS: Rota[] = ["inicio", "chat", "escritorio", "conexoes", "journal", "estudos", "financas", "metas", "calendario", "atualizacao", "ia", "consumo", "conquistas", "configuracoes"];
 
 function texto(valor: unknown, limite = 200): string {
   return typeof valor === "string" ? valor.trim().slice(0, limite) : "";

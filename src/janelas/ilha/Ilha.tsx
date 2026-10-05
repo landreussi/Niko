@@ -143,12 +143,12 @@ export function Ilha() {
   const abas = cfg.ordemAbas.filter((a) => cfg.blocos[a]);
   const abaAtual = abas.includes(aba) ? aba : abas[0] ?? "hoje";
   const frente = usarEstadoDaFrente(cfg.ativa);
-  const [areaDeTrabalhoNativa, setAreaDeTrabalhoNativa] = useState(true);
+  const [lateraisLivresNativo, setLateraisLivresNativo] = useState(true);
   useEffect(() => {
-    if (frente.frente !== "sobreposta") setAreaDeTrabalhoNativa(frente.frente === "area_de_trabalho");
-  }, [frente.frente]);
+    if (frente.frente !== "sobreposta") setLateraisLivresNativo(!frente.maximizada && !frente.telaCheia);
+  }, [frente.frente, frente.maximizada, frente.telaCheia]);
   const appAbertoNoNavegador = (sistemaAberto && !sistemaMinimizado) || janelasConexao.some((j) => !j.minimizada);
-  const naAreaDeTrabalho = NATIVO ? areaDeTrabalhoNativa : !appAbertoNoNavegador;
+  const lateraisLivres = NATIVO ? lateraisLivresNativo : !appAbertoNoNavegador;
   const coberta = cfg.modo === "inteligente" && !revelada && (NATIVO ? frente.cobre : alguemCobre({ x: (window.innerWidth - LARGURA_EXPANDIDA) / 2, y: 0, w: LARGURA_EXPANDIDA, h: 40 }));
   const pomodoroIniciado = pomodoro.rodando || pomodoro.restanteMs != null;
   const agora = useAgora(1000, pomodoro.rodando && estado !== "expandida");
@@ -245,7 +245,7 @@ export function Ilha() {
   const VisaoAtual = VISAO_ABA[abaAtual];
   const agenteLateral: AgenteId = abaAtual === "avisos" && alertas[0] ? alertas[0].agenteId : AGENTE_DA_ABA[abaAtual] ?? (trabalhando[0] as AgenteId | undefined) ?? favorito;
   const restantePomodoro = restanteAtual(pomodoro, agora);
-  const barraVisivel = cfg.laterais && estadoEfetivo !== "escondida" && naAreaDeTrabalho;
+  const barraVisivel = cfg.laterais && estadoEfetivo !== "escondida" && lateraisLivres;
 
   const abaDaCompacta = (): AbaIlha | undefined =>
     compacta.tipo === "revelacao" ? revelacao?.aba : compacta.tipo === "pomodoro" ? "foco" : compacta.tipo === "midia" ? "midia" : compacta.tipo === "trabalho" ? "chat" : undefined;

@@ -304,6 +304,7 @@ pub fn run() {
                 .inner_size(1320.0_f64.min(mw - 40.0), 860.0_f64.min(mh - 40.0))
                 .min_inner_size(960.0, 600.0)
                 .background_color(tauri::window::Color(14, 14, 16, 255))
+                .disable_drag_drop_handler()
                 .center()
                 .visible(!escondido)
                 .build()?;

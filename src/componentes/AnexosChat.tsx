@@ -126,7 +126,7 @@ export function useArrastarArquivos(alvo: React.RefObject<HTMLElement | null>, a
   return arrastando;
 }
 
-export function ZonaDeSoltar({ ativo, agente, compacta }: { ativo: boolean; agente: AgenteId; compacta?: boolean }) {
+export function ZonaDeSoltar({ ativo, agente, compacta, texto = T.chat.anexos.solte, tipos = T.chat.anexos.tipos }: { ativo: boolean; agente: AgenteId; compacta?: boolean; texto?: string; tipos?: readonly string[] }) {
   const caixa = useRef<HTMLDivElement>(null);
   const xBruto = useMotionValue(0);
   const x = useSpring(xBruto, { stiffness: 260, damping: 22 });
@@ -188,9 +188,9 @@ export function ZonaDeSoltar({ ativo, agente, compacta }: { ativo: boolean; agen
             </div>
           </motion.div>
           <div className="zona-soltar-texto" style={{ opacity: perto ? 0.35 : 1 }}>
-            <b>{T.chat.anexos.solte}</b>
+            <b>{texto}</b>
             <span className="zona-soltar-tipos">
-              {T.chat.anexos.tipos.map((t) => <span key={t}>{t}</span>)}
+              {tipos.map((t) => <span key={t}>{t}</span>)}
             </span>
           </div>
         </motion.div>

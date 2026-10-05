@@ -21,6 +21,7 @@ pub enum TipoDaFrente {
 pub struct EstadoDaFrente {
     cobre: bool,
     tela_cheia: bool,
+    maximizada: bool,
     frente: TipoDaFrente,
 }
 
@@ -56,8 +57,10 @@ unsafe fn ler_janela_da_frente(app: &AppHandle) -> EstadoDaFrente {
     let mut pid = 0u32;
     GetWindowThreadProcessId(frente, Some(&mut pid));
     if pid == std::process::id() {
-        let tipo = if e_janela_do_sistema(app, frente) { TipoDaFrente::App } else { TipoDaFrente::Sobreposta };
-        return EstadoDaFrente { frente: tipo, ..Default::default() };
+        if e_janela_do_sistema(app, frente) {
+            return EstadoDaFrente { frente: TipoDaFrente::App, maximizada: IsZoomed(frente).as_bool(), ..Default::default() };
+        }
+        return EstadoDaFrente { frente: TipoDaFrente::Sobreposta, ..Default::default() };
     }
     let mut classe = [0u16; 64];
     let tamanho = GetClassNameW(frente, &mut classe).max(0) as usize;
@@ -71,12 +74,12 @@ unsafe fn ler_janela_da_frente(app: &AppHandle) -> EstadoDaFrente {
     }
     let maximizada = IsZoomed(frente).as_bool();
     let cobre_monitor = retangulo_cobre_monitor(frente, monitor);
-    EstadoDaFrente { cobre: maximizada || cobre_monitor, tela_cheia: !maximizada && cobre_monitor, frente: TipoDaFrente::App }
+    EstadoDaFrente { cobre: maximizada || cobre_monitor, tela_cheia: !maximizada && cobre_monitor, maximizada, frente: TipoDaFrente::App }
 }
 
 #[tauri::command]
 pub fn frente_cobre_tela(app: AppHandle) -> EstadoDaFrente {
     let janela = unsafe { ler_janela_da_frente(&app) };
     let tela_cheia = janela.tela_cheia || windows_em_tela_cheia();
-    EstadoDaFrente { cobre: janela.cobre || tela_cheia, tela_cheia, frente: if tela_cheia { TipoDaFrente::App } else { janela.frente } }
+    EstadoDaFrente { cobre: janela.cobre || tela_cheia, tela_cheia, maximizada: janela.maximizada, frente: if tela_cheia { TipoDaFrente::App } else { janela.frente } }
 }

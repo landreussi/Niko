@@ -20,6 +20,7 @@ export type Rota =
   | "financas"
   | "metas"
   | "calendario"
+  | "atualizacao"
   | "ia"
   | "consumo"
   | "conquistas"

@@ -217,10 +217,11 @@ export type TipoDaFrente = "area_de_trabalho" | "sobreposta" | "app";
 export interface EstadoDaFrente {
   cobre: boolean;
   telaCheia: boolean;
+  maximizada: boolean;
   frente: TipoDaFrente;
 }
 
-const FRENTE_LIVRE: EstadoDaFrente = { cobre: false, telaCheia: false, frente: "area_de_trabalho" };
+const FRENTE_LIVRE: EstadoDaFrente = { cobre: false, telaCheia: false, maximizada: false, frente: "area_de_trabalho" };
 
 export function usarEstadoDaFrente(ativo: boolean): EstadoDaFrente {
   const [estado, setEstado] = useState<EstadoDaFrente>(FRENTE_LIVRE);
@@ -235,8 +236,9 @@ export function usarEstadoDaFrente(ativo: boolean): EstadoDaFrente {
       if (!vivo) return;
       const cobre = Boolean(r?.cobre);
       const telaCheia = Boolean(r?.telaCheia);
+      const maximizada = Boolean(r?.maximizada);
       const frente: TipoDaFrente = r?.frente === "app" || r?.frente === "sobreposta" ? r.frente : "area_de_trabalho";
-      setEstado((anterior) => (anterior.cobre === cobre && anterior.telaCheia === telaCheia && anterior.frente === frente ? anterior : { cobre, telaCheia, frente }));
+      setEstado((anterior) => (anterior.cobre === cobre && anterior.telaCheia === telaCheia && anterior.maximizada === maximizada && anterior.frente === frente ? anterior : { cobre, telaCheia, maximizada, frente }));
     };
     void ler();
     const t = window.setInterval(() => void ler(), 800);

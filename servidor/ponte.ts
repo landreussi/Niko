@@ -2,12 +2,14 @@ import type { Plugin, Connect } from "./tiposVite";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { listarProvedores, salvarProvedor, removerProvedor, testarProvedor, conversar, validarMensagens, validarFerramentas } from "./ia";
 import { lerConsumo } from "./consumo";
+import { lerUltimaVersao } from "./atualizacoes";
 import { lerTudo, gravar, backupManual, zerarBanco } from "./banco";
 import { pedirMidia } from "./midia";
 import { pedirJanelas } from "./janelasWindows";
 import { estadoConexoes, lerConexao, salvarChaveConexao, removerChaveConexao, servicoValido, chaveDe, SERVICOS as SERVICOS_CONEXAO } from "./conexoes";
 import { buscarGmail, criarRascunhoGmail, enviarGmail } from "./gmail";
 import { lerAudio, definirVolume, definirMudo, ajustarSessao, lerTema, definirTema, abrirFerramenta, agirNaEnergia, lerBandeja, abrirDaBandeja } from "./controleRapido";
+import { listarArquivos, receberArquivo, enviarConteudo, excluirArquivo, excluirArquivosDaMateria, baixarArquivo, abrirArquivoNoPrograma } from "./arquivos";
 import { tipoDoComputador, estadoDoSistema, listarRedes, listarBluetooth, lerComputador, conectarRede, esquecerRede, desconectarRede, definirBrilho, definirRadio, abrirConfiguracoesWindows } from "./sistema";
 
 const LIMITE_CORPO = 24 * 1024 * 1024;
@@ -64,6 +66,7 @@ export const rotas: Connect.NextHandleFunction = async (req, res, proximo) => {
   const caminho = url.pathname.slice("/ponte".length);
 
   try {
+    if (caminho === "/atualizacao" && req.method === "GET") return responder(res, 200, await lerUltimaVersao());
     if (caminho === "/estado" && req.method === "GET") {
       return responder(res, 200, { disponivel: true, plataforma: process.platform, provedores: listarProvedores() });
     }
@@ -80,6 +83,18 @@ export const rotas: Connect.NextHandleFunction = async (req, res, proximo) => {
     const testar = /^\/provedores\/([a-z0-9-]+)\/testar$/.exec(caminho);
     if (testar && req.method === "POST") {
       return responder(res, 200, await testarProvedor(testar[1]));
+    }
+    const arquivo = /^\/arquivos\/([A-Za-z0-9-]{1,64})(?:\/([A-Za-z0-9-]{1,64})(?:\/(baixar|abrir))?)?$/.exec(caminho);
+    if (arquivo) {
+      const banco = String(req.headers["x-niko-banco"] ?? "");
+      const [, materia, id, acao] = arquivo;
+      if (!id && req.method === "GET") return responder(res, 200, { arquivos: listarArquivos(banco, materia) });
+      if (!id && req.method === "POST") return responder(res, 200, await receberArquivo(req, banco, materia, url.searchParams.get("nome") ?? ""));
+      if (!id && req.method === "DELETE") return responder(res, 200, excluirArquivosDaMateria(banco, materia));
+      if (id && !acao && req.method === "GET") return enviarConteudo(res, banco, materia, id);
+      if (id && !acao && req.method === "DELETE") return responder(res, 200, excluirArquivo(banco, materia, id));
+      if (id && acao === "baixar" && req.method === "POST") return responder(res, 200, await baixarArquivo(banco, materia, id));
+      if (id && acao === "abrir" && req.method === "POST") return responder(res, 200, abrirArquivoNoPrograma(banco, materia, id));
     }
     if (caminho === "/janelas" && req.method === "GET") return responder(res, 200, await pedirJanelas("listar"));
     const acaoJanela = /^\/janelas\/(focar|minimizar|fechar)$/.exec(caminho);
