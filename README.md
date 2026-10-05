@@ -9,7 +9,7 @@
 Rotina, estudos, finanças, metas e os serviços que você acompanha, reunidos em um só lugar e cuidados por um time de agentes com personalidade própria.
 
 ![Windows 10 e 11](https://img.shields.io/badge/Windows-10%20%7C%2011-0b0d10?style=flat-square)
-![Versão](https://img.shields.io/badge/versão-0.1.0-0b0d10?style=flat-square)
+![Versão](https://img.shields.io/badge/versão-0.1.1-0b0d10?style=flat-square)
 ![Licença](https://img.shields.io/badge/licença-proprietária-b42318?style=flat-square)
 
 <br />
@@ -160,6 +160,32 @@ pnpm verificar   # checagem de tipos em modo estrito
 pnpm build       # build da interface em dist/
 pnpm app         # gera o instalador do Windows
 ```
+
+### Publicar uma nova versão
+
+Informe a versão explicitamente, sem editar os arquivos à mão:
+
+```powershell
+pnpm lancar 0.1.2 "Descrição das novidades"
+```
+
+O comando sincroniza `package.json`, `src-tauri/tauri.conf.json`, a versão do pacote Niko em `src-tauri/Cargo.toml` e `src-tauri/Cargo.lock`, além do selo de versão deste README. Antes de escrever, valida os arquivos, recusa redução de versão e consulta o GitHub para impedir uma release duplicada. Em builds feitos a partir de uma tag no GitHub Actions, a tag precisa ser `v` seguida da mesma versão.
+
+O instalador e a assinatura precisam existir com o nome esperado e ter sido gerados no build atual. Só depois é criado o `latest.json`. O comando não publica nada no GitHub. Envie o instalador e o manifesto gerados em `src-tauri/target/release/bundle/nsis`.
+
+Use a mesma chave de atualização das versões anteriores. O script usa `TAURI_SIGNING_PRIVATE_KEY` ou a chave em `%USERPROFILE%\.tauri\niko-atualizacao.key`. Se ela tiver senha, configure `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` no terminal. Nunca publique a chave privada.
+
+Comandos que não geram instalador:
+
+```powershell
+pnpm lancar:verificar
+pnpm lancar 0.1.2 --verificar
+pnpm lancar:testar
+```
+
+O primeiro confere se as quatro versões concordam. O segundo mostra uma prévia da sincronização, sem alterar arquivos nem consultar o GitHub. O terceiro executa os testes das proteções de release.
+
+Para reconstruir deliberadamente uma versão já publicada, use `pnpm lancar 0.1.1 --recompilar "Notas da versão"`. Essa opção dispensa a consulta de duplicidade no GitHub, mas mantém as validações dos arquivos e do build. Não substitua uma release publicada usando esses arquivos.
 
 ## Estrutura
 

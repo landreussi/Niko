@@ -13,7 +13,9 @@
         "ponte:build": "node scripts/construir-ponte.mjs",
         "tauri": "tauri",
         "app": "tauri build",
-        "lancar": "node scripts/lancar-versao.mjs"
+        "lancar": "node scripts/lancar-versao.mjs",
+        "lancar:verificar": "node scripts/lancar-versao.mjs --verificar",
+        "lancar:testar": "node --test scripts/versao-release.test.mjs"
     },
     "dependencies": {
         "@dnd-kit/core": "^6.3.1",
