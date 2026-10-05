@@ -2,6 +2,7 @@ import { create } from "zustand";
 import type { Rota, ServicoId } from "../tipos";
 import { gerarId } from "../utilitarios/basicos";
 import { NATIVO, enviarComando, foraDoSistema, mostrarSistema } from "../desktop/desktop";
+import { rotaLigada } from "../utilitarios/funcoes";
 
 export interface AvisoRodape {
   id: string;
@@ -141,8 +142,10 @@ export const useInterface = create<EstadoInterface>()((set, get) => ({
     }
     get().irParaLocal(rota, parametros);
   },
-  irParaLocal: (rota, parametros = {}) => {
+  irParaLocal: (rotaPedida, parametrosPedidos = {}) => {
     if (NATIVO) void mostrarSistema();
+    const rota = rotaLigada(rotaPedida) ? rotaPedida : "inicio";
+    const parametros = rota === rotaPedida ? parametrosPedidos : {};
     const atual = get();
     const mesmoDestino = atual.rota === rota && JSON.stringify(parametros) === JSON.stringify(atual.parametros);
     set({

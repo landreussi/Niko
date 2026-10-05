@@ -4,14 +4,22 @@ import { hojeISO } from "./datas";
 import { T } from "../textos/textos";
 import { normalizarTexto, urlSegura } from "./basicos";
 import { escaparHtml } from "./sanitizar";
+import { avisoDeFuncaoDesligada, funcaoLigada, type Funcao } from "./funcoes";
 
 export type TipoCaptura = "tarefa" | "gasto" | "link" | "nota" | "lembrete";
 
 export const TIPOS_CAPTURA: TipoCaptura[] = ["tarefa", "gasto", "link", "nota", "lembrete"];
 
+const FUNCAO_DA_CAPTURA: Record<TipoCaptura, Funcao> = { tarefa: "journal", nota: "journal", gasto: "financas", link: "estudos", lembrete: "calendario" };
+
+export function tiposDeCapturaLigados(desligadas: readonly Funcao[]): TipoCaptura[] {
+  return TIPOS_CAPTURA.filter((t) => funcaoLigada(FUNCAO_DA_CAPTURA[t], desligadas));
+}
+
 export function capturar(tipo: TipoCaptura, texto: string): ResultadoComando {
   const limpo = texto.trim();
   if (!limpo) return { agente: "organizador", resposta: T.validacao.obrigatorio, ok: false };
+  if (!funcaoLigada(FUNCAO_DA_CAPTURA[tipo])) return { agente: "organizador", resposta: avisoDeFuncaoDesligada(FUNCAO_DA_CAPTURA[tipo]), ok: false };
   if (tipo === "nota") {
     const hoje = hojeISO();
     const rotina = useRotina.getState();

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { Check } from "lucide-react";
+import { Check, Sparkles } from "lucide-react";
+import { useInterface } from "../../estado/interface";
 import { useConfig, type ModoBorda, type Tema } from "../../estado/configuracoes";
 import { Personagem } from "../../personagens/Personagem";
 import { AGENTES } from "../../estado/agentes";
@@ -8,6 +9,16 @@ import { Botao, Campo, Segmentado, Tecla } from "../../componentes/basicos";
 import { T } from "../../textos/textos";
 import { tocarSom } from "../../ponte/sons";
 import { EditorFoto } from "../../componentes/FotoPerfil";
+
+function PreviaDoModo({ modo }: { modo: ModoBorda }) {
+  return (
+    <div className="previa-modo" data-modo={modo} role="img" aria-label={`${T.primeira.previaModo}: ${T.configuracoes.modos[modo]}`}>
+      <span className="previa-modo-janela" />
+      <span className="previa-modo-ilha" />
+      <span className="previa-modo-cursor" />
+    </div>
+  );
+}
 
 export function PrimeiraExecucao() {
   const cfg = useConfig();
@@ -106,6 +117,7 @@ export function PrimeiraExecucao() {
                     aoMudar={(modo) => cfg.definirIlha({ modo })}
                     opcoes={(["fixo", "esconder", "inteligente"] as ModoBorda[]).map((m) => ({ valor: m, rotulo: T.configuracoes.modos[m] }))}
                   />
+                  <PreviaDoModo modo={cfg.ilha.modo} />
                   <span className="campo-dica">{T.configuracoes.modosDica[cfg.ilha.modo]}</span>
                 </div>
                 <div className="campo-grupo">
@@ -123,15 +135,22 @@ export function PrimeiraExecucao() {
               <>
                 <h2 className="titulo-secao">{T.primeira.ia}</h2>
                 <p className="texto-2">{T.primeira.iaTexto}</p>
-              </>
-            )}
-            {passo === 4 && (
-              <>
-                <h2 className="titulo-secao">{T.primeira.dados}</h2>
+                <div>
+                  <Botao
+                    icone={<Sparkles size={14} />}
+                    onClick={() => {
+                      concluir();
+                      useInterface.getState().irPara("ia");
+                    }}
+                  >
+                    {T.primeira.configurarIa}
+                  </Botao>
+                </div>
+                <h2 className="titulo-secao" style={{ marginTop: 8 }}>{T.primeira.dados}</h2>
                 <p className="texto-2">{T.primeira.dadosTexto}</p>
               </>
             )}
-            {passo === 5 && (
+            {passo === 4 && (
               <>
                 <h2 className="titulo-secao">{T.primeira.pronto}</h2>
                 <p className="texto-2">{T.primeira.prontoTexto}</p>

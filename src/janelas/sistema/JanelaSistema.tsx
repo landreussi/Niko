@@ -9,6 +9,7 @@ import { T } from "../../textos/textos";
 import { AvisosRodape } from "../../componentes/basicos";
 import { tocarSom } from "../../ponte/sons";
 import { NATIVO, janelaAtual } from "../../desktop/desktop";
+import { rotaLigada } from "../../utilitarios/funcoes";
 
 const MINIMO = { w: 960, h: 600 };
 
@@ -20,7 +21,9 @@ function geometriaPadrao(): Geometria {
 }
 
 export function JanelaSistema() {
-  const rota = useInterface((s) => s.rota);
+  const rotaPedida = useInterface((s) => s.rota);
+  const desligadas = useConfig((s) => s.funcoesDesligadas);
+  const rota = rotaLigada(rotaPedida, desligadas) ? rotaPedida : "inicio";
   const historico = useInterface((s) => s.historico);
   const voltar = useInterface((s) => s.voltar);
   const geometriaSalva = useInterface((s) => s.geometria);

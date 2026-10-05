@@ -4,6 +4,7 @@ import { useEstudos } from "../estado/estudos";
 import { normalizarTexto } from "./basicos";
 import { hojeISO, paraISO, diaDoMomento, dataValida, formatar } from "./datas";
 import { T } from "../textos/textos";
+import { funcaoLigada } from "./funcoes";
 
 export type AcaoAnexo = keyof typeof T.chat.anexos.acoes;
 export type PedidoLocal = "pausar" | "continuar" | "encerrar" | "timer" | "capacidades" | "relatorio";
@@ -83,7 +84,15 @@ export function gerarRelatorioSemanal(fim = hojeISO()) {
 
 export function textoRelatorioSemanal(r = gerarRelatorioSemanal()) {
   const S = T.chat.recursos;
-  return [S.relatorioTitulo(formatar(r.inicio, "dd/MM/yyyy"), formatar(r.fim, "dd/MM/yyyy")), ...(r.dias_com_registro === 0 ? [S.relatorioVazio] : []), S.relatorioTarefas(r.tarefas_concluidas), S.relatorioHabitos(r.habitos_registros, r.habitos_cumpridos), S.relatorioFoco(r.foco_sessoes_concluidas, r.foco_concluido_minutos, r.foco_interrompido_minutos), r.sono_media_horas === null ? S.relatorioSemSono : S.relatorioSono(r.sono_media_horas, r.sono_dias), r.agua_media_ml === null ? S.relatorioSemAgua : S.relatorioAgua(r.agua_media_ml, r.agua_dias), S.relatorioFonte].join("\n\n");
+  const comDiario = funcaoLigada("journal");
+  return [
+    S.relatorioTitulo(formatar(r.inicio, "dd/MM/yyyy"), formatar(r.fim, "dd/MM/yyyy")),
+    ...(r.dias_com_registro === 0 ? [S.relatorioVazio] : []),
+    ...(comDiario ? [S.relatorioTarefas(r.tarefas_concluidas), S.relatorioHabitos(r.habitos_registros, r.habitos_cumpridos)] : []),
+    S.relatorioFoco(r.foco_sessoes_concluidas, r.foco_concluido_minutos, r.foco_interrompido_minutos),
+    ...(comDiario ? [r.sono_media_horas === null ? S.relatorioSemSono : S.relatorioSono(r.sono_media_horas, r.sono_dias), r.agua_media_ml === null ? S.relatorioSemAgua : S.relatorioAgua(r.agua_media_ml, r.agua_dias)] : []),
+    S.relatorioFonte,
+  ].join("\n\n");
 }
 
 export function montarPedidoAnexo(acao: string, anexos: { nome: string; texto?: string }[]) {

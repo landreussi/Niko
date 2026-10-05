@@ -16,6 +16,7 @@ import { useAgentes } from "../estado/agentes";
 import { useInterface } from "../estado/interface";
 import { somar } from "./basicos";
 import { controlarPomodoro, textoPomodoro } from "./recursosChat";
+import { avisoDeFuncaoDesligada, funcaoDoCartao, funcaoDoComando, funcaoLigada } from "./funcoes";
 
 export interface ResultadoComando {
   agente: AgenteId;
@@ -188,6 +189,8 @@ export function linhasDaConfirmacao(c: CartaoConfirmacao): [string, string][] {
 }
 
 export function confirmarComando(c: CartaoConfirmacao): string | Promise<string> {
+  const desligada = funcaoDoCartao(c.tipo);
+  if (desligada) return avisoDeFuncaoDesligada(desligada);
   const fin = useFinancas.getState();
   const d = c.dados;
   if (c.tipo === "rascunho" || c.tipo === "email") {
@@ -283,6 +286,8 @@ export function executarComando(entrada: string, opcoes: { confirmar?: boolean }
   const nome = normalizarTexto(m[1]);
   const argumentos = m[2].trim();
   const agentes = useAgentes.getState();
+  const desligada = funcaoDoComando(nome);
+  if (desligada) return { agente: "organizador", resposta: avisoDeFuncaoDesligada(desligada), ok: false };
 
   switch (nome) {
     case "ajuda":
@@ -394,7 +399,11 @@ export function executarComando(entrada: string, opcoes: { confirmar?: boolean }
       const gasto = somar(gastosDoMes(fin, hoje.slice(0, 7)), (t) => parteDoUsuario(t, fin.divisoes));
       return {
         agente: "organizador",
-        resposta: T.chat.respostas.status(abertas, pendentes, revisoesParaHoje(useEstudos.getState()), formatarDinheiro(gasto)),
+        resposta: T.chat.respostas.status({
+          ...(funcaoLigada("journal") ? { tarefas: abertas, habitos: pendentes } : {}),
+          ...(funcaoLigada("estudos") ? { revisoes: revisoesParaHoje(useEstudos.getState()) } : {}),
+          ...(funcaoLigada("financas") ? { gasto: formatarDinheiro(gasto) } : {}),
+        }),
         ok: true,
       };
     }

@@ -13,6 +13,7 @@ import { Avatar } from "../../componentes/FotoPerfil";
 import { hojeISO } from "../../utilitarios/datas";
 import { Tecla } from "../../componentes/basicos";
 import type { Rota } from "../../tipos";
+import { funcaoLigada, rotaLigada } from "../../utilitarios/funcoes";
 
 function useContadores(): Partial<Record<Rota, { n: number; alerta?: boolean }>> {
   const hoje = hojeISO();
@@ -43,8 +44,10 @@ export function BarraLateral({ recolhida }: { recolhida: boolean }) {
   const contadores = useContadores();
   const rolagem = useRef<HTMLDivElement>(null);
   const [fade, setFade] = useState({ topo: false, base: false });
+  const desligadas = useConfig((s) => s.funcoesDesligadas);
   const hoje = tarefasDoDia(tarefas, hojeISO()).filter((t) => t.status !== "cancelada").slice(0, 5);
-  const visiveis = barra.filter((i) => i.visivel);
+  const visiveis = barra.filter((i) => i.visivel && rotaLigada(i.rota, desligadas));
+  const mostrarHoje = funcaoLigada("journal", desligadas);
 
   useEffect(() => {
     const el = rolagem.current;
@@ -128,7 +131,7 @@ export function BarraLateral({ recolhida }: { recolhida: boolean }) {
             </div>
           );
         })}
-        {!recolhida && (
+        {!recolhida && mostrarHoje && (
           <div className="barra-grupo">
             <button type="button" className="barra-rotulo" aria-expanded={!hojeFechado} onClick={() => alternarGrupo("hoje")}>
               <span className="rotulo-secao">{T.gruposBarra.hoje}</span>

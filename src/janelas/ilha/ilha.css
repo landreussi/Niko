@@ -182,6 +182,19 @@
   color: var(--i-tinta);
 }
 
+.ilha-aba:has(.ilha-aba-nome) {
+  width: auto;
+  display: flex;
+  gap: 6px;
+  padding: 0 10px 0 8px;
+}
+
+.ilha-aba-nome {
+  font-size: 11.5px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
 .ilha-aba-selo {
   position: absolute;
   top: 1px;
@@ -217,6 +230,36 @@
 .ilha-acao:hover {
   background: rgba(var(--i-rgb), 0.07);
   color: var(--i-tinta);
+}
+
+.ilha-acao[data-dica] {
+  position: relative;
+}
+
+.ilha-acao[data-dica]::after {
+  content: attr(data-dica);
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 10;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: rgba(20, 20, 23, 0.96);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: #f1f2f4;
+  font-size: 11px;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(-2px);
+  transition: opacity 0.12s, transform 0.12s;
+}
+
+.ilha-acao[data-dica]:hover::after,
+.ilha-acao[data-dica]:focus-visible::after {
+  opacity: 1;
+  transform: translateY(0);
+  transition-delay: 0.35s;
 }
 
 .ilha-visoes {
@@ -258,6 +301,16 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+
+.ilha-midia-origem {
+  gap: 6px;
+  min-width: 0;
+}
+
+.ilha-midia-app {
+  display: inline-flex;
+  flex: 0 0 auto;
 }
 
 .ilha-titulo {

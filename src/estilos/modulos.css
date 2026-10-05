@@ -166,6 +166,93 @@
   gap: var(--esp-3);
 }
 
+.previa-modo {
+  position: relative;
+  width: 220px;
+  height: 112px;
+  margin: 4px 0;
+  border: 1px solid var(--borda);
+  border-radius: 10px;
+  background: var(--fundo);
+  overflow: hidden;
+}
+
+.previa-modo-janela {
+  position: absolute;
+  left: 46px;
+  top: 34px;
+  width: 128px;
+  height: 64px;
+  border: 1px solid var(--borda-forte);
+  border-radius: 6px;
+  background: var(--superficie-2);
+}
+
+.previa-modo-ilha {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  width: 64px;
+  height: 12px;
+  border-radius: 0 0 7px 7px;
+  background: #111114;
+  transform: translateX(-50%);
+}
+
+.previa-modo-cursor {
+  position: absolute;
+  left: 150px;
+  top: 80px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--texto-3);
+  opacity: 0;
+}
+
+.previa-modo[data-modo="esconder"] .previa-modo-ilha {
+  animation: previa-ilha-esconder 3.6s ease-in-out infinite;
+}
+
+.previa-modo[data-modo="esconder"] .previa-modo-cursor {
+  animation: previa-cursor-esconder 3.6s ease-in-out infinite;
+}
+
+.previa-modo[data-modo="inteligente"] .previa-modo-janela {
+  animation: previa-janela-maximizar 4s ease-in-out infinite;
+}
+
+.previa-modo[data-modo="inteligente"] .previa-modo-ilha {
+  animation: previa-ilha-coberta 4s ease-in-out infinite;
+}
+
+@keyframes previa-ilha-esconder {
+  0%, 25%, 85%, 100% { width: 36px; height: 3px; }
+  45%, 70% { width: 64px; height: 12px; }
+}
+
+@keyframes previa-cursor-esconder {
+  0%, 10% { opacity: 1; left: 150px; top: 80px; }
+  40%, 70% { opacity: 1; left: 112px; top: 4px; }
+  95%, 100% { opacity: 0; left: 150px; top: 80px; }
+}
+
+@keyframes previa-janela-maximizar {
+  0%, 20%, 90%, 100% { left: 46px; top: 34px; width: 128px; height: 64px; }
+  40%, 70% { left: 0; top: 0; width: 220px; height: 112px; border-radius: 0; }
+}
+
+@keyframes previa-ilha-coberta {
+  0%, 25%, 85%, 100% { opacity: 1; }
+  40%, 70% { opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .previa-modo * {
+    animation: none !important;
+  }
+}
+
 .assistente-rodape {
   display: flex;
   justify-content: space-between;

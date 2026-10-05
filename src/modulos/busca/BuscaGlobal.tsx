@@ -17,6 +17,7 @@ import { formatar } from "../../utilitarios/datas";
 import { ICONE_ROTA } from "../../janelas/sistema/rotas";
 import { Tecla } from "../../componentes/basicos";
 import type { Rota } from "../../tipos";
+import { funcaoLigada, rotaLigada } from "../../utilitarios/funcoes";
 
 interface Resultado {
   id: string;
@@ -64,6 +65,7 @@ export function BuscaGlobal() {
     }
   }, [aberta]);
 
+  const desligadas = useConfig((s) => s.funcoesDesligadas);
   const resultados = useMemo<Resultado[]>(() => {
     if (!aberta) return [];
     const t = termo.trim();
@@ -85,7 +87,7 @@ export function BuscaGlobal() {
       { id: "a-priv", grupo: "acoes", titulo: T.busca.acoes.privacidade, icone: <EyeOff size={15} />, executar: () => { const c = useConfig.getState(); c.definir({ privacidade: !c.privacidade }); fechar(); } },
       { id: "a-captura", grupo: "acoes", titulo: T.busca.acoes.captura, icone: <Zap size={15} />, executar: () => { fechar(); abrirCaptura(true); } },
     ];
-    const abas: Resultado[] = (Object.keys(T.rotas) as Rota[]).map((r) => {
+    const abas: Resultado[] = (Object.keys(T.rotas) as Rota[]).filter((r) => rotaLigada(r, desligadas)).map((r) => {
       const Icone = ICONE_ROTA[r];
       return { id: `r-${r}`, grupo: "abas", titulo: T.rotas[r], icone: <Icone size={15} />, executar: () => { irPara(r); fechar(); } };
     });
@@ -93,24 +95,26 @@ export function BuscaGlobal() {
     const ok = (id: string, ...campos: (string | undefined)[]) => (!t ? recentes.includes(id) : campos.some((c) => c !== undefined && contem(c, t)));
     const r: Resultado[] = [];
     if (t) r.push(...acoes.filter((a) => contem(a.titulo, t)), ...abas.filter((a) => contem(a.titulo, t)));
-    for (const x of useRotina.getState().tarefas) {
+    const comTarefas = funcaoLigada("journal", desligadas);
+    const comEstudos = funcaoLigada("estudos", desligadas);
+    for (const x of comTarefas ? useRotina.getState().tarefas : []) {
       if (ok(x.id, x.titulo, x.descricao))
         r.push({ id: x.id, grupo: "tarefas", titulo: x.titulo, sub: x.data ? formatar(x.data, "d 'de' MMM") : T.geral.semData, icone: <ListTodo size={15} />, executar: () => { irPara("journal", x.data ? { data: x.data } : {}); fechar(); } });
     }
     const est = useEstudos.getState();
-    for (const p of est.paginas) {
+    for (const p of comEstudos ? est.paginas : []) {
       if (ok(p.id, p.titulo, t ? htmlParaTexto(p.conteudo) : ""))
         r.push({ id: p.id, grupo: "paginas", titulo: p.titulo || T.estudos.semTitulo, sub: est.materias.find((m) => m.id === p.materiaId)?.nome, icone: <FileText size={15} />, executar: () => { irPara("estudos", { materia: p.materiaId, pagina: p.id, aba: "anotacoes" }); fechar(); } });
     }
-    for (const l of est.links) {
+    for (const l of comEstudos ? est.links : []) {
       if (ok(l.id, l.titulo, l.url, ...l.tags))
         r.push({ id: l.id, grupo: "links", titulo: l.titulo, sub: l.url, icone: <Link2 size={15} />, executar: () => { irPara("estudos", { aba: "links", materia: l.materiaId ?? "" }); fechar(); } });
     }
-    for (const x of useFinancas.getState().transacoes) {
+    for (const x of funcaoLigada("financas", desligadas) ? useFinancas.getState().transacoes : []) {
       if (ok(x.id, x.descricao))
         r.push({ id: x.id, grupo: "transacoes", titulo: x.descricao, sub: `${formatarDinheiro(x.valor)} . ${formatar(x.data, "d 'de' MMM")}`, icone: <Wallet size={15} />, executar: () => { irPara("financas", { aba: "transacoes", busca: x.descricao }); fechar(); } });
     }
-    for (const e of useOrganizacao.getState().eventos) {
+    for (const e of funcaoLigada("calendario", desligadas) ? useOrganizacao.getState().eventos : []) {
       if (ok(e.id, e.titulo))
         r.push({ id: e.id, grupo: "eventos", titulo: e.titulo, sub: formatar(e.data, "d 'de' MMM"), icone: <CalendarDays size={15} />, executar: () => { irPara("calendario", { data: e.data }); fechar(); } });
     }
@@ -127,7 +131,7 @@ export function BuscaGlobal() {
       return [...vistos, ...acoes, ...abas.slice(0, 6)];
     }
     return comRecentes.slice(0, 60);
-  }, [aberta, termo, abrir, irPara, abrirCaptura]);
+  }, [aberta, termo, abrir, irPara, abrirCaptura, desligadas]);
 
   useEffect(() => {
     setAtivo(0);

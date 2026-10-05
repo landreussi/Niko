@@ -58,6 +58,7 @@ export function SecaoClaudeCode() {
     (acao === "instalar" ? claudeCode.instalar() : claudeCode.remover())
       .then((r) => {
         if (acao === "instalar") definirIlha({ blocos: { ...useConfig.getState().ilha.blocos, claude: true } });
+        definir({ claudeInstalado: acao === "instalar" });
         avisar(acao === "instalar" ? C.conectadoAviso(r.copia) : C.removidoAviso(r.copia));
         void tocarSom(acao === "instalar" ? "approve" : "close", "interface");
         setPrevia(null);
@@ -106,7 +107,7 @@ export function SecaoClaudeCode() {
         )}
       </div>
 
-      <LinhaAlternador rotulo={C.mostrarAba} ligado={ilha.blocos.claude} aoMudar={(v) => definirIlha({ blocos: { ...ilha.blocos, claude: v } })} />
+      <LinhaAlternador rotulo={C.mostrarAba} dica={instalado ? undefined : C.mostrarAbaDica} ligado={ilha.blocos.claude} aoMudar={(v) => definirIlha({ blocos: { ...ilha.blocos, claude: v } })} />
       <div className="coluna" style={{ gap: 4 }}>
         <LinhaAlternador
           rotulo={C.notificar}

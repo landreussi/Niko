@@ -16,7 +16,8 @@ import { useInterface } from "../../estado/interface";
 import { usePomodoro } from "../../estado/pomodoro";
 import { T } from "../../textos/textos";
 import { contraste, hexValido, FUNDO_DESTAQUE } from "../../utilitarios/cores";
-import { baixarArquivo, lerArquivoTexto } from "../../utilitarios/basicos";
+import { baixarArquivo, lerArquivoTexto, normalizarTexto } from "../../utilitarios/basicos";
+import { abaLigada, rotaLigada } from "../../utilitarios/funcoes";
 import { hojeISO } from "../../utilitarios/datas";
 import { listarChaves, lerChave, gravarChave, salvarAgora, modoArmazenamento, zerarTudo, tamanhoGuardado, PREFIXO } from "../../ponte/armazenamento";
 import { TODOS_OS_SONS, tocarSom, type CategoriaSom } from "../../ponte/sons";
@@ -265,6 +266,16 @@ export default function Configuracoes() {
   useEffect(() => {
     if (parametros.secao && parametros.secao in T.configuracoes.secoes) setSecao(parametros.secao as Secao);
   }, [parametros]);
+  const [busca, setBusca] = useState("");
+  const secoesVisiveis = useMemo(() => {
+    const termo = normalizarTexto(busca.trim());
+    const todas = Object.keys(T.configuracoes.secoes) as Secao[];
+    if (!termo) return todas;
+    return todas.filter((s) => normalizarTexto(`${T.configuracoes.secoes[s]} ${T.configuracoes.palavrasChave[s]}`).includes(termo));
+  }, [busca]);
+  useEffect(() => {
+    if (secoesVisiveis.length > 0 && !secoesVisiveis.includes(secao)) setSecao(secoesVisiveis[0]);
+  }, [secoesVisiveis, secao]);
   const [previaVisual, setPreviaVisual] = useState<ReturnType<typeof validarVisual>>(null);
   const [erroVisual, setErroVisual] = useState("");
   const [novoFato, setNovoFato] = useState("");
@@ -361,7 +372,7 @@ export default function Configuracoes() {
           <DndContext collisionDetection={closestCenter} onDragEnd={aoArrastarBarra}>
             <SortableContext items={cfg.barraLateral.map((b) => b.rota)} strategy={verticalListSortingStrategy}>
               <div className="lista">
-                {cfg.barraLateral.map((b) => (
+                {cfg.barraLateral.filter((b) => rotaLigada(b.rota, cfg.funcoesDesligadas)).map((b) => (
                   <ItemBarraOrdenavel
                     key={b.rota}
                     rota={b.rota}
@@ -425,7 +436,7 @@ export default function Configuracoes() {
           <DndContext collisionDetection={closestCenter} onDragEnd={aoArrastarAbas}>
             <SortableContext items={cfg.ilha.ordemAbas} strategy={verticalListSortingStrategy}>
               <div className="lista">
-                {cfg.ilha.ordemAbas.map((a) => <AbaIlhaOrdenavel key={a} aba={a} />)}
+                {cfg.ilha.ordemAbas.filter((a) => abaLigada(a, cfg.funcoesDesligadas)).map((a) => <AbaIlhaOrdenavel key={a} aba={a} />)}
               </div>
             </SortableContext>
           </DndContext>
@@ -667,8 +678,10 @@ export default function Configuracoes() {
       <CabecalhoAba titulo={T.configuracoes.titulo} subtitulo={T.configuracoes.subtitulo} />
       <div className="duas-colunas">
         <Cartao>
+          <input className="campo" type="search" value={busca} placeholder={T.configuracoes.buscarSecao} aria-label={T.configuracoes.buscarSecao} style={{ marginBottom: 8 }} onChange={(e) => setBusca(e.target.value)} />
           <nav className="lista-lateral" aria-label={T.configuracoes.titulo}>
-            {(Object.keys(T.configuracoes.secoes) as Secao[]).map((s) => (
+            {secoesVisiveis.length === 0 && <span className="campo-dica">{T.configuracoes.semSecao}</span>}
+            {secoesVisiveis.map((s) => (
               <button key={s} type="button" className="lista-lateral-item" aria-current={secao === s} onClick={() => setSecao(s)}>
                 {ICONES[s]}
                 {T.configuracoes.secoes[s]}

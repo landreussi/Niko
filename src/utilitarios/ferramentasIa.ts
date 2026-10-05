@@ -18,6 +18,7 @@ import { T } from "../textos/textos";
 import { lerPomodoro, controlarPomodoro, gerarRelatorioSemanal, textoPomodoro, textoRelatorioSemanal } from "./recursosChat";
 import { listarArquivos, lerConteudo } from "../ponte/arquivos";
 import { extrairTexto, mensagemDeLeitura } from "./leitorDeArquivos";
+import { FUNCOES, PARTES, areaDoBancoLigada, avisoDeFuncaoDesligada, ferramentaLigada, funcaoLigada, rotaLigada } from "./funcoes";
 
 type Argumentos = Record<string, unknown>;
 
@@ -207,8 +208,11 @@ const FERRAMENTAS: FerramentaNiko[] = [
       },
     },
     executar: (a) => {
-      const area = AREAS_BANCO[texto(a.area, 40)];
-      if (!area) return { tipo: "erro", mensagem: ERROS.areaDesconhecida(Object.keys(AREAS_BANCO).join(", ")) };
+      const nomeArea = texto(a.area, 40);
+      const area = AREAS_BANCO[nomeArea];
+      if (!area) return { tipo: "erro", mensagem: ERROS.areaDesconhecida(areasDisponiveis().join(", ")) };
+      const funcaoDaArea = FUNCOES.find((f) => PARTES[f].areasDoBanco.includes(nomeArea) && !funcaoLigada(f));
+      if (funcaoDaArea) return { tipo: "erro", mensagem: avisoDeFuncaoDesligada(funcaoDaArea) };
       if (area.financeira && useConfig.getState().nuncaFinanceiro) return { tipo: "erro", mensagem: T.chat.ferramentas.financeiroBloqueado };
       const busca = normalizarTexto(texto(a.busca, 80));
       const de = dataValida(a.de);
@@ -442,7 +446,7 @@ const FERRAMENTAS: FerramentaNiko[] = [
       parametros: { type: "object", properties: { tela: { type: "string", enum: TELAS } }, required: ["tela"] },
     },
     executar: (a) => {
-      const tela = TELAS.find((t) => t === a.tela);
+      const tela = TELAS.find((t) => t === a.tela && rotaLigada(t));
       if (!tela) return { tipo: "erro", mensagem: ERROS.telaDesconhecida };
       useInterface.getState().irPara(tela);
       return { tipo: "dados", conteudo: { aberta: tela }, resumo: T.chat.ferramentas.abriu(T.rotas[tela]) };
@@ -584,12 +588,32 @@ const FERRAMENTAS: FerramentaNiko[] = [
   },
 ];
 
+function areasDisponiveis(): string[] {
+  return Object.keys(AREAS_BANCO).filter((a) => areaDoBancoLigada(a));
+}
+
+function definicaoAtual(f: FerramentaIa): FerramentaIa {
+  if (f.nome === "abrir_tela") {
+    const parametros = f.parametros as { properties: Record<string, unknown> };
+    return { ...f, parametros: { ...parametros, properties: { ...parametros.properties, tela: { type: "string", enum: TELAS.filter((t) => rotaLigada(t)) } } } };
+  }
+  if (f.nome !== "consultar_banco") return f;
+  const areas = areasDisponiveis();
+  const parametros = f.parametros as { properties: Record<string, unknown> };
+  return {
+    ...f,
+    descricao: f.descricao.replace(Object.keys(AREAS_BANCO).join(", "), areas.join(", ")),
+    parametros: { ...parametros, properties: { ...parametros.properties, area: { type: "string", enum: areas } } },
+  };
+}
+
 export function definicoesFerramentas(): FerramentaIa[] {
   const financeiroBloqueado = useConfig.getState().nuncaFinanceiro;
   const gmailConectado = useComunicacao.getState().conexoes.some((c) => c.id === "gmail" && c.chaveSalva);
-  return FERRAMENTAS.map((f) => f.definicao).filter((f) => {
+  return FERRAMENTAS.map((f) => definicaoAtual(f.definicao)).filter((f) => {
     if (financeiroBloqueado && f.nome === "ler_financas") return false;
     if (!gmailConectado && ["buscar_emails", "criar_rascunho_email", "enviar_email"].includes(f.nome)) return false;
+    if (!ferramentaLigada(f.nome)) return false;
     return true;
   });
 }
@@ -624,6 +648,8 @@ export function textoCapacidadesResumido(): string {
 export async function executarFerramenta(nome: string, argumentos: Argumentos): Promise<ResultadoFerramenta> {
   const ferramenta = FERRAMENTAS.find((f) => f.definicao.nome === normalizarTexto(nome));
   if (!ferramenta) return { tipo: "erro", mensagem: ERROS.ferramentaDesconhecida(nome) };
+  const desligada = FUNCOES.find((f) => PARTES[f].ferramentasIa.includes(ferramenta.definicao.nome) && !funcaoLigada(f));
+  if (desligada) return { tipo: "erro", mensagem: avisoDeFuncaoDesligada(desligada) };
   try {
     if (ferramenta.assincrona) return await ferramenta.assincrona(argumentos ?? {});
     return ferramenta.executar(argumentos ?? {});

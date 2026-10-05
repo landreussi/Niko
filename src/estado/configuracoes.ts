@@ -125,6 +125,8 @@ export interface Configuracoes {
   receberStripe: boolean;
   primeiraExecucaoFeita: boolean;
   notificarClaude: boolean;
+  claudeInstalado: boolean;
+  funcoesDesligadas: ("journal" | "estudos" | "financas" | "metas" | "calendario")[];
 }
 
 export const CONFIG_PADRAO: Configuracoes = {
@@ -183,6 +185,8 @@ export const CONFIG_PADRAO: Configuracoes = {
   receberStripe: false,
   primeiraExecucaoFeita: false,
   notificarClaude: false,
+  claudeInstalado: false,
+  funcoesDesligadas: [],
 };
 
 interface AcoesConfig {

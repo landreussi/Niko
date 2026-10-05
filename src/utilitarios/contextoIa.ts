@@ -10,6 +10,14 @@ import { formatarDinheiro } from "./dinheiro";
 import { somar } from "./basicos";
 import { T } from "../textos/textos";
 import type { AgenteId } from "../tipos";
+import { funcaoDoComando, funcaoLigada, regraDasFuncoesParaIa } from "./funcoes";
+
+function comandosSugeridos(): string {
+  return ["tarefa", "gasto", "lembrete", "compra"]
+    .filter((c) => !funcaoDoComando(c))
+    .map((c) => `/${c}`)
+    .join(", ");
+}
 
 export function resumoPorAgente(): Record<AgenteId, string> {
   const hoje = hojeISO();
@@ -27,11 +35,14 @@ export function resumoPorAgente(): Record<AgenteId, string> {
   const areasCodigo = estudos.areas.filter((a) => a.tipo === "programacao").map((a) => a.id);
   const materiaCodigo = estudos.materias.find((m) => areasCodigo.includes(m.areaId));
   const github = useComunicacao.getState().conexoes.find((c) => c.id === "github" && c.ligada && c.resumo);
+  const comTarefas = funcaoLigada("journal");
+  const comEstudos = funcaoLigada("estudos");
+  const comFinancas = funcaoLigada("financas");
   return {
-    organizador: tarefas.length || habitos.length ? `${T.falas.organizador.bomDia(tarefas.length)} ${habitos.length ? T.falas.organizador.habitos(habitos.length) : ""}`.trim() : T.falas.organizador.livre,
-    tutor: revisoes ? T.falas.tutor.revisoes(revisoes) : prova ? T.falas.tutor.prova(prova.titulo, formatar(prova.data, "d 'de' MMM")) : T.falas.tutor.livre,
-    operador: falha ? falha.texto : gasto ? T.falas.operador.gasto(formatarDinheiro(gasto)) : T.falas.operador.livre,
-    java: falhaConexao ? falhaConexao.texto : github ? github.resumo : materiaCodigo ? T.falas.java.estudo(materiaCodigo.nome) : T.falas.java.livre,
+    organizador: comTarefas && (tarefas.length || habitos.length) ? `${T.falas.organizador.bomDia(tarefas.length)} ${habitos.length ? T.falas.organizador.habitos(habitos.length) : ""}`.trim() : T.falas.organizador.livre,
+    tutor: !comEstudos ? T.falas.tutor.semFuncao : revisoes ? T.falas.tutor.revisoes(revisoes) : prova ? T.falas.tutor.prova(prova.titulo, formatar(prova.data, "d 'de' MMM")) : T.falas.tutor.livre,
+    operador: falha ? falha.texto : !comFinancas ? T.falas.operador.semFuncao : gasto ? T.falas.operador.gasto(formatarDinheiro(gasto)) : T.falas.operador.livre,
+    java: falhaConexao ? falhaConexao.texto : github ? github.resumo : comEstudos && materiaCodigo ? T.falas.java.estudo(materiaCodigo.nome) : T.falas.java.livre,
   };
 }
 
@@ -45,14 +56,15 @@ export function contextoParaIa(): string {
   const provas = estudos.datas.filter((d) => !d.concluida && d.data >= hoje).slice(0, 5).map((d) => `- ${d.titulo} em ${d.data}`);
   const memoria = useComunicacao.getState().memoria.slice(-20).map((m) => `- ${m.texto}`);
   const pomodoros = usePomodoro.getState().sessoes.filter((s) => diaDoMomento(s.inicio) === hoje && s.etapa === "foco").length;
+  const comEstudos = funcaoLigada("estudos");
   const linhas = [
     `Hoje é ${formatar(hoje, "EEEE, d 'de' MMMM 'de' yyyy")}. Usuário: ${cfg.nome || "sem nome"}.`,
-    `Tarefas de hoje:\n${tarefas.join("\n") || "- nenhuma"}`,
-    `Revisões pendentes hoje: ${revisoesParaHoje(estudos)}. Pomodoros hoje: ${pomodoros}.`,
-    `Próximas datas de estudo:\n${provas.join("\n") || "- nenhuma"}`,
+    ...(funcaoLigada("journal") ? [`Tarefas de hoje:\n${tarefas.join("\n") || "- nenhuma"}`] : []),
+    comEstudos ? `Revisões pendentes hoje: ${revisoesParaHoje(estudos)}. Pomodoros hoje: ${pomodoros}.` : `Pomodoros hoje: ${pomodoros}.`,
+    ...(comEstudos ? [`Próximas datas de estudo:\n${provas.join("\n") || "- nenhuma"}`] : []),
     `Fatos que o usuário pediu para lembrar:\n${memoria.join("\n") || "- nenhum"}`,
   ];
-  if (!cfg.nuncaFinanceiro) {
+  if (!cfg.nuncaFinanceiro && funcaoLigada("financas")) {
     const gasto = somar(gastosDoMes(fin, hoje.slice(0, 7)), (t) => parteDoUsuario(t, fin.divisoes));
     linhas.push(`Gasto do mês até agora: ${formatarDinheiro(gasto)}.`);
   }
@@ -76,7 +88,8 @@ export function promptDoAgente(agente: AgenteId, apenasAnalise = false): string 
     "- Para criar, concluir, lançar, marcar ou guardar algo, chame a ferramenta certa. Ela mostra um cartão e o usuário confirma. Diga que deixou pronto para confirmar, nunca que já salvou.",
     "- Pode chamar várias ferramentas na mesma resposta quando o pedido tiver várias coisas.",
     `- Hoje é ${hojeISO()}. Converta datas como amanhã ou sexta para AAAA-MM-DD e horas para HH:MM.`,
-    "- Se as ferramentas não estiverem disponíveis, sugira o comando exato (/tarefa, /gasto, /lembrete, /compra) para o usuário clicar.",
+    `- Se as ferramentas não estiverem disponíveis, sugira o comando exato (${comandosSugeridos()}) para o usuário clicar.`,
+    ...(regraDasFuncoesParaIa() ? [regraDasFuncoesParaIa() as string] : []),
     ...(agente === "java" ? ["- Em programação, explique com exemplos curtos em blocos de código com a linguagem indicada."] : []),
     "",
     "Contexto atual:",

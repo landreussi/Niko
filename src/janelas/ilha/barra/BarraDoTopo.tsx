@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { ChevronUp, LayoutGrid, ListTodo, Palette, SlidersHorizontal } from "lucide-react";
-import type { AbaIlha } from "../../../estado/configuracoes";
+import { useConfig, type AbaIlha } from "../../../estado/configuracoes";
+import { funcaoLigada } from "../../../utilitarios/funcoes";
 import { useRotina, tarefasDoDia } from "../../../estado/rotina";
 import { useControleRapido, usarAudio, usarRede } from "../../../estado/controleRapido";
 import { T } from "../../../textos/textos";
@@ -55,6 +56,7 @@ function LadoEsquerdo({ pop, alternarPersonalizacao, aoAbrirAba }: { pop: Pop; a
     relogioIniciar.current = window.setInterval(() => iniciar.current.preparar(), INTERVALO_LEITURA_INICIAR_MS);
   };
   const tarefas = useRotina((s) => s.tarefas);
+  const comTarefas = useConfig((s) => funcaoLigada("journal", s.funcoesDesligadas));
   const doDia = tarefasDoDia(tarefas, hojeISO()).filter((t) => t.status !== "cancelada");
   const feitas = doDia.filter((t) => t.status === "concluida").length;
   const rotuloTarefas = doDia.length ? T.ilha.barra.tarefasHojeDica(feitas, doDia.length) : T.ilha.barra.semTarefas;
@@ -94,10 +96,12 @@ function LadoEsquerdo({ pop, alternarPersonalizacao, aoAbrirAba }: { pop: Pop; a
       >
         <LayoutGrid size={14} />
       </button>
-      <button type="button" className="ilha-barra-botao ilha-barra-texto" title={rotuloTarefas} aria-label={rotuloTarefas} aria-expanded={estadoIlha === "expandida" && abaIlha === "hoje"} data-ativo={estadoIlha === "expandida" && abaIlha === "hoje" || undefined} onClick={() => aoAbrirAba("hoje")}>
-        <ListTodo size={13} />
-        <span className="numero">{doDia.length ? T.ilha.barra.tarefasHoje(feitas, doDia.length) : "0"}</span>
-      </button>
+      {comTarefas && (
+        <button type="button" className="ilha-barra-botao ilha-barra-texto" title={rotuloTarefas} aria-label={rotuloTarefas} aria-expanded={estadoIlha === "expandida" && abaIlha === "hoje"} data-ativo={estadoIlha === "expandida" && abaIlha === "hoje" || undefined} onClick={() => aoAbrirAba("hoje")}>
+          <ListTodo size={13} />
+          <span className="numero">{doDia.length ? T.ilha.barra.tarefasHoje(feitas, doDia.length) : "0"}</span>
+        </button>
+      )}
     </div>
   );
 }

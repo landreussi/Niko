@@ -1,6 +1,7 @@
 import {
   siStripe, siGithub, siVercel, siResend, siNotion, siCaldotcom, siN8n, siAnthropic, siOllama,
   siNvidia, siOpencode, siQwen, siGooglegemini, siOpenrouter, siMistralai, siHuggingface, siDeepseek, siLmstudio, siGmail, siSupabase, siCloudflare, siClaudecode,
+  siSpotify, siGooglechrome, siFirefoxbrowser, siZenbrowser, siYoutube, siYoutubemusic, siDeezer, siApplemusic, siTidal, siSoundcloud,
 } from "simple-icons";
 import type { ServicoId } from "../tipos";
 
@@ -10,7 +11,26 @@ interface IconeMarca {
   hex: string;
 }
 
-export type MarcaId = ServicoId | "anthropic" | "ollama" | "nvidia" | "opencode" | "qwen" | "gemini" | "openrouter" | "mistral" | "huggingface" | "deepseek" | "lmstudio" | "claudecode";
+export type MarcaId = ServicoId | "anthropic" | "ollama" | "nvidia" | "opencode" | "qwen" | "gemini" | "openrouter" | "mistral" | "huggingface" | "deepseek" | "lmstudio" | "claudecode" | MarcaDeMidia;
+
+export type MarcaDeMidia = "spotify" | "chrome" | "firefox" | "zen" | "youtube" | "youtubemusic" | "deezer" | "applemusic" | "tidal" | "soundcloud";
+
+const PADROES_DE_MIDIA: [RegExp, MarcaDeMidia][] = [
+  [/youtube music/i, "youtubemusic"],
+  [/youtube/i, "youtube"],
+  [/spotify/i, "spotify"],
+  [/deezer/i, "deezer"],
+  [/apple ?music|itunes/i, "applemusic"],
+  [/tidal/i, "tidal"],
+  [/soundcloud/i, "soundcloud"],
+  [/chrome/i, "chrome"],
+  [/firefox/i, "firefox"],
+  [/^zen$/i, "zen"],
+];
+
+export function marcaDoApp(app: string): MarcaDeMidia | null {
+  return PADROES_DE_MIDIA.find(([padrao]) => padrao.test(app))?.[1] ?? null;
+}
 
 export const MARCAS: Record<MarcaId, IconeMarca> = {
   stripe: siStripe,
@@ -35,6 +55,16 @@ export const MARCAS: Record<MarcaId, IconeMarca> = {
   deepseek: siDeepseek,
   lmstudio: siLmstudio,
   claudecode: siClaudecode,
+  spotify: siSpotify,
+  chrome: siGooglechrome,
+  firefox: siFirefoxbrowser,
+  zen: siZenbrowser,
+  youtube: siYoutube,
+  youtubemusic: siYoutubemusic,
+  deezer: siDeezer,
+  applemusic: siApplemusic,
+  tidal: siTidal,
+  soundcloud: siSoundcloud,
 };
 
 function escura(hex: string): boolean {

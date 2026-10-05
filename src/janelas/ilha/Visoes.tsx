@@ -14,7 +14,7 @@ import { useAgentes } from "../../estado/agentes";
 import { useConfig } from "../../estado/configuracoes";
 import { useInterface } from "../../estado/interface";
 import { useIlha } from "../../estado/ilha";
-import { Marca, MARCAS } from "../../marcas/Marca";
+import { Marca, MARCAS, marcaDoApp } from "../../marcas/Marca";
 import { Anel } from "../../componentes/Graficos";
 import { T } from "../../textos/textos";
 import { deISO, formatarData, hojeISO, paraISO, horarioRelativo } from "../../utilitarios/datas";
@@ -23,7 +23,7 @@ import { ConexaoNaIlha } from "./ConexaoNaIlha";
 import { EspacoDoPersonagem } from "./animacoes/PersonagemContinuo";
 import { useFinancas } from "../../estado/financas";
 import { interpretarQuando } from "../../utilitarios/linguagem";
-import { capturar, TIPOS_CAPTURA, type TipoCaptura } from "../../utilitarios/captura";
+import { capturar, tiposDeCapturaLigados, type TipoCaptura } from "../../utilitarios/captura";
 import { confirmarComando } from "../../utilitarios/comandos";
 import { formatarDinheiro } from "../../utilitarios/dinheiro";
 import { tocarSom } from "../../ponte/sons";
@@ -121,10 +121,21 @@ export function VisaoHoje() {
 }
 
 export function VisaoCaptura() {
-  const [tipo, setTipo] = useState<TipoCaptura>("tarefa");
+  const desligadas = useConfig((s) => s.funcoesDesligadas);
+  const tipos = tiposDeCapturaLigados(desligadas);
+  const [tipoEscolhido, setTipo] = useState<TipoCaptura>("tarefa");
+  const tipo = tipos.includes(tipoEscolhido) ? tipoEscolhido : tipos[0];
   const [texto, setTexto] = useState("");
   const [retorno, setRetorno] = useState<{ ok: boolean; texto: string } | null>(null);
   const [confirmacao, setConfirmacao] = useState<CartaoConfirmacao | null>(null);
+
+  if (!tipo) {
+    return (
+      <Cartao>
+        <span className="ilha-sub">{T.funcoes.semCaptura}</span>
+      </Cartao>
+    );
+  }
 
   const enviar = () => {
     const r = capturar(tipo, texto);
@@ -143,7 +154,7 @@ export function VisaoCaptura() {
   return (
     <Cartao>
       <div className="ilha-chips" role="tablist" aria-label={T.ilha.abas.captura}>
-        {TIPOS_CAPTURA.map((t) => (
+        {tipos.map((t) => (
           <button
             key={t}
             type="button"
@@ -248,6 +259,8 @@ export function VisaoMidia() {
     );
   }
 
+  const marcaApp = marcaDoApp(faixa.app);
+
   return (
     <Cartao veu={c1}>
       <div className="linha" style={{ gap: 26, flex: 1 }}>
@@ -258,7 +271,15 @@ export function VisaoMidia() {
         <div className="coluna" style={{ gap: 6, flex: 1, minWidth: 0 }}>
           <div className="coluna" style={{ gap: 0 }}>
             <span className="ilha-titulo cortar privado">{faixa.titulo}</span>
-            <span className="ilha-sub cortar privado">{faixa.artista}</span>
+            <span className="linha ilha-midia-origem">
+              {marcaApp && (
+                <span className="ilha-midia-app" title={faixa.app} aria-label={faixa.app}>
+                  <Marca marca={marcaApp} tamanho={12} />
+                </span>
+              )}
+              <span className="ilha-sub cortar privado">{faixa.artista}</span>
+              {!marcaApp && faixa.app && <span className="ilha-mini cortar">{faixa.app}</span>}
+            </span>
           </div>
           <div
             className="ilha-trilho"
@@ -282,7 +303,6 @@ export function VisaoMidia() {
           </div>
           <div className="linha-entre ilha-mini numero">
             <span>{fmt(pos)}</span>
-            <span className="cortar">{faixa.app}</span>
             <span>{fmt(faixa.duracao)}</span>
           </div>
         </div>

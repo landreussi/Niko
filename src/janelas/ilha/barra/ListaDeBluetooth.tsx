@@ -69,7 +69,7 @@ export function ListaDeBluetooth() {
           </span>
         </span>
         <span className="bt-acao">
-          {acao.replace(/ no Windows$/, "")}
+          {S.abrirBluetoothWindows}
           <ExternalLink size={11} />
         </span>
       </button>

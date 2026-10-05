@@ -27,7 +27,7 @@ beforeEach(() => {
   useRotina.setState({ tarefas: [], habitos: [], registros: {}, dias: {} });
   useComunicacao.setState({ conexoes: [], memoria: [], conversas: [] });
   useConversando.setState({ conversaId: null, fase: null, agente: null, parcial: "" });
-  useConfig.setState({ nuncaFinanceiro: true, pomodoro: { ...useConfig.getState().pomodoro, autoProxima: false }, ia: { provedorId: "teste", modelo: "falso", reservas: [], modelos: {}, autoAprovar: [] } });
+  useConfig.setState({ funcoesDesligadas: [], nuncaFinanceiro: true, pomodoro: { ...useConfig.getState().pomodoro, autoProxima: false }, ia: { provedorId: "teste", modelo: "falso", reservas: [], modelos: {}, autoAprovar: [] } });
 });
 
 test("reconhece controles naturais e não executa perguntas, negações ou pedidos ambíguos", () => {
@@ -296,4 +296,35 @@ test("IA não altera os números calculados do relatório semanal", async () => 
   assert.equal(r.texto, recursos.textoRelatorioSemanal());
   assert.equal(r.acoes.length, 0);
   assert.ok(!r.texto.includes("999"));
+});
+
+test("função desligada some das ferramentas, do banco, dos comandos e do prompt", async () => {
+  const { promptDoAgente } = await servidor.ssrLoadModule("/src/utilitarios/contextoIa.ts");
+  const { capturar } = await servidor.ssrLoadModule("/src/utilitarios/captura.ts");
+  useConfig.setState({ funcoesDesligadas: ["financas", "journal"], nuncaFinanceiro: false });
+  const nomes = definicoesFerramentas().map((f) => f.nome);
+  for (const nome of ["lancar_transacao", "ler_financas", "criar_tarefa", "ler_tarefas", "marcar_habito"]) assert.ok(!nomes.includes(nome), nome);
+  assert.ok(nomes.includes("ler_estudos"));
+  const banco = definicoesFerramentas().find((f) => f.nome === "consultar_banco");
+  assert.ok(!banco.parametros.properties.area.enum.includes("transacoes"));
+  assert.ok(!banco.descricao.includes("transacoes"));
+  const chamada = await executarFerramenta("lancar_transacao", { tipo: "gasto", valor: 10, descricao: "mercado" });
+  assert.equal(chamada.tipo, "erro");
+  assert.equal((await executarFerramenta("consultar_banco", { area: "tarefas" })).tipo, "erro");
+  assert.match(executarComando("/gasto 30 mercado").resposta, /Finanças está desligado/);
+  assert.match(executarComando("/tarefa estudar").resposta, /Diário e tarefas está desligado/);
+  assert.equal(capturar("nota", "lembrar disso").ok, false);
+  const prompt = promptDoAgente("operador");
+  assert.match(prompt, /desligou estas funções do Niko: Finanças, Diário e tarefas/);
+  assert.ok(!prompt.includes("/gasto"));
+  assert.ok(!prompt.includes("Tarefas de hoje"));
+});
+
+test("religar a função devolve tudo sem perder dados", () => {
+  useRotina.setState({ tarefas: [{ id: "t1", titulo: "Ler", status: "a_fazer", prioridade: "media", checklist: [], criadaEm: new Date().toISOString() }] });
+  useConfig.setState({ funcoesDesligadas: ["journal"] });
+  assert.ok(!definicoesFerramentas().some((f) => f.nome === "ler_tarefas"));
+  useConfig.setState({ funcoesDesligadas: [] });
+  assert.ok(definicoesFerramentas().some((f) => f.nome === "ler_tarefas"));
+  assert.equal(useRotina.getState().tarefas.length, 1);
 });

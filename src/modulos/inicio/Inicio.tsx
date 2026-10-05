@@ -1,5 +1,7 @@
-import { useEffect, useRef, useState } from "react";
-import { Plus, Timer, Wallet, Plug, Layers, Gauge, Trophy, CalendarDays, Users, ListTodo, SlidersHorizontal, GripVertical, ChevronRight, Cpu, Play, Pause, RotateCcw, SkipForward } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { PainelFuncoes } from "./PainelFuncoes";
+import { blocoLigado, funcaoLigada } from "../../utilitarios/funcoes";
+import { Plus, Timer, Wallet, Plug, Layers, Gauge, Trophy, CalendarDays, Users, ListTodo, SlidersHorizontal, ToggleRight, GripVertical, ChevronRight, Cpu, Play, Pause, RotateCcw, SkipForward } from "lucide-react";
 import { useMosaico } from "../../componentes/useMosaico";
 import { resumoPorAgente } from "../../utilitarios/contextoIa";
 import { lerConsumo, type Consumo } from "../../ponte/ponteLocal";
@@ -88,10 +90,14 @@ function BlocoTime() {
   const gasto = somar(gastosDoMes(fin, hoje.slice(0, 7)), (t) => parteDoUsuario(t, fin.divisoes));
   const falha = agentes.alertas.find((a) => a.agenteId === "operador");
 
+  const desligadas = useConfig((s) => s.funcoesDesligadas);
+  const comTarefas = funcaoLigada("journal", desligadas);
+  const comEstudos = funcaoLigada("estudos", desligadas);
+  const comFinancas = funcaoLigada("financas", desligadas);
   const falas = {
-    organizador: abertas > 0 ? T.falas.organizador.bomDia(abertas) : T.falas.organizador.livre,
-    tutor: revisoes > 0 ? T.falas.tutor.revisoes(revisoes) : prova ? T.falas.tutor.prova(prova.titulo, descreverDistancia(prova.data)) : T.falas.tutor.livre,
-    operador: falha ? falha.texto : gasto > 0 ? T.falas.operador.gasto(formatarDinheiro(gasto)) : T.falas.operador.livre,
+    organizador: comTarefas && abertas > 0 ? T.falas.organizador.bomDia(abertas) : T.falas.organizador.livre,
+    tutor: !comEstudos ? T.falas.tutor.semFuncao : revisoes > 0 ? T.falas.tutor.revisoes(revisoes) : prova ? T.falas.tutor.prova(prova.titulo, descreverDistancia(prova.data)) : T.falas.tutor.livre,
+    operador: falha ? falha.texto : !comFinancas ? T.falas.operador.semFuncao : gasto > 0 ? T.falas.operador.gasto(formatarDinheiro(gasto)) : T.falas.operador.livre,
     java: resumoPorAgente().java,
   };
 
@@ -640,17 +646,20 @@ function LinhaOrdenavel({ id, visivel, aoMudar }: { id: BlocoInicio; visivel: bo
 }
 
 export default function Inicio() {
-  const blocos = useConfig((s) => s.blocosInicio);
+  const todosOsBlocos = useConfig((s) => s.blocosInicio);
+  const desligadas = useConfig((s) => s.funcoesDesligadas);
+  const blocos = useMemo(() => todosOsBlocos.filter((b) => blocoLigado(b.id, desligadas)), [todosOsBlocos, desligadas]);
   const definir = useConfig((s) => s.definir);
   const [personalizando, setPersonalizando] = useState(false);
+  const [escolhendoFuncoes, setEscolhendoFuncoes] = useState(false);
   const grade = useRef<HTMLDivElement>(null);
   useMosaico(grade, blocos.filter((b) => b.visivel).map((b) => b.id).join());
 
   const aoArrastar = (e: DragEndEvent) => {
     if (!e.over || e.active.id === e.over.id) return;
-    const de = blocos.findIndex((b) => b.id === e.active.id);
-    const para = blocos.findIndex((b) => b.id === e.over?.id);
-    definir({ blocosInicio: arrayMove(blocos, de, para) });
+    const de = todosOsBlocos.findIndex((b) => b.id === e.active.id);
+    const para = todosOsBlocos.findIndex((b) => b.id === e.over?.id);
+    definir({ blocosInicio: arrayMove(todosOsBlocos, de, para) });
   };
 
   return (
@@ -661,7 +670,14 @@ export default function Inicio() {
           .map((b) => {
             const Componente = COMPONENTE[b.id];
             return (
-              <Cartao key={b.id} titulo={b.id === "time" ? undefined : TITULO[b.id]} icone={ICONES[b.id]} className={`${LARGURA[b.id]} bento-cartao`} acoes={b.id === "time" ? <Botao pequeno variante="fantasma" icone={<SlidersHorizontal size={13} />} onClick={() => setPersonalizando(true)}>{T.inicio.personalizar}</Botao> : undefined}>
+              <Cartao key={b.id} titulo={b.id === "time" ? undefined : TITULO[b.id]} icone={ICONES[b.id]} className={`${LARGURA[b.id]} bento-cartao`} acoes={
+                  b.id === "time" ? (
+                    <div className="linha" style={{ gap: 4 }}>
+                      <Botao pequeno variante="fantasma" icone={<ToggleRight size={13} />} onClick={() => setEscolhendoFuncoes(true)}>{T.funcoes.botao}</Botao>
+                      <Botao pequeno variante="fantasma" icone={<SlidersHorizontal size={13} />} onClick={() => setPersonalizando(true)}>{T.inicio.personalizar}</Botao>
+                    </div>
+                  ) : undefined
+                }>
                 <Componente />
               </Cartao>
             );
@@ -673,12 +689,13 @@ export default function Inicio() {
           <SortableContext items={blocos.map((b) => b.id)} strategy={verticalListSortingStrategy}>
             <div className="lista">
               {blocos.map((b) => (
-                <LinhaOrdenavel key={b.id} id={b.id} visivel={b.visivel} aoMudar={(v) => definir({ blocosInicio: blocos.map((x) => (x.id === b.id ? { ...x, visivel: v } : x)) })} />
+                <LinhaOrdenavel key={b.id} id={b.id} visivel={b.visivel} aoMudar={(v) => definir({ blocosInicio: todosOsBlocos.map((x) => (x.id === b.id ? { ...x, visivel: v } : x)) })} />
               ))}
             </div>
           </SortableContext>
         </DndContext>
       </Modal>
+      <PainelFuncoes aberto={escolhendoFuncoes} aoFechar={() => setEscolhendoFuncoes(false)} />
     </>
   );
 }

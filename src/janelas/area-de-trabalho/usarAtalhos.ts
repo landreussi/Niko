@@ -6,6 +6,7 @@ import { useMidia } from "../../estado/midia";
 import { useRotina } from "../../estado/rotina";
 import { tocarSom } from "../../ponte/sons";
 import { T } from "../../textos/textos";
+import { rotaLigada } from "../../utilitarios/funcoes";
 
 function emCampoDeTexto(alvo: EventTarget | null): boolean {
   const el = alvo as HTMLElement | null;
@@ -71,7 +72,7 @@ export function usarAtalhos() {
         return;
       }
       if (/^[1-9]$/.test(e.key)) {
-        const visiveis = cfg.barraLateral.filter((i) => i.visivel);
+        const visiveis = cfg.barraLateral.filter((i) => i.visivel && rotaLigada(i.rota, cfg.funcoesDesligadas));
         const alvo = visiveis[Number(e.key) - 1];
         if (alvo) {
           e.preventDefault();

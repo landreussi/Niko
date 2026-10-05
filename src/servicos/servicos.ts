@@ -23,6 +23,7 @@ import { rotuloJanela } from "../utilitarios/consumo";
 import { T } from "../textos/textos";
 import type { Evento, ServicoId } from "../tipos";
 import { addDays, addMonths, addWeeks } from "date-fns";
+import { funcaoLigada } from "../utilitarios/funcoes";
 
 function notificar(titulo: string, corpo: string) {
   try {
@@ -66,6 +67,7 @@ function verificarPomodoro() {
 }
 
 function verificarLembretes() {
+  if (!funcaoLigada("calendario")) return;
   const agora = new Date();
   const org = useOrganizacao.getState();
   for (const e of org.eventos) {
@@ -79,6 +81,7 @@ function verificarLembretes() {
 }
 
 function verificarDatas() {
+  if (!funcaoLigada("estudos")) return;
   const hoje = hojeISO();
   const base = new Date(`${hoje}T00:00:00`).getTime();
   for (const d of useEstudos.getState().datas) {
@@ -114,6 +117,7 @@ async function verificarLimitesPlanos() {
 }
 
 function verificarOrcamento() {
+  if (!funcaoLigada("financas")) return;
   const fin = useFinancas.getState();
   const mes = hojeISO().slice(0, 7);
   const gastos = gastoPorCategoria(fin, mes);
@@ -173,6 +177,7 @@ function verificarConquistas() {
 }
 
 function lembrarHabitos() {
+  if (!funcaoLigada("journal")) return;
   const agora = new Date();
   if (agora.getHours() < 21) return;
   const hoje = hojeISO();
@@ -269,7 +274,7 @@ export function useServicos() {
     useFinancas.getState().garantirCategorias();
     useOrganizacao.getState().garantirPilares();
     const gerados = useFinancas.getState().gerarRecorrentes();
-    if (gerados > 0) useAgentes.getState().registrar("operador", T.financas.abas.recorrentes);
+    if (gerados > 0 && funcaoLigada("financas")) useAgentes.getState().registrar("operador", T.financas.abas.recorrentes);
     verificarPomodoro();
     verificarConquistas();
   }, []);

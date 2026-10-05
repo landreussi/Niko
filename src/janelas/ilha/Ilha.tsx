@@ -22,6 +22,7 @@ import { alguemCobre } from "../geometria";
 import { VisaoChat } from "./VisaoChat";
 import { VisaoClaude } from "./claude/VisaoClaude";
 import { usarClaudeCode, devolverPendentesAoTerminal } from "./claude/usarClaudeCode";
+import { abaLigada } from "../../utilitarios/funcoes";
 import { useClaudeCode, sessaoAtiva } from "../../estado/claudeCode";
 import { useAtualizacao } from "../../estado/atualizacao";
 import { NATIVO, usarAreaInterativa, usarCursorFora, usarEstadoDaFrente } from "../../desktop/desktop";
@@ -159,7 +160,9 @@ export function Ilha() {
     [],
   );
 
-  const abas = cfg.ordemAbas.filter((a) => cfg.blocos[a]);
+  const claudeInstalado = useConfig((s) => s.claudeInstalado);
+  const desligadas = useConfig((s) => s.funcoesDesligadas);
+  const abas = cfg.ordemAbas.filter((a) => cfg.blocos[a] && (a !== "claude" || claudeInstalado) && abaLigada(a, desligadas));
   const abaAtual = abas.includes(aba) ? aba : abas[0] ?? "hoje";
   const frente = usarEstadoDaFrente(cfg.ativa);
   const [lateraisLivresNativo, setLateraisLivresNativo] = useState(true);
@@ -191,7 +194,7 @@ export function Ilha() {
   }, [estado, abaAtual, alertas.length]);
 
   useEffect(() => {
-    if (estadoEfetivo !== "expandida" || sobre || cfg.fechamentoSeg === 0 || (abaAtual === "claude" && pedidosClaude.length > 0)) {
+    if (estadoEfetivo !== "expandida" || sobre || cfg.fechamentoSeg === 0 || abaAtual === "claude") {
       setRestanteFechar(null);
       return;
     }
@@ -209,7 +212,7 @@ export function Ilha() {
       setRestanteFechar(r);
     }, 100);
     return () => window.clearInterval(t);
-  }, [estadoEfetivo, sobre, cfg.fechamentoSeg, recolher, abaAtual, pedidosClaude.length]);
+  }, [estadoEfetivo, sobre, cfg.fechamentoSeg, recolher, abaAtual]);
 
   useEffect(() => {
     if (estadoEfetivo !== "expandida") return;
@@ -535,6 +538,7 @@ export function Ilha() {
                             }}
                           >
                             {a === "claude" ? <Marca marca="claudecode" tamanho={14} monocromatica={a !== abaAtual} /> : <Icone size={14} />}
+                            {a === abaAtual && <span className="ilha-aba-nome">{T.ilha.abas[a]}</span>}
                             {a === "claude" && pedidosClaude.length > 0 && <span className="ilha-aba-selo">{pedidosClaude.length}</span>}
                             {a === "avisos" && naoVistos > 0 && <span className="ilha-aba-selo">{naoVistos}</span>}
                           </motion.button>
@@ -546,7 +550,7 @@ export function Ilha() {
                         type="button"
                         className="ilha-acao"
                         aria-label={somLigado ? T.ilha.silenciar : T.ilha.ativarSom}
-                        title={somLigado ? T.ilha.silenciar : T.ilha.ativarSom}
+                        data-dica={somLigado ? T.ilha.silenciar : T.ilha.ativarSom}
                         onClick={() => definirConfig({ sons: { ...sons, ligado: !somLigado } })}
                       >
                         {somLigado ? <Volume2 size={14} /> : <VolumeX size={14} />}
@@ -555,7 +559,7 @@ export function Ilha() {
                         type="button"
                         className="ilha-acao"
                         aria-label={T.ilha.abrirSistema}
-                        title={T.ilha.abrirSistema}
+                        data-dica={T.ilha.abrirSistema}
                         onClick={() => {
                           const rota = { hoje: "journal", captura: "inicio", midia: "inicio", foco: "estudos", habitos: "journal", chat: "chat", conexoes: "conexoes", calendario: "calendario", avisos: "inicio", claude: "configuracoes" } as const;
                           irPara(rota[abaAtual]);
@@ -565,7 +569,7 @@ export function Ilha() {
                       >
                         <AppWindow size={14} />
                       </button>
-                      <button type="button" className="ilha-acao" aria-label={T.ilha.fecharIlha} title={T.ilha.fecharIlha} onClick={() => recolher()}>
+                      <button type="button" className="ilha-acao" aria-label={T.ilha.fecharIlha} data-dica={T.ilha.fecharIlha} onClick={() => recolher()}>
                         <ChevronUp size={14} />
                       </button>
                     </div>

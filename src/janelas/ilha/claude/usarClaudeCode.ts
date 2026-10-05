@@ -88,7 +88,20 @@ function reagir(e: EventoClaude) {
   }
 }
 
+function marcarInstalado(instalado: boolean) {
+  const cfg = useConfig.getState();
+  if (cfg.claudeInstalado !== instalado) cfg.definir({ claudeInstalado: instalado });
+}
+
 export function usarClaudeCode(ligado: boolean) {
+  useEffect(() => {
+    if (!ligado) return;
+    claudeCode
+      .instalacao()
+      .then((e) => marcarInstalado(e.instalado || e.parcial || e.desatualizado))
+      .catch(() => undefined);
+  }, [ligado]);
+
   useEffect(() => {
     if (!ligado) {
       useClaudeCode.getState().definirConectado(false);
@@ -97,6 +110,7 @@ export function usarClaudeCode(ligado: boolean) {
     let conectadoEm = Date.now();
     return ouvirClaudeCode(
       (e) => {
+        if (e.sessao) marcarInstalado(true);
         useClaudeCode.getState().aplicar(e);
         if (Date.parse(e.recebidoEm) >= conectadoEm - TOLERANCIA_MS) reagir(e);
       },
