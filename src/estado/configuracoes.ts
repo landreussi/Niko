@@ -10,9 +10,9 @@ const DESTAQUE_ESCURO_PADRAO = "#a78bfa";
 export type Tema = "claro" | "escuro" | "sistema";
 export type Paleta = "padrao" | "areia" | "grafite" | "floresta" | "oceano";
 export type ModoBorda = "fixo" | "esconder" | "inteligente";
-export type AbaIlha = "calendario" | "hoje" | "captura" | "midia" | "foco" | "habitos" | "agenda" | "chat" | "conexoes" | "avisos";
+export type AbaIlha = "calendario" | "hoje" | "captura" | "midia" | "foco" | "habitos" | "agenda" | "chat" | "conexoes" | "avisos" | "claude";
 
-export const ABAS_ILHA: AbaIlha[] = ["calendario", "conexoes", "chat", "hoje", "captura", "midia", "foco", "habitos", "agenda", "avisos"];
+export const ABAS_ILHA: AbaIlha[] = ["calendario", "claude", "conexoes", "chat", "hoje", "captura", "midia", "foco", "habitos", "agenda", "avisos"];
 export type RepousoIlha = "nada" | "relogio" | "midia" | "agente";
 export type BlocoInicio =
   | "time" | "hoje" | "foco" | "financas" | "conexoes" | "revisoes" | "consumo" | "mapa" | "conquistas";
@@ -144,7 +144,7 @@ export const CONFIG_PADRAO: Configuracoes = {
   ilha: {
     ativa: true,
     modo: "inteligente",
-    blocos: { calendario: true, hoje: true, captura: true, midia: true, foco: true, habitos: true, agenda: true, chat: true, conexoes: true, avisos: true },
+    blocos: { calendario: true, hoje: true, captura: true, midia: true, foco: true, habitos: true, agenda: true, chat: true, conexoes: true, avisos: true, claude: false },
     ordemAbas: ABAS_ILHA,
     repouso: "agente",
     tamanho: "media",

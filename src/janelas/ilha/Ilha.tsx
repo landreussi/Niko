@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import {
-  ListTodo, Zap, Music, Timer, Repeat, CalendarClock, CalendarDays, MessageCircle, Plug, Bell, Volume2, VolumeX, AppWindow, ChevronUp, Check, CircleAlert, Download,
+  ListTodo, Zap, Music, Timer, Repeat, CalendarClock, CalendarDays, MessageCircle, Plug, Bell, Volume2, VolumeX, AppWindow, ChevronUp, Check, CircleAlert, Download, SquareTerminal, ShieldAlert, LoaderCircle,
   type LucideIcon,
 } from "lucide-react";
 import { useConfig, type AbaIlha } from "../../estado/configuracoes";
@@ -20,9 +20,13 @@ import {
 } from "./Visoes";
 import { alguemCobre } from "../geometria";
 import { VisaoChat } from "./VisaoChat";
+import { VisaoClaude } from "./claude/VisaoClaude";
+import { usarClaudeCode } from "./claude/usarClaudeCode";
+import { useClaudeCode, sessaoAtiva } from "../../estado/claudeCode";
 import { useAtualizacao } from "../../estado/atualizacao";
 import { NATIVO, usarAreaInterativa, usarCursorFora, usarEstadoDaFrente } from "../../desktop/desktop";
 import { BarraDoTopo, ALTURA_DA_FAIXA } from "./barra/BarraDoTopo";
+import { alternarAbaDaBarra } from "./barra/acoesDaBarra";
 import { usarAparenciaDeBorda, variaveisDaBorda } from "../aparencia";
 import type { AgenteId, EstadoAgente } from "../../tipos";
 import "./ilha.css";
@@ -38,6 +42,7 @@ const ICONE_ABA: Record<AbaIlha, LucideIcon> = {
   conexoes: Plug,
   calendario: CalendarDays,
   avisos: Bell,
+  claude: SquareTerminal,
 };
 
 const VISAO_ABA: Record<AbaIlha, () => React.JSX.Element> = {
@@ -51,6 +56,7 @@ const VISAO_ABA: Record<AbaIlha, () => React.JSX.Element> = {
   conexoes: VisaoConexoes,
   calendario: VisaoCalendario,
   avisos: VisaoAvisos,
+  claude: VisaoClaude,
 };
 
 const ALTURA_ABA: Record<AbaIlha, number> = {
@@ -64,6 +70,7 @@ const ALTURA_ABA: Record<AbaIlha, number> = {
   conexoes: 350,
   calendario: 286,
   avisos: 178,
+  claude: 336,
 };
 
 const ESCALA = { pequena: 0.85, media: 1, grande: 1.15 };
@@ -113,6 +120,9 @@ export function Ilha() {
   const agentes = useAgentes();
   const pomodoro = usePomodoro();
   const midia = useMidia();
+  usarClaudeCode();
+  const pedidosClaude = useClaudeCode((s) => s.pedidos);
+  const claudeAtivo = useClaudeCode(sessaoAtiva);
   const raiz = useRef<HTMLDivElement>(null);
   const [sobre, setSobre] = useState(false);
   const atualizacao = useAtualizacao();
@@ -171,7 +181,7 @@ export function Ilha() {
   }, [estado, abaAtual, alertas.length]);
 
   useEffect(() => {
-    if (estadoEfetivo !== "expandida" || sobre || cfg.fechamentoSeg === 0) {
+    if (estadoEfetivo !== "expandida" || sobre || cfg.fechamentoSeg === 0 || (abaAtual === "claude" && pedidosClaude.length > 0)) {
       setRestanteFechar(null);
       return;
     }
@@ -189,7 +199,7 @@ export function Ilha() {
       setRestanteFechar(r);
     }, 100);
     return () => window.clearInterval(t);
-  }, [estadoEfetivo, sobre, cfg.fechamentoSeg, recolher]);
+  }, [estadoEfetivo, sobre, cfg.fechamentoSeg, recolher, abaAtual, pedidosClaude.length]);
 
   useEffect(() => {
     if (estadoEfetivo !== "expandida") return;
@@ -220,14 +230,16 @@ export function Ilha() {
   const compacta = useMemo(() => {
     if (atualizacao.fase !== "nada") return { tipo: "atualizacao" as const, largura: 350 };
     if (revelacao) return { tipo: "revelacao" as const, largura: 340 };
+    if (pedidosClaude.length > 0) return { tipo: "claudePedido" as const, largura: 340 };
     if (pomodoroIniciado) return { tipo: "pomodoro" as const, largura: midia.tocando ? 330 : 290 };
     if (cfg.blocos.midia && midiaAtivaNaIlha(midia)) return { tipo: "midia" as const, largura: 330 };
+    if (claudeAtivo) return { tipo: "claude" as const, largura: 330 };
     if (trabalhando.length > 0) return { tipo: "trabalho" as const, largura: 280 };
     if (cfg.repouso === "relogio") return { tipo: "relogio" as const, largura: 190 };
     if (cfg.repouso === "midia") return { tipo: "relogio" as const, largura: 190 };
     if (cfg.repouso === "agente") return { tipo: "agente" as const, largura: 230 };
     return { tipo: "nada" as const, largura: 120 };
-  }, [revelacao, pomodoroIniciado, midia.tocando, Boolean(midia.faixa), trabalhando.length, cfg.repouso, cfg.blocos.midia, atualizacao.fase]);
+  }, [revelacao, pomodoroIniciado, midia.tocando, Boolean(midia.faixa), trabalhando.length, cfg.repouso, cfg.blocos.midia, atualizacao.fase, pedidosClaude.length, Boolean(claudeAtivo)]);
 
   if (!cfg.ativa || frente.telaCheia) return null;
 
@@ -248,7 +260,7 @@ export function Ilha() {
   const barraVisivel = cfg.laterais && estadoEfetivo !== "escondida" && lateraisLivres;
 
   const abaDaCompacta = (): AbaIlha | undefined =>
-    compacta.tipo === "revelacao" ? revelacao?.aba : compacta.tipo === "pomodoro" ? "foco" : compacta.tipo === "midia" ? "midia" : compacta.tipo === "trabalho" ? "chat" : undefined;
+    compacta.tipo === "revelacao" ? revelacao?.aba : compacta.tipo === "pomodoro" ? "foco" : compacta.tipo === "midia" ? "midia" : compacta.tipo === "trabalho" ? "chat" : compacta.tipo === "claude" || compacta.tipo === "claudePedido" ? "claude" : undefined;
 
   const acionarCompacta = () => {
     window.clearTimeout(relogioHover.current);
@@ -328,6 +340,34 @@ export function Ilha() {
             <span className="ilha-compacta-texto brilho-texto">{agentes.tarefaAtual[trabalhando[0]] || T.agentes.estados.escrevendo}</span>
           </>
         );
+      case "claudePedido":
+        return (
+          <>
+            <div className="ilha-compacta-lado">
+              <Marca marca="claudecode" tamanho={16} />
+            </div>
+            <span className="ilha-compacta-texto ilha-claude-compacta" data-estado="aprovacao">
+              {T.ilha.claude.permissaoCompacta(pedidosClaude[0]?.projeto ?? "")}
+            </span>
+            <div className="ilha-compacta-lado">
+              <ShieldAlert size={15} color="#f0a060" />
+            </div>
+          </>
+        );
+      case "claude": {
+        const passo = [...(claudeAtivo?.passos ?? [])].reverse().find((p) => p.tipo === "ferramenta");
+        return (
+          <>
+            <div className="ilha-compacta-lado">
+              <Marca marca="claudecode" tamanho={16} />
+            </div>
+            <span className="ilha-compacta-texto brilho-texto">{passo ? `${passo.rotulo} ${passo.detalhe ?? ""}` : T.ilha.claude.estados[claudeAtivo?.estado ?? "pensando"]}</span>
+            <div className="ilha-compacta-lado">
+              <LoaderCircle size={14} className="girando" color="#4daafc" />
+            </div>
+          </>
+        );
+      }
       case "relogio":
         return <span className="ilha-compacta-texto ilha-tempo">{new Date(relogio).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}</span>;
       case "agente":
@@ -355,7 +395,7 @@ export function Ilha() {
           escala={escala}
           larguraDaIlha={alvo.w * escala}
           aparencia={aparencia}
-          aoAbrirAba={(a) => abrir(abas.includes(a) ? a : abaAtual)}
+          aoAbrirAba={(a) => alternarAbaDaBarra(abas.includes(a) ? a : abaAtual)}
           aoUsar={setBarraEmUso}
         />
       )}
@@ -498,7 +538,7 @@ export function Ilha() {
                         aria-label={T.ilha.abrirSistema}
                         title={T.ilha.abrirSistema}
                         onClick={() => {
-                          const rota = { hoje: "journal", captura: "inicio", midia: "inicio", foco: "estudos", habitos: "journal", agenda: "calendario", chat: "chat", conexoes: "conexoes", calendario: "calendario", avisos: "inicio" } as const;
+                          const rota = { hoje: "journal", captura: "inicio", midia: "inicio", foco: "estudos", habitos: "journal", agenda: "calendario", chat: "chat", conexoes: "conexoes", calendario: "calendario", avisos: "inicio", claude: "configuracoes" } as const;
                           irPara(rota[abaAtual]);
                           recolher();
                           void tocarSom("open");

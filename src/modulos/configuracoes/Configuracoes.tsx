@@ -4,7 +4,7 @@ import { SortableContext, useSortable, verticalListSortingStrategy, arrayMove } 
 import { CSS } from "@dnd-kit/utilities";
 import {
   Settings, Palette, PanelTop, PanelBottom, Timer, Users, Volume2, Gauge, Maximize, Keyboard, ShieldCheck, Database, Info, Wrench,
-  GripVertical, Download, Upload, RotateCcw, Trash2, DatabaseBackup,
+  GripVertical, Download, Upload, RotateCcw, Trash2, DatabaseBackup, SquareTerminal,
 } from "lucide-react";
 import { CabecalhoAba } from "../../componentes/CabecalhoAba";
 import { Cartao, Botao, Campo, Modal, Segmentado, AvisoFaixa, LinhaAlternador, Alternador, Tecla, ConfirmarModal } from "../../componentes/basicos";
@@ -23,6 +23,7 @@ import { TODOS_OS_SONS, tocarSom, type CategoriaSom } from "../../ponte/sons";
 import { DESTAQUE_PADRAO } from "../../janelas/area-de-trabalho/usarTema";
 import { EditorFoto } from "../../componentes/FotoPerfil";
 import { SeletorDeFundo } from "./SeletorDeFundo";
+import { SecaoClaudeCode } from "./SecaoClaudeCode";
 import type { EstadoAgente, Rota } from "../../tipos";
 
 type Secao = keyof typeof T.configuracoes.secoes;
@@ -40,6 +41,7 @@ const ICONES: Record<Secao, React.ReactNode> = {
   atalhos: <Keyboard size={15} />,
   privacidade: <ShieldCheck size={15} />,
   dados: <Database size={15} />,
+  claude: <SquareTerminal size={15} />,
   sobre: <Info size={15} />,
   desenvolvedor: <Wrench size={15} />,
 };
@@ -610,6 +612,7 @@ export default function Configuracoes() {
       </>
     ),
     dados: <SecaoDados />,
+    claude: <SecaoClaudeCode />,
     sobre: (
       <>
         <p>{T.configuracoes.sobreTexto}</p>

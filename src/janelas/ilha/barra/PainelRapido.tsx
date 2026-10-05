@@ -14,6 +14,7 @@ import { controle, sistema, type AcaoDeEnergia, type AlvoDeAudio, type EstadoSis
 import { tocarSom } from "../../../ponte/sons";
 import { T } from "../../../textos/textos";
 import { IconeDeSinal, IconeDeVolume, IconeDeWifi, wifiLigado as estaComWifiLigado } from "./IconesDeStatus";
+import { ListaDeBluetooth } from "./ListaDeBluetooth";
 
 const B = T.ilha.barra;
 const S = T.ilha.sistema;
@@ -244,7 +245,13 @@ function Conexoes() {
   const rede = useControleRapido((s) => s.rede);
   const sincronizarRede = useControleRapido((s) => s.sincronizarRede);
   const [ocupado, setOcupado] = useState<"WiFi" | "Bluetooth" | null>(null);
-  const [redesAbertas, setRedesAbertas] = useState(false);
+  const [listaAberta, setListaAberta] = useState<"WiFi" | "Bluetooth" | null>(null);
+  const redesAbertas = listaAberta === "WiFi";
+  const bluetoothAberto = listaAberta === "Bluetooth";
+
+  useEffect(() => {
+    if (listaAberta === "Bluetooth" && !rede?.radios.Bluetooth || listaAberta === "WiFi" && (!rede || !estaComWifiLigado(rede))) setListaAberta(null);
+  }, [rede, listaAberta]);
 
   if (!rede) return null;
   const wifiLigado = estaComWifiLigado(rede);
@@ -284,7 +291,7 @@ function Conexoes() {
               aria-expanded={redesAbertas}
               aria-label={redesAbertas ? B.esconderRedes : B.verRedes}
               title={redesAbertas ? B.esconderRedes : B.verRedes}
-              onClick={() => setRedesAbertas((v) => !v)}
+              onClick={() => setListaAberta((v) => v === "WiFi" ? null : "WiFi")}
             >
               <ChevronDown size={14} className="ilha-rapido-seta" data-aberta={redesAbertas || undefined} />
             </button>
@@ -299,10 +306,14 @@ function Conexoes() {
                 <span className="cortar">{btLigado ? S.ligado : S.desligado}</span>
               </span>
             </button>
+            <button type="button" className="ilha-rapido-conexao-seta" disabled={!btLigado || ocupado === "Bluetooth"} aria-expanded={bluetoothAberto} aria-label={bluetoothAberto ? S.esconderBluetooth : S.verBluetooth} title={bluetoothAberto ? S.esconderBluetooth : S.verBluetooth} onClick={() => setListaAberta((v) => v === "Bluetooth" ? null : "Bluetooth")}>
+              <ChevronDown size={14} className="ilha-rapido-seta" data-aberta={bluetoothAberto || undefined} />
+            </button>
           </div>
         )}
       </div>
       {redesAbertas && wifiLigado && <ListaDeRedes rede={rede} aoMudar={() => void sincronizarRede()} />}
+      {bluetoothAberto && btLigado && <ListaDeBluetooth />}
     </>
   );
 }

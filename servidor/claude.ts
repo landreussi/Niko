@@ -1,0 +1,349 @@
+import type { IncomingMessage, ServerResponse } from "node:http";
+import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
+import { randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
+import { pastaDados } from "./ia";
+
+const CABECALHO_SEGREDO = "x-niko-gancho";
+const CAMINHO_EVENTO = "/ponte/claude/evento";
+const LIMITE_CORPO = 2 * 1024 * 1024;
+const LIMITE_CAMPO = 4000;
+const LIMITE_RESPOSTA_FINAL = 12000;
+const ESPERA_DECISAO_MS = 110_000;
+const TEMPO_HOOK_RAPIDO = 5;
+const TEMPO_HOOK_DECISAO = 120;
+const MAXIMO_HISTORICO = 300;
+
+export const EVENTOS_INSTALADOS = [
+  "SessionStart",
+  "UserPromptSubmit",
+  "PreToolUse",
+  "PostToolUseFailure",
+  "PermissionRequest",
+  "Notification",
+  "Stop",
+  "StopFailure",
+  "SubagentStart",
+  "SubagentStop",
+  "SessionEnd",
+] as const;
+
+const CAMPOS_DESCARTADOS = ["tool_response", "tool_result", "transcript_path", "scratchpad_dir"];
+
+export interface EventoClaude {
+  id: string;
+  recebidoEm: string;
+  evento: string;
+  sessao: string;
+  cwd: string;
+  dados: Record<string, unknown>;
+  pedidoId?: string;
+}
+
+interface Pendente {
+  res: ServerResponse;
+  temporizador: NodeJS.Timeout;
+  sessao: string;
+}
+
+const historico: EventoClaude[] = [];
+const ouvintes = new Set<ServerResponse>();
+const pendentes = new Map<string, Pendente>();
+
+function pastaClaude() {
+  return join(homedir(), ".claude");
+}
+
+function caminhoSettings() {
+  return join(pastaClaude(), "settings.json");
+}
+
+function porta() {
+  return Number(process.env.NIKO_PORTA) || 47831;
+}
+
+function urlDoGancho() {
+  return `http://127.0.0.1:${porta()}${CAMINHO_EVENTO}`;
+}
+
+function segredo(): string {
+  const arquivo = join(pastaDados(), "gancho-claude.json");
+  try {
+    const lido = JSON.parse(readFileSync(arquivo, "utf8")) as { segredo?: string };
+    if (typeof lido.segredo === "string" && lido.segredo.length >= 32) return lido.segredo;
+  } catch {
+    mkdirSync(pastaDados(), { recursive: true });
+  }
+  const novo = randomBytes(32).toString("hex");
+  writeFileSync(arquivo, JSON.stringify({ segredo: novo }), "utf8");
+  return novo;
+}
+
+function segredoConfere(recebido: unknown): boolean {
+  if (typeof recebido !== "string") return false;
+  const esperado = Buffer.from(segredo());
+  const dado = Buffer.from(recebido);
+  return dado.length === esperado.length && timingSafeEqual(dado, esperado);
+}
+
+function ehGanchoDoNiko(gancho: unknown): boolean {
+  if (!gancho || typeof gancho !== "object") return false;
+  const g = gancho as { type?: unknown; url?: unknown; headers?: Record<string, unknown> };
+  return g.type === "http" && typeof g.url === "string" && g.url.includes(CAMINHO_EVENTO) && Boolean(g.headers && CABECALHO_SEGREDO in g.headers);
+}
+
+type Settings = Record<string, unknown> & { hooks?: Record<string, unknown> };
+
+function lerSettings(): { texto: string | null; dados: Settings } {
+  const caminho = caminhoSettings();
+  if (!existsSync(caminho)) return { texto: null, dados: {} };
+  const texto = readFileSync(caminho, "utf8");
+  if (!texto.trim()) return { texto, dados: {} };
+  try {
+    const dados = JSON.parse(texto.replace(/^﻿/, "")) as unknown;
+    if (!dados || typeof dados !== "object" || Array.isArray(dados)) throw new Error();
+    return { texto, dados: dados as Settings };
+  } catch {
+    throw new Error("settings_invalido");
+  }
+}
+
+function semGanchosDoNiko(dados: Settings): Settings {
+  const copia: Settings = JSON.parse(JSON.stringify(dados)) as Settings;
+  const hooks = copia.hooks && typeof copia.hooks === "object" && !Array.isArray(copia.hooks) ? (copia.hooks as Record<string, unknown>) : null;
+  if (!hooks) return copia;
+  for (const [evento, grupos] of Object.entries(hooks)) {
+    if (!Array.isArray(grupos)) continue;
+    const restantes = grupos
+      .map((grupo) => {
+        if (!grupo || typeof grupo !== "object") return grupo;
+        const g = grupo as { hooks?: unknown[] };
+        if (!Array.isArray(g.hooks)) return grupo;
+        const filtrados = g.hooks.filter((h) => !ehGanchoDoNiko(h));
+        return filtrados.length === g.hooks.length ? grupo : filtrados.length ? { ...g, hooks: filtrados } : null;
+      })
+      .filter((g) => g !== null);
+    if (restantes.length) hooks[evento] = restantes;
+    else delete hooks[evento];
+  }
+  if (Object.keys(hooks).length === 0) delete copia.hooks;
+  return copia;
+}
+
+function comGanchosDoNiko(dados: Settings): Settings {
+  const limpo = semGanchosDoNiko(dados);
+  const hooks = (limpo.hooks && typeof limpo.hooks === "object" && !Array.isArray(limpo.hooks) ? limpo.hooks : {}) as Record<string, unknown[]>;
+  const chave = segredo();
+  for (const evento of EVENTOS_INSTALADOS) {
+    const atuais = Array.isArray(hooks[evento]) ? hooks[evento] : [];
+    hooks[evento] = [
+      ...atuais,
+      {
+        hooks: [
+          {
+            type: "http",
+            url: urlDoGancho(),
+            timeout: evento === "PermissionRequest" ? TEMPO_HOOK_DECISAO : TEMPO_HOOK_RAPIDO,
+            headers: { [CABECALHO_SEGREDO]: chave },
+          },
+        ],
+      },
+    ];
+  }
+  return { ...limpo, hooks };
+}
+
+function ocultarSegredo(texto: string) {
+  return texto.split(segredo()).join("••••••••");
+}
+
+export function estadoDaInstalacao() {
+  const caminho = caminhoSettings();
+  let dados: Settings = {};
+  let invalido = false;
+  try {
+    dados = lerSettings().dados;
+  } catch {
+    invalido = true;
+  }
+  const hooks = (dados.hooks ?? {}) as Record<string, unknown>;
+  const instalados = EVENTOS_INSTALADOS.filter((evento) => {
+    const grupos = hooks[evento];
+    return Array.isArray(grupos) && grupos.some((g) => Array.isArray((g as { hooks?: unknown[] })?.hooks) && (g as { hooks: unknown[] }).hooks.some((h) => ehGanchoDoNiko(h) && (h as { url: string }).url === urlDoGancho()));
+  });
+  return {
+    caminho,
+    existe: existsSync(caminho),
+    claudeInstalado: existsSync(pastaClaude()),
+    invalido,
+    instalado: instalados.length === EVENTOS_INSTALADOS.length,
+    parcial: instalados.length > 0 && instalados.length < EVENTOS_INSTALADOS.length,
+    eventos: instalados,
+    conectado: ouvintes.size > 0,
+  };
+}
+
+export function previaDaInstalacao(acao: "instalar" | "remover") {
+  const { texto, dados } = lerSettings();
+  const proposto = acao === "instalar" ? comGanchosDoNiko(dados) : semGanchosDoNiko(dados);
+  return { caminho: caminhoSettings(), atual: texto === null ? null : ocultarSegredo(texto), proposto: ocultarSegredo(`${JSON.stringify(proposto, null, 2)}\n`) };
+}
+
+function gravarComCopia(conteudo: Settings) {
+  const caminho = caminhoSettings();
+  mkdirSync(pastaClaude(), { recursive: true });
+  let copia: string | null = null;
+  if (existsSync(caminho)) {
+    copia = `${caminho}.niko-${new Date().toISOString().replace(/[:.]/g, "-")}.bak`;
+    copyFileSync(caminho, copia);
+  }
+  writeFileSync(caminho, `${JSON.stringify(conteudo, null, 2)}\n`, "utf8");
+  return { caminho, copia };
+}
+
+export function instalarGanchos(corpo: Record<string, unknown>) {
+  if (corpo.confirmacao !== "INSTALAR") throw new Error("confirmacao_invalida");
+  return gravarComCopia(comGanchosDoNiko(lerSettings().dados));
+}
+
+export function removerGanchos(corpo: Record<string, unknown>) {
+  if (corpo.confirmacao !== "REMOVER") throw new Error("confirmacao_invalida");
+  return gravarComCopia(semGanchosDoNiko(lerSettings().dados));
+}
+
+function cortar(valor: unknown, limite = LIMITE_CAMPO): unknown {
+  if (typeof valor === "string") return valor.length > limite ? `${valor.slice(0, limite)}…` : valor;
+  if (Array.isArray(valor)) return valor.slice(0, 50).map((v) => cortar(v, limite));
+  if (valor && typeof valor === "object") return Object.fromEntries(Object.entries(valor as Record<string, unknown>).slice(0, 40).map(([k, v]) => [k, cortar(v, limite)]));
+  return valor;
+}
+
+function lerCorpoJson(req: IncomingMessage): Promise<Record<string, unknown>> {
+  return new Promise((resolver, rejeitar) => {
+    let tamanho = 0;
+    const partes: Buffer[] = [];
+    req.on("data", (p: Buffer) => {
+      tamanho += p.length;
+      if (tamanho > LIMITE_CORPO) {
+        req.destroy();
+        rejeitar(new Error("corpo_grande"));
+        return;
+      }
+      partes.push(p);
+    });
+    req.on("end", () => {
+      try {
+        const dados = JSON.parse(Buffer.concat(partes).toString("utf8").replace(/^﻿/, "")) as unknown;
+        resolver(dados && typeof dados === "object" && !Array.isArray(dados) ? (dados as Record<string, unknown>) : {});
+      } catch {
+        rejeitar(new Error("json_invalido"));
+      }
+    });
+    req.on("error", rejeitar);
+  });
+}
+
+function transmitir(evento: EventoClaude) {
+  historico.push(evento);
+  if (historico.length > MAXIMO_HISTORICO) historico.splice(0, historico.length - MAXIMO_HISTORICO);
+  const linha = `${JSON.stringify(evento)}\n`;
+  for (const ouvinte of ouvintes) ouvinte.write(linha);
+}
+
+function responderVazio(res: ServerResponse) {
+  if (res.writableEnded) return;
+  res.statusCode = 200;
+  res.setHeader("cache-control", "no-store");
+  res.end();
+}
+
+export async function receberEventoDoGancho(req: IncomingMessage, res: ServerResponse) {
+  if (req.headers.origin || !segredoConfere(req.headers[CABECALHO_SEGREDO])) {
+    res.statusCode = 403;
+    return res.end();
+  }
+  let corpo: Record<string, unknown>;
+  try {
+    corpo = await lerCorpoJson(req);
+  } catch {
+    return responderVazio(res);
+  }
+  for (const campo of CAMPOS_DESCARTADOS) delete corpo[campo];
+  const nome = typeof corpo.hook_event_name === "string" ? corpo.hook_event_name : "";
+  const ultima = typeof corpo.last_assistant_message === "string" ? corpo.last_assistant_message.slice(0, LIMITE_RESPOSTA_FINAL) : undefined;
+  const dados = cortar(corpo) as Record<string, unknown>;
+  if (ultima !== undefined) dados.last_assistant_message = ultima;
+  const evento: EventoClaude = {
+    id: randomUUID(),
+    recebidoEm: new Date().toISOString(),
+    evento: nome,
+    sessao: typeof corpo.session_id === "string" ? corpo.session_id : "",
+    cwd: typeof corpo.cwd === "string" ? corpo.cwd : "",
+    dados,
+  };
+  if (nome !== "PermissionRequest" || ouvintes.size === 0) {
+    responderVazio(res);
+    transmitir(evento);
+    return;
+  }
+  const pedidoId = randomUUID();
+  evento.pedidoId = pedidoId;
+  const temporizador = setTimeout(() => encerrarPedido(pedidoId, null, "expirou"), ESPERA_DECISAO_MS);
+  pendentes.set(pedidoId, { res, temporizador, sessao: evento.sessao });
+  res.on("close", () => {
+    if (pendentes.has(pedidoId)) encerrarPedido(pedidoId, null, "cancelado");
+  });
+  transmitir(evento);
+}
+
+function encerrarPedido(pedidoId: string, decisao: "allow" | "deny" | null, motivo: string) {
+  const pendente = pendentes.get(pedidoId);
+  if (!pendente) return false;
+  pendentes.delete(pedidoId);
+  clearTimeout(pendente.temporizador);
+  if (!pendente.res.writableEnded) {
+    if (decisao) {
+      const corpo = {
+        hookSpecificOutput: {
+          hookEventName: "PermissionRequest",
+          decision: decisao === "allow" ? { behavior: "allow" } : { behavior: "deny", message: "Negado pelo Niko." },
+        },
+      };
+      pendente.res.statusCode = 200;
+      pendente.res.setHeader("content-type", "application/json; charset=utf-8");
+      pendente.res.end(JSON.stringify(corpo));
+    } else responderVazio(pendente.res);
+  }
+  transmitir({ id: randomUUID(), recebidoEm: new Date().toISOString(), evento: "NikoPedidoEncerrado", sessao: pendente.sessao, cwd: "", dados: { motivo, decisao }, pedidoId });
+  return true;
+}
+
+export function decidirPedido(corpo: Record<string, unknown>) {
+  const pedidoId = typeof corpo.pedidoId === "string" ? corpo.pedidoId : "";
+  const decisao = corpo.decisao === "allow" || corpo.decisao === "deny" ? corpo.decisao : null;
+  if (!decisao) throw new Error("decisao_invalida");
+  if (!encerrarPedido(pedidoId, decisao, "decidido")) throw new Error("pedido_expirou");
+  return { ok: true };
+}
+
+export function ouvirEventos(req: IncomingMessage, res: ServerResponse) {
+  res.statusCode = 200;
+  res.setHeader("content-type", "application/x-ndjson; charset=utf-8");
+  res.setHeader("cache-control", "no-store");
+  res.setHeader("x-accel-buffering", "no");
+  const limite = Date.now() - 6 * 3600_000;
+  for (const evento of historico) if (Date.parse(evento.recebidoEm) >= limite) res.write(`${JSON.stringify(evento)}\n`);
+
+  res.write(`${JSON.stringify({ evento: "NikoConectado", id: randomUUID(), recebidoEm: new Date().toISOString(), sessao: "", cwd: "", dados: {} })}\n`);
+  ouvintes.add(res);
+  const pulso = setInterval(() => res.write("\n"), 20_000);
+  req.on("close", () => {
+    clearInterval(pulso);
+    ouvintes.delete(res);
+  });
+}
+
+export function ehRotaDoGancho(caminho: string) {
+  return caminho === CAMINHO_EVENTO;
+}

@@ -695,6 +695,27 @@ button.ilha-rapido-icone:hover:not(:disabled),
   flex: 1 1 auto;
 }
 
+.ilha-rapido-bluetooth-lista {
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.ilha-rapido-bluetooth-nome {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.ilha-rapido-bluetooth-nome small {
+  color: var(--i-dim);
+  font-size: 10px;
+}
+
+.ilha-rapido-bluetooth .ilha-rapido-texto-pequeno {
+  flex-shrink: 0;
+}
+
 .ilha-rapido-texto-pequeno {
   height: 24px;
   padding: 0 8px;

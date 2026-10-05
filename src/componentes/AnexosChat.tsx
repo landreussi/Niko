@@ -4,6 +4,7 @@ import { Check, FileCode2, FileText, Image as ImagemIcone, X } from "lucide-reac
 import { Personagem } from "../personagens/Personagem";
 import { lerAnexo, tipoDoAnexo, formatarTamanho, MAXIMO_ANEXOS, type AnexoPronto, type FalhaAnexo } from "../utilitarios/anexos";
 import { gerarId } from "../utilitarios/basicos";
+import { mensagemDeLeitura } from "../utilitarios/leitorDeArquivos";
 import { tocarSom } from "../ponte/sons";
 import { T } from "../textos/textos";
 import type { AgenteId } from "../tipos";
@@ -57,7 +58,7 @@ export function useAnexos(aoErro: (texto: string) => void) {
           .catch((e: Error) => {
             setLista((l) => l.filter((a) => a.id !== id));
             const motivo = (["grande", "tipo", "leitura"].includes(e.message) ? e.message : "leitura") as FalhaAnexo;
-            aoErro(T.chat.anexos[motivo](arquivo.name));
+            aoErro(mensagemDeLeitura(e, arquivo.name) ?? T.chat.anexos[motivo](arquivo.name));
             void tocarSom("error", "avisos");
           });
       }

@@ -8,7 +8,9 @@ import { pedirMidia } from "./midia";
 import { pedirJanelas } from "./janelasWindows";
 import { estadoConexoes, lerConexao, salvarChaveConexao, removerChaveConexao, servicoValido, chaveDe, SERVICOS as SERVICOS_CONEXAO } from "./conexoes";
 import { buscarGmail, criarRascunhoGmail, enviarGmail } from "./gmail";
-import { lerAudio, definirVolume, definirMudo, ajustarSessao, lerTema, definirTema, abrirFerramenta, agirNaEnergia, lerBandeja, abrirDaBandeja } from "./controleRapido";
+import { lerAudio, definirVolume, definirMudo, ajustarSessao, lerTema, lerIniciar, definirTema, abrirFerramenta, agirNaEnergia, lerBandeja, abrirDaBandeja } from "./controleRapido";
+import { ocrDaRequisicao } from "./ocr";
+import { receberEventoDoGancho, ehRotaDoGancho, ouvirEventos, decidirPedido, estadoDaInstalacao, previaDaInstalacao, instalarGanchos, removerGanchos } from "./claude";
 import { listarArquivos, receberArquivo, enviarConteudo, excluirArquivo, excluirArquivosDaMateria, baixarArquivo, abrirArquivoNoPrograma } from "./arquivos";
 import { tipoDoComputador, estadoDoSistema, listarRedes, listarBluetooth, lerComputador, conectarRede, esquecerRede, desconectarRede, definirBrilho, definirRadio, abrirConfiguracoesWindows } from "./sistema";
 
@@ -62,6 +64,7 @@ function origemConfiavel(req: IncomingMessage): boolean {
 export const rotas: Connect.NextHandleFunction = async (req, res, proximo) => {
   const url = new URL(req.url ?? "/", "http://localhost");
   if (!url.pathname.startsWith("/ponte/")) return proximo();
+  if (ehRotaDoGancho(url.pathname) && req.method === "POST") return receberEventoDoGancho(req, res);
   if (!origemConfiavel(req)) return responder(res, 403, { erro: "origem_nao_permitida" });
   const caminho = url.pathname.slice("/ponte".length);
 
@@ -84,6 +87,13 @@ export const rotas: Connect.NextHandleFunction = async (req, res, proximo) => {
     if (testar && req.method === "POST") {
       return responder(res, 200, await testarProvedor(testar[1]));
     }
+    if (caminho === "/claude/eventos" && req.method === "GET") return ouvirEventos(req, res);
+    if (caminho === "/claude/decisao" && req.method === "POST") return responder(res, 200, decidirPedido(await lerCorpo(req)));
+    if (caminho === "/claude/instalacao" && req.method === "GET") return responder(res, 200, estadoDaInstalacao());
+    if (caminho === "/claude/previa" && req.method === "GET") return responder(res, 200, previaDaInstalacao(url.searchParams.get("acao") === "remover" ? "remover" : "instalar"));
+    if (caminho === "/claude/instalar" && req.method === "POST") return responder(res, 200, instalarGanchos(await lerCorpo(req)));
+    if (caminho === "/claude/remover" && req.method === "POST") return responder(res, 200, removerGanchos(await lerCorpo(req)));
+    if (caminho === "/ocr" && req.method === "POST") return responder(res, 200, await ocrDaRequisicao(req));
     const arquivo = /^\/arquivos\/([A-Za-z0-9-]{1,64})(?:\/([A-Za-z0-9-]{1,64})(?:\/(baixar|abrir))?)?$/.exec(caminho);
     if (arquivo) {
       const banco = String(req.headers["x-niko-banco"] ?? "");
@@ -181,7 +191,7 @@ export const rotas: Connect.NextHandleFunction = async (req, res, proximo) => {
     }
     if (caminho.startsWith("/controle/")) {
       const acao = caminho.slice("/controle/".length);
-      const leitura: Record<string, () => Promise<unknown>> = { audio: lerAudio, tema: lerTema, bandeja: lerBandeja };
+      const leitura: Record<string, () => Promise<unknown>> = { audio: lerAudio, tema: lerTema, bandeja: lerBandeja, iniciar: lerIniciar };
       const escrita: Record<string, (d: Record<string, unknown>) => Promise<unknown>> = {
         volume: definirVolume,
         mudo: definirMudo,

@@ -384,10 +384,10 @@ export default function Chat() {
                 <Botao key={pedido} pequeno variante="fantasma" disabled={fase !== null} onClick={() => consultar(pedido)}>{rotulo}</Botao>
               ))}
             </div>
-            {anexos.lista.length > 0 && anexos.lista.every((a) => a.tipo === "texto") && (
+            {anexos.lista.length > 0 && anexos.lista.every((a) => a.tipo === "texto" || a.tipo === "imagem") && (
               <div className="chat-recursos" aria-label={T.chat.anexos.acoesRotulo}>
                 {(Object.keys(T.chat.anexos.acoes) as AcaoAnexo[]).map((acao) => (
-                  <Botao key={acao} pequeno disabled={fase !== null || anexos.carregando || !anexos.prontos().some((a) => a.anexo.texto?.trim())} onClick={() => enviar(acao)}>{T.chat.anexos.acoes[acao]}</Botao>
+                  <Botao key={acao} pequeno disabled={fase !== null || anexos.carregando || !anexos.prontos().some((a) => a.anexo.texto?.trim() || a.imagemCompleta)} onClick={() => enviar(acao)}>{T.chat.anexos.acoes[acao]}</Botao>
                 ))}
                 <span className="texto-3 chat-recursos-aviso">{T.chat.anexos.limiteAviso}</span>
               </div>

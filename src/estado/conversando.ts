@@ -8,7 +8,8 @@ import { detectarIntencao } from "../utilitarios/intencoes";
 import { resumoPorAgente } from "../utilitarios/contextoIa";
 import { acharMencao, escolherAgente, historicoParaIa, perguntarAssistente, provedoresEmOrdem, mensagemDeErroIa } from "../utilitarios/assistente";
 import { hojeISO } from "../utilitarios/datas";
-import { guardarImagens, type AnexoPronto } from "../utilitarios/anexos";
+import { guardarImagens, imagemParaBlob, type AnexoPronto } from "../utilitarios/anexos";
+import { lerTextoDeImagem, mensagemDeLeitura } from "../utilitarios/leitorDeArquivos";
 import { tocarSom } from "../ponte/sons";
 import { T } from "../textos/textos";
 import { controlarPomodoro, detectarPedidoLocal, montarPedidoAnexo, textoPomodoro, textoRelatorioSemanal, type AcaoAnexo } from "../utilitarios/recursosChat";
@@ -130,8 +131,18 @@ export async function enviarAoTime(conversaId: string, texto: string, anexos: An
   const mencao = acharMencao(limpo);
   const semMencao = mencao ? limpo.replace(/^@\S+\s*/, "") : limpo;
   if (opcoes.acaoAnexo) {
+    let analisaveis = anexos;
+    if (anexos.some((a) => !a.anexo.texto?.trim() && a.imagemCompleta)) {
+      try {
+        analisaveis = await Promise.all(anexos.map(async (a) => (a.anexo.texto?.trim() || !a.imagemCompleta ? a : { ...a, anexo: { ...a.anexo, texto: (await lerTextoDeImagem(imagemParaBlob(a.imagemCompleta))).texto } })));
+      } catch (erro) {
+        const nome = anexos.find((a) => a.imagemCompleta && !a.anexo.texto)?.anexo.nome ?? "";
+        await responder(conversaId, "tutor", mensagemDeLeitura(erro, nome) ?? T.estudos.arquivos.leitura.falha_ocr(nome));
+        return;
+      }
+    }
     let pedido: string;
-    try { pedido = montarPedidoAnexo(opcoes.acaoAnexo, anexos.map((a) => a.anexo)); }
+    try { pedido = montarPedidoAnexo(opcoes.acaoAnexo, analisaveis.map((a) => a.anexo)); }
     catch (erro) { await responder(conversaId, "tutor", (erro as Error).message); return; }
     if (opcoes.acaoAnexo === "extrair") {
       await responder(conversaId, "tutor", pedido.slice(pedido.indexOf(T.chat.anexos.delimitador) + T.chat.anexos.delimitador.length).trim());

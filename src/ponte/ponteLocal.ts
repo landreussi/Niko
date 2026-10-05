@@ -133,6 +133,7 @@ export interface AparelhoBluetooth {
   id: string;
   nome: string;
   ativo: boolean;
+  conectado: boolean | null;
 }
 
 let tipoEmCache: Promise<{ notebook: boolean; bateria: boolean }> | null = null;
@@ -193,6 +194,8 @@ function enviar<T>(caminho: string, corpo: unknown) {
 }
 
 export const controle = {
+  iniciar: () => pedir<{ aberto: boolean }>("/controle/iniciar"),
+  alternarIniciar: (abertoAntes?: boolean) => enviar("/controle/ferramenta", { nome: "iniciar", abertoAntes }),
   audio: () => pedir<EstadoAudio>("/controle/audio").then((r) => ({ ...r, sessoes: comoLista(r.sessoes) })),
   volume: (alvo: AlvoDeAudio, volume: number) => enviar("/controle/volume", { alvo, volume }),
   mudo: (alvo: AlvoDeAudio, mudo: boolean) => enviar("/controle/mudo", { alvo, mudo }),

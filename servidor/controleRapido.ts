@@ -101,6 +101,7 @@ public static class NikoControle {
   [DllImport("user32.dll")] static extern bool BringWindowToTop(IntPtr janela);
   [DllImport("user32.dll")] static extern IntPtr GetForegroundWindow();
   [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr janela, out uint pid);
+  [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern int GetWindowText(IntPtr janela, System.Text.StringBuilder texto, int tamanho);
   [DllImport("user32.dll")] static extern bool AttachThreadInput(uint de, uint para, bool ligar);
   [DllImport("kernel32.dll")] static extern uint GetCurrentThreadId();
   [DllImport("user32.dll")] static extern void keybd_event(byte tecla, byte varredura, uint opcoes, UIntPtr extra);
@@ -258,6 +259,28 @@ public static class NikoControle {
     keybd_event(TECLA_WINDOWS, 0, SOLTAR, UIntPtr.Zero);
   }
 
+  public static bool IniciarAberto() {
+    IntPtr janela = GetForegroundWindow();
+    uint pid;
+    GetWindowThreadProcessId(janela, out pid);
+    try {
+      using (var processo = System.Diagnostics.Process.GetProcessById((int)pid)) {
+        if (processo.ProcessName.Equals("StartMenuExperienceHost", StringComparison.OrdinalIgnoreCase)) return true;
+        if (!processo.ProcessName.Equals("ShellExperienceHost", StringComparison.OrdinalIgnoreCase)) return false;
+        var texto = new System.Text.StringBuilder(256);
+        GetWindowText(janela, texto, texto.Capacity);
+        return texto.ToString() == "Start" || texto.ToString() == "Iniciar";
+      }
+    } catch { return false; }
+  }
+
+  public static void FecharIniciar() {
+    if (!IniciarAberto()) return;
+    const byte ESCAPE = 0x1B;
+    keybd_event(ESCAPE, 0, 0, UIntPtr.Zero);
+    keybd_event(ESCAPE, 0, 0x0002, UIntPtr.Zero);
+  }
+
   public static bool Bloquear() { return LockWorkStation(); }
   public static bool Suspender() { return SetSuspendState(false, false, false) != 0; }
 }
@@ -386,6 +409,7 @@ while ($true) {
         $r = @{ ajustadas = [NikoControle]::AjustarSessoes($pids, [int]$pedido.volume, [int]$pedido.mudo) }
       }
       'tema' { $r = @{ escuro = (TemaEscuro) } }
+      'iniciar' { $r = @{ aberto = [NikoControle]::IniciarAberto() } }
       'definirTema' {
         $claro = $(if ($pedido.escuro) { 0 } else { 1 })
         Set-ItemProperty -Path $CHAVE_TEMA -Name AppsUseLightTheme -Value $claro -Type DWord
@@ -396,10 +420,16 @@ while ($true) {
       'ferramenta' {
         if ($pedido.nome -eq 'captura') { Start-Process 'ms-screenclip:' }
         elseif ($pedido.nome -eq 'teclado') { Start-Process (Join-Path $env:WINDIR 'System32\osk.exe') }
-        elseif ($pedido.nome -eq 'iniciar') { [NikoControle]::AbrirIniciar() }
+        elseif ($pedido.nome -eq 'iniciar') {
+          if ($pedido.abertoAntes -eq $true -or [NikoControle]::IniciarAberto()) { [NikoControle]::FecharIniciar() }
+          else { [NikoControle]::AbrirIniciar() }
+        }
         elseif ($pedido.nome -eq 'papelDeParede') { Start-Process 'ms-settings:personalization-background' }
         else { throw 'ferramenta_desconhecida' }
-        $r = @{ ok = $true }
+        if ($pedido.nome -eq 'iniciar') {
+          Start-Sleep -Milliseconds 150
+          $r = @{ ok = $true; aberto = [NikoControle]::IniciarAberto() }
+        } else { $r = @{ ok = $true } }
       }
       'energia' {
         switch ($pedido.tipo) {
@@ -422,7 +452,7 @@ while ($true) {
 }
 `;
 
-const ARQUIVO = join(tmpdir(), "niko-controle-v4.ps1");
+const ARQUIVO = join(tmpdir(), "niko-controle-v6.ps1");
 let processo: ChildProcessWithoutNullStreams | null = null;
 let contador = 0;
 const esperando = new Map<number, { resolver: (v: unknown) => void; rejeitar: (e: Error) => void; relogio: NodeJS.Timeout }>();
@@ -501,10 +531,12 @@ export const ajustarSessao = (d: Record<string, unknown>) => {
   return pedir({ acao: "sessao", pids, volume, mudo });
 };
 export const lerTema = () => pedir({ acao: "tema" });
+export const lerIniciar = () => pedir({ acao: "iniciar" });
 export const definirTema = (d: Record<string, unknown>) => pedir({ acao: "definirTema", escuro: d.escuro === true });
 export const abrirFerramenta = (d: Record<string, unknown>) => {
   if (!FERRAMENTAS.includes(d.nome as (typeof FERRAMENTAS)[number])) throw new Error("valor_invalido");
-  return pedir({ acao: "ferramenta", nome: d.nome });
+  if (d.abertoAntes !== undefined && typeof d.abertoAntes !== "boolean") throw new Error("valor_invalido");
+  return pedir({ acao: "ferramenta", nome: d.nome, abertoAntes: d.abertoAntes });
 };
 export const agirNaEnergia = (d: Record<string, unknown>) => {
   if (!ENERGIA.includes(d.tipo as (typeof ENERGIA)[number])) throw new Error("valor_invalido");

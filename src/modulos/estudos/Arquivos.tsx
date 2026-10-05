@@ -1,8 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Download, Eye, ExternalLink, File, FileArchive, FileAudio, FileImage, FileSpreadsheet, FileText, FileVideo, LoaderCircle, Presentation, Search, Trash2, Upload } from "lucide-react";
+import { Copy, Download, Eye, ExternalLink, File, FileArchive, FileAudio, FileImage, FileSpreadsheet, FileText, FileVideo, LoaderCircle, Presentation, ScanText, Search, Trash2, Upload } from "lucide-react";
 import { Botao, ConfirmarModal, Modal, Vazio, AvisoFaixa } from "../../componentes/basicos";
 import { ZonaDeSoltar, useArrastarArquivos } from "../../componentes/AnexosChat";
 import { useInterface } from "../../estado/interface";
+import { useComunicacao } from "../../estado/comunicacao";
+import { enviarAoTime } from "../../estado/conversando";
+import { extrairTexto, podeExtrairTexto, type TextoExtraido } from "../../utilitarios/leitorDeArquivos";
+import type { AcaoAnexo } from "../../utilitarios/recursosChat";
 import { tocarSom } from "../../ponte/sons";
 import { formatarTamanho } from "../../utilitarios/anexos";
 import { formatar } from "../../utilitarios/datas";
@@ -17,9 +21,46 @@ type CodigoDeErro = keyof typeof T.estudos.arquivos.erros;
 
 const LIMITE_TEXTO = 2 * 1024 * 1024;
 
+type CodigoDeLeitura = keyof typeof T.estudos.arquivos.leitura;
+
 function mensagemDeErro(e: unknown, nome: string): string {
-  const codigo = (e as Error)?.message as CodigoDeErro;
-  return (T.estudos.arquivos.erros[codigo] ?? T.estudos.arquivos.erros.outro)(nome);
+  const codigo = (e as Error)?.message ?? "";
+  if (Object.hasOwn(T.estudos.arquivos.leitura, codigo)) return T.estudos.arquivos.leitura[codigo as CodigoDeLeitura](nome);
+  return (T.estudos.arquivos.erros[codigo as CodigoDeErro] ?? T.estudos.arquivos.erros.outro)(nome);
+}
+
+function descreverOrigem(e: TextoExtraido): string {
+  const O = T.estudos.arquivos.origens;
+  if (e.origem === "pdf") return O.pdf(e.paginas ?? 0);
+  if (e.origem === "pdf_ocr") return O.pdf_ocr(e.paginas ?? 0, e.paginasLidasComOcr ?? 0);
+  return O[e.origem];
+}
+
+function TextoDoArquivo({ aberto, aoFechar }: { aberto: { arquivo: ArquivoDaMateria; extraido: TextoExtraido } | null; aoFechar: () => void }) {
+  const avisar = useInterface((s) => s.avisar);
+  return (
+    <Modal aberto={!!aberto} titulo={aberto ? T.estudos.arquivos.textoDe(aberto.arquivo.nome) : ""} aoFechar={aoFechar} largo>
+      {aberto && (
+        <div className="visualizador">
+          <AvisoFaixa>{descreverOrigem(aberto.extraido)}</AvisoFaixa>
+          <div className="visualizador-quadro" data-forma="texto">
+            <pre className="visualizador-texto">{aberto.extraido.texto}</pre>
+          </div>
+          <div className="formulario-acoes">
+            <Botao
+              variante="primario"
+              icone={<Copy size={14} />}
+              onClick={() => {
+                void navigator.clipboard.writeText(aberto.extraido.texto).then(() => avisar(T.estudos.arquivos.copiado));
+              }}
+            >
+              {T.estudos.arquivos.copiar}
+            </Botao>
+          </div>
+        </div>
+      )}
+    </Modal>
+  );
 }
 
 function IconeDoArquivo({ extensao }: { extensao: string }) {
@@ -40,7 +81,7 @@ interface Envio {
   tamanho: number;
 }
 
-function Visualizador({ materiaId, arquivo, aoFechar, aoBaixar, aoAbrir }: { materiaId: string; arquivo: ArquivoDaMateria | null; aoFechar: () => void; aoBaixar: (a: ArquivoDaMateria) => void; aoAbrir: (a: ArquivoDaMateria) => void }) {
+function Visualizador({ materiaId, arquivo, aoFechar, aoBaixar, aoAbrir, aoVerTexto }: { materiaId: string; arquivo: ArquivoDaMateria | null; aoFechar: () => void; aoBaixar: (a: ArquivoDaMateria) => void; aoAbrir: (a: ArquivoDaMateria) => void; aoVerTexto: (a: ArquivoDaMateria) => void }) {
   const [url, setUrl] = useState<string | null>(null);
   const [texto, setTexto] = useState<{ conteudo: string; cortado: boolean } | null>(null);
   const [erro, setErro] = useState("");
@@ -99,6 +140,7 @@ function Visualizador({ materiaId, arquivo, aoFechar, aoBaixar, aoAbrir }: { mat
           </div>
           <div className="formulario-acoes">
             <span className="texto-3 empurrar">{formatarTamanho(arquivo.tamanho)}</span>
+            {podeExtrairTexto(arquivo.nome) && <Botao icone={<ScanText size={14} />} onClick={() => aoVerTexto(arquivo)}>{T.estudos.arquivos.verTexto}</Botao>}
             <Botao icone={<ExternalLink size={14} />} onClick={() => aoAbrir(arquivo)}>{T.estudos.arquivos.abrirNoPrograma}</Botao>
             <Botao variante="primario" icone={<Download size={14} />} onClick={() => aoBaixar(arquivo)}>{T.estudos.arquivos.baixar}</Botao>
           </div>
@@ -177,6 +219,35 @@ export function Arquivos({ materia }: { materia: Materia }) {
   );
 
   const arrastando = useArrastarArquivos(area, enviar);
+  const irPara = useInterface((s) => s.irPara);
+  const [acoesAbertas, setAcoesAbertas] = useState<string | null>(null);
+  const [lendo, setLendo] = useState<{ id: string; progresso: number } | null>(null);
+  const [textoAberto, setTextoAberto] = useState<{ arquivo: ArquivoDaMateria; extraido: TextoExtraido } | null>(null);
+
+  const analisar = useCallback(
+    async (a: ArquivoDaMateria, acao: AcaoAnexo) => {
+      if (lendo) return;
+      setLendo({ id: a.id, progresso: 0 });
+      try {
+        const extraido = await extrairTexto(await lerConteudo(materia.id, a.id), a.nome, (p) => setLendo({ id: a.id, progresso: p }));
+        if (acao === "extrair") {
+          setTextoAberto({ arquivo: a, extraido });
+          return;
+        }
+        const conversa = useComunicacao.getState().criarConversa("tutor");
+        void enviarAoTime(conversa.id, "", [{ anexo: { nome: a.nome.slice(0, 120), tipo: a.extensao, tamanho: a.tamanho, texto: extraido.texto.slice(0, 60000) } }], { acaoAnexo: acao });
+        irPara("chat", { conversa: conversa.id });
+        avisar(T.estudos.arquivos.enviadoAoChat);
+      } catch (e) {
+        avisar(mensagemDeErro(e, a.nome));
+        void tocarSom("error", "avisos");
+      } finally {
+        setLendo(null);
+        setAcoesAbertas(null);
+      }
+    },
+    [avisar, irPara, lendo, materia.id],
+  );
 
   const baixar = useCallback(
     (a: ArquivoDaMateria) => {
@@ -251,7 +322,8 @@ export function Arquivos({ materia }: { materia: Materia }) {
           {visiveis.map((a) => {
             const temPrevia = formaDeVer(a.extensao) !== "programa";
             return (
-              <div key={a.id} className="lista-item arquivo-item">
+              <div key={a.id} className="arquivo-bloco">
+              <div className="lista-item arquivo-item">
                 <span className="arquivo-icone" data-extensao={a.extensao}>
                   <IconeDoArquivo extensao={a.extensao} />
                 </span>
@@ -266,15 +338,35 @@ export function Arquivos({ materia }: { materia: Materia }) {
                 ) : (
                   <Botao pequeno soIcone variante="fantasma" icone={<ExternalLink size={14} />} aria-label={T.estudos.arquivos.abrirNoPrograma} title={T.estudos.arquivos.abrirNoPrograma} onClick={() => abrir(a)} />
                 )}
+                {podeExtrairTexto(a.nome) &&
+                  (lendo?.id === a.id ? (
+                    <span className="texto-3 arquivo-lendo">
+                      <LoaderCircle size={13} className="girando" />
+                      {T.estudos.arquivos.lendoPaginas(lendo.progresso)}
+                    </span>
+                  ) : (
+                    <Botao pequeno soIcone variante={acoesAbertas === a.id ? "secundario" : "fantasma"} icone={<ScanText size={14} />} aria-label={T.estudos.arquivos.analisarRotulo(a.nome)} title={T.estudos.arquivos.analisar} aria-expanded={acoesAbertas === a.id} disabled={!!lendo} onClick={() => setAcoesAbertas((x) => (x === a.id ? null : a.id))} />
+                  ))}
                 <Botao pequeno soIcone variante="fantasma" icone={<Download size={14} />} aria-label={T.estudos.arquivos.baixar} title={T.estudos.arquivos.baixar} onClick={() => baixar(a)} />
                 <Botao pequeno soIcone variante="fantasma" icone={<Trash2 size={14} />} aria-label={T.estudos.arquivos.excluir} title={T.estudos.arquivos.excluir} onClick={() => setExcluindo(a)} />
+              </div>
+              {acoesAbertas === a.id && (
+                <div className="arquivo-acoes" role="group" aria-label={T.estudos.arquivos.analisarRotulo(a.nome)}>
+                  {(Object.keys(T.chat.anexos.acoes) as AcaoAnexo[]).map((acao) => (
+                    <Botao key={acao} pequeno variante={acao === "extrair" ? "fantasma" : "secundario"} disabled={!!lendo} onClick={() => void analisar(a, acao)}>
+                      {T.chat.anexos.acoes[acao]}
+                    </Botao>
+                  ))}
+                </div>
+              )}
               </div>
             );
           })}
         </div>
       )}
 
-      <Visualizador materiaId={materia.id} arquivo={vendo} aoFechar={() => setVendo(null)} aoBaixar={baixar} aoAbrir={abrir} />
+      <Visualizador materiaId={materia.id} arquivo={vendo} aoFechar={() => setVendo(null)} aoBaixar={baixar} aoAbrir={abrir} aoVerTexto={(a) => { setVendo(null); void analisar(a, "extrair"); }} />
+      <TextoDoArquivo aberto={textoAberto} aoFechar={() => setTextoAberto(null)} />
       <ConfirmarModal
         aberto={!!excluindo}
         titulo={T.estudos.arquivos.excluir}

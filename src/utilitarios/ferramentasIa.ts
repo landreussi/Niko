@@ -16,6 +16,8 @@ import { somar, normalizarTexto } from "./basicos";
 import { acharPorNome, categoriaPelaDescricao } from "./comandos";
 import { T } from "../textos/textos";
 import { lerPomodoro, controlarPomodoro, gerarRelatorioSemanal, textoPomodoro, textoRelatorioSemanal } from "./recursosChat";
+import { listarArquivos, lerConteudo } from "../ponte/arquivos";
+import { extrairTexto, mensagemDeLeitura } from "./leitorDeArquivos";
 
 type Argumentos = Record<string, unknown>;
 
@@ -113,6 +115,48 @@ const AREAS_BANCO: Record<string, AreaBanco> = {
   eventos_conexao: { data: "data", ler: () => useComunicacao.getState().eventosConexao.map((e) => ({ servico: e.servico, tipo: e.tipo, texto: e.texto, data: diaDoMomento(e.data) })) },
   uso_ia: { data: "data", ler: () => useComunicacao.getState().usoIa.map((u) => ({ data: u.data, provedor: u.provedor, modelo: u.modelo, agente: u.agenteId, entrada: u.entrada, saida: u.saida })) },
 };
+
+const LIMITE_LEITURA_IA = 20000;
+
+function materiasPeloNome(nome: string) {
+  const e = useEstudos.getState();
+  const alvo = normalizarTexto(nome);
+  if (!alvo) return e.materias;
+  const exatas = e.materias.filter((m) => normalizarTexto(m.nome) === alvo);
+  return exatas.length ? exatas : e.materias.filter((m) => normalizarTexto(m.nome).includes(alvo) || alvo.includes(normalizarTexto(m.nome)));
+}
+
+async function listarArquivosDasMaterias(a: Argumentos): Promise<ResultadoFerramenta> {
+  const materias = materiasPeloNome(texto(a.materia, 80));
+  if (materias.length === 0) return { tipo: "erro", mensagem: T.chat.recursos.materiaNaoEncontrada };
+  const lista = await Promise.all(
+    materias.slice(0, 30).map(async (m) => ({
+      materia: m.nome,
+      arquivos: (await listarArquivos(m.id).catch(() => [])).slice(0, 60).map((x) => ({ id: x.id, nome: x.nome, tipo: x.extensao, tamanho_kb: Math.round(x.tamanho / 1024), enviado_em: diaDoMomento(x.criadoEm) })),
+    })),
+  );
+  return { tipo: "dados", conteudo: lista.filter((m) => m.arquivos.length > 0 || materias.length === 1) };
+}
+
+async function lerArquivoDaMateria(a: Argumentos): Promise<ResultadoFerramenta> {
+  const pedido = normalizarTexto(texto(a.arquivo, 200));
+  if (!pedido) return { tipo: "erro", mensagem: T.chat.recursos.arquivoNaoEncontrado };
+  for (const m of materiasPeloNome(texto(a.materia, 80))) {
+    const arquivos = await listarArquivos(m.id).catch(() => []);
+    const achado = arquivos.find((x) => x.id === texto(a.arquivo, 80)) ?? arquivos.find((x) => normalizarTexto(x.nome) === pedido) ?? arquivos.find((x) => normalizarTexto(x.nome).includes(pedido));
+    if (!achado) continue;
+    try {
+      const extraido = await extrairTexto(await lerConteudo(m.id, achado.id), achado.nome);
+      return {
+        tipo: "dados",
+        conteudo: { materia: m.nome, arquivo: achado.nome, origem: extraido.origem, paginas: extraido.paginas ?? null, recortado: extraido.texto.length > LIMITE_LEITURA_IA, texto: extraido.texto.slice(0, LIMITE_LEITURA_IA) },
+      };
+    } catch (e) {
+      return { tipo: "erro", mensagem: mensagemDeLeitura(e, achado.nome) ?? T.estudos.arquivos.leitura.leitura(achado.nome) };
+    }
+  }
+  return { tipo: "erro", mensagem: T.chat.recursos.arquivoNaoEncontrado };
+}
 
 const SERVICOS_IA: ServicoId[] = ["stripe", "github", "vercel", "gmail", "supabase", "cloudflare", "resend", "notion", "calcom", "n8n"];
 
@@ -276,6 +320,24 @@ const FERRAMENTAS: FerramentaNiko[] = [
         },
       };
     },
+  },
+  {
+    definicao: {
+      nome: "listar_arquivos",
+      descricao: T.chat.recursos.listarArquivosDescricao,
+      parametros: { type: "object", properties: { materia: { type: "string", description: T.chat.recursos.parametroMateria } } },
+    },
+    executar: () => ({ tipo: "erro", mensagem: T.chat.recursos.soAssincrona }),
+    assincrona: listarArquivosDasMaterias,
+  },
+  {
+    definicao: {
+      nome: "ler_arquivo",
+      descricao: T.chat.recursos.lerArquivoDescricao,
+      parametros: { type: "object", properties: { materia: { type: "string", description: T.chat.recursos.parametroMateria }, arquivo: { type: "string", description: T.chat.recursos.parametroArquivo } }, required: ["arquivo"] },
+    },
+    executar: () => ({ tipo: "erro", mensagem: T.chat.recursos.soAssincrona }),
+    assincrona: lerArquivoDaMateria,
   },
   {
     definicao: {

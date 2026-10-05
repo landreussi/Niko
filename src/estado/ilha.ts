@@ -1,5 +1,6 @@
 import { create } from "zustand";
-import type { AgenteId, ServicoId } from "../tipos";
+import type { AgenteId } from "../tipos";
+import type { MarcaId } from "../marcas/Marca";
 import { useConfig, type AbaIlha } from "./configuracoes";
 
 export type EstadoIlha = "escondida" | "compacta" | "expandida";
@@ -7,7 +8,7 @@ export type EstadoIlha = "escondida" | "compacta" | "expandida";
 export interface Revelacao {
   texto: string;
   tipo: "sucesso" | "info" | "alerta";
-  marca?: ServicoId;
+  marca?: MarcaId;
   agente?: AgenteId;
   aba?: AbaIlha;
 }

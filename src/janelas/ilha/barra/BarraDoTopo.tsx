@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { ChevronUp, LayoutGrid, ListTodo, Palette, SlidersHorizontal } from "lucide-react";
 import type { AbaIlha } from "../../../estado/configuracoes";
@@ -12,6 +12,8 @@ import { controle, type EstadoSistema } from "../../../ponte/ponteLocal";
 import { PainelRapido } from "./PainelRapido";
 import { Bandeja } from "./Bandeja";
 import { Personalizacao } from "./Personalizacao";
+import { criarAlternadorDoIniciar } from "./acoesDaBarra";
+import { useIlha } from "../../../estado/ilha";
 import { BateriaDesenhada, IconeDeVolume, IconeDeWifi, wifiLigado } from "./IconesDeStatus";
 import { variaveisDaBorda } from "../../aparencia";
 import type { AparenciaDeBorda } from "../../../utilitarios/cores";
@@ -40,6 +42,17 @@ function rotuloDoWifi(rede: EstadoSistema) {
 }
 
 function LadoEsquerdo({ pop, alternarPersonalizacao, aoAbrirAba }: { pop: Pop; alternarPersonalizacao: () => void; aoAbrirAba: (aba: AbaIlha) => void }) {
+  const estadoIlha = useIlha((s) => s.estado);
+  const abaIlha = useIlha((s) => s.aba);
+  const iniciar = useRef(criarAlternadorDoIniciar(controle.iniciar, controle.alternarIniciar));
+  const relogioIniciar = useRef<number | undefined>(undefined);
+  const [iniciarOcupado, setIniciarOcupado] = useState(false);
+  useEffect(() => () => window.clearInterval(relogioIniciar.current), []);
+  const prepararIniciar = () => {
+    iniciar.current.preparar();
+    window.clearInterval(relogioIniciar.current);
+    relogioIniciar.current = window.setInterval(() => iniciar.current.preparar(), 100);
+  };
   const tarefas = useRotina((s) => s.tarefas);
   const doDia = tarefasDoDia(tarefas, hojeISO()).filter((t) => t.status !== "cancelada");
   const feitas = doDia.filter((t) => t.status === "concluida").length;
@@ -63,14 +76,24 @@ function LadoEsquerdo({ pop, alternarPersonalizacao, aoAbrirAba }: { pop: Pop; a
         className="ilha-barra-botao"
         aria-label={T.ilha.barra.iniciar}
         title={T.ilha.barra.iniciar}
+        aria-busy={iniciarOcupado}
+        onPointerEnter={prepararIniciar}
+        onPointerLeave={() => {
+          window.clearInterval(relogioIniciar.current);
+          iniciar.current.limpar();
+        }}
+        onFocus={() => iniciar.current.preparar()}
+        onPointerDown={(e) => e.preventDefault()}
         onClick={() => {
+          if (iniciarOcupado) return;
           void tocarSom("blip");
-          void controle.ferramenta("iniciar").catch(() => undefined);
+          setIniciarOcupado(true);
+          void iniciar.current.alternar().catch(() => useIlha.getState().avisarFalha(T.ilha.barra.indisponivel)).finally(() => setIniciarOcupado(false));
         }}
       >
         <LayoutGrid size={14} />
       </button>
-      <button type="button" className="ilha-barra-botao ilha-barra-texto" title={rotuloTarefas} aria-label={rotuloTarefas} onClick={() => aoAbrirAba("hoje")}>
+      <button type="button" className="ilha-barra-botao ilha-barra-texto" title={rotuloTarefas} aria-label={rotuloTarefas} aria-expanded={estadoIlha === "expandida" && abaIlha === "hoje"} data-ativo={estadoIlha === "expandida" && abaIlha === "hoje" || undefined} onClick={() => aoAbrirAba("hoje")}>
         <ListTodo size={13} />
         <span className="numero">{doDia.length ? T.ilha.barra.tarefasHoje(feitas, doDia.length) : "0"}</span>
       </button>
@@ -205,7 +228,7 @@ export function BarraDoTopo({ visivel, escala, larguraDaIlha, aparencia, aoAbrir
                 alternarPersonalizacao={alternarPersonalizacao}
                 aoAbrirAba={(aba) => {
                   setPop(null);
-                  void tocarSom("open");
+                  void tocarSom(useIlha.getState().estado === "expandida" && useIlha.getState().aba === aba ? "close" : "open");
                   aoAbrirAba(aba);
                 }}
               />

@@ -1,0 +1,277 @@
+import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  Bell, Bot, Check, CircleCheck, CircleX, Copy, FilePen, FileText, FolderSearch, Globe, ListChecks, LoaderCircle, MessageSquare, Search, Settings, ShieldAlert, SquareTerminal, X, type LucideIcon,
+} from "lucide-react";
+import { useClaudeCode, type PassoClaude, type SessaoClaude, type PedidoDePermissao } from "../../../estado/claudeCode";
+import { claudeCode, type EstadoDaInstalacao } from "../../../ponte/claudeCode";
+import { useInterface } from "../../../estado/interface";
+import { useIlha } from "../../../estado/ilha";
+import { tocarSom } from "../../../ponte/sons";
+import { Marca } from "../../../marcas/Marca";
+import { TextoRico } from "../../../componentes/TextoRico";
+import { T } from "../../../textos/textos";
+import "./claude.css";
+
+const ESPERA_MS = 110_000;
+const C = T.ilha.claude;
+
+const ICONE_FERRAMENTA: Record<string, LucideIcon> = {
+  Bash: SquareTerminal,
+  PowerShell: SquareTerminal,
+  Read: FileText,
+  Write: FilePen,
+  Edit: FilePen,
+  MultiEdit: FilePen,
+  NotebookEdit: FilePen,
+  Glob: FolderSearch,
+  LS: FolderSearch,
+  Grep: Search,
+  WebSearch: Globe,
+  WebFetch: Globe,
+  TodoWrite: ListChecks,
+  Task: Bot,
+  Agent: Bot,
+};
+
+function iconeDoPasso(p: PassoClaude): LucideIcon {
+  if (p.tipo === "pedido") return MessageSquare;
+  if (p.tipo === "falha" || p.tipo === "erro") return CircleX;
+  if (p.tipo === "fim") return CircleCheck;
+  if (p.tipo === "aviso") return Bell;
+  if (p.tipo === "subagente") return Bot;
+  return (p.ferramenta && ICONE_FERRAMENTA[p.ferramenta]) || SquareTerminal;
+}
+
+function hora(iso: string) {
+  return new Date(iso).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+}
+
+function quandoFoi(iso: string, agora: number) {
+  const min = Math.floor((agora - Date.parse(iso)) / 60000);
+  return min < 1 ? C.agora : C.haMinutos(min);
+}
+
+function usarAgora(intervalo: number) {
+  const [agora, setAgora] = useState(Date.now());
+  useEffect(() => {
+    const t = window.setInterval(() => setAgora(Date.now()), intervalo);
+    return () => window.clearInterval(t);
+  }, [intervalo]);
+  return agora;
+}
+
+function Permissao({ pedido, fila }: { pedido: PedidoDePermissao; fila: number }) {
+  const agora = usarAgora(1000);
+  const [enviando, setEnviando] = useState(false);
+  const restante = Math.max(0, Math.ceil((Date.parse(pedido.recebidoEm) + ESPERA_MS - agora) / 1000));
+  const decidir = (decisao: "allow" | "deny") => {
+    if (enviando) return;
+    setEnviando(true);
+    claudeCode
+      .decidir(pedido.pedidoId, decisao)
+      .then(() => {
+        useClaudeCode.getState().removerPedido(pedido.pedidoId);
+        void tocarSom(decisao === "allow" ? "approve" : "slap", "avisos");
+      })
+      .catch(() => {
+        useClaudeCode.getState().removerPedido(pedido.pedidoId);
+        useIlha.getState().revelar({ texto: C.decisaoFalhou, tipo: "alerta", marca: "claudecode", aba: "claude" }, 5000);
+      })
+      .finally(() => setEnviando(false));
+  };
+  return (
+    <div className="vsc-permissao" role="alertdialog" aria-label={C.querPermissao(pedido.ferramenta)}>
+      <div className="vsc-permissao-topo">
+        <ShieldAlert size={15} />
+        <span>{C.querPermissao(pedido.ferramenta)}</span>
+        <span className="vsc-chip">{pedido.projeto}</span>
+      </div>
+      <pre className="vsc-codigo">{pedido.entrada}</pre>
+      <div className="vsc-permissao-rodape">
+        <span className="vsc-dim">
+          {C.expiraEm(restante)}
+          {fila > 1 ? ` . ${C.maisPedidos(fila - 1)}` : ""}
+        </span>
+        <span className="vsc-barra-tempo" style={{ ["--resto" as string]: `${(restante / (ESPERA_MS / 1000)) * 100}%` }} />
+        <button type="button" className="vsc-botao" disabled={enviando} onClick={() => decidir("deny")}>
+          {C.negar}
+        </button>
+        <button type="button" className="vsc-botao vsc-botao-primario" disabled={enviando} onClick={() => decidir("allow")}>
+          {enviando ? <LoaderCircle size={13} className="girando" /> : <Check size={13} />}
+          {C.permitir}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function Atividade({ sessao }: { sessao: SessaoClaude }) {
+  const fim = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    fim.current?.scrollIntoView({ block: "end" });
+  }, [sessao.passos.length]);
+  return (
+    <div className="vsc-atividade" role="log">
+      {sessao.passos.map((p) => {
+        const Icone = iconeDoPasso(p);
+        return (
+          <div key={p.id} className="vsc-linha" data-tipo={p.tipo}>
+            <span className="vsc-hora">{hora(p.hora)}</span>
+            <Icone size={13} className="vsc-icone" />
+            <span className="vsc-rotulo">{p.rotulo}</span>
+            {p.detalhe && <span className="vsc-detalhe">{p.detalhe}</span>}
+          </div>
+        );
+      })}
+      {(sessao.estado === "trabalhando" || sessao.estado === "pensando") && (
+        <div className="vsc-linha vsc-cursor">
+          <span className="vsc-hora" />
+          <LoaderCircle size={13} className="vsc-icone girando" />
+          <span className="vsc-rotulo">{C.estados[sessao.estado]}</span>
+        </div>
+      )}
+      <div ref={fim} />
+    </div>
+  );
+}
+
+function Resposta({ sessao }: { sessao: SessaoClaude }) {
+  const [copiado, setCopiado] = useState(false);
+  return (
+    <div className="vsc-editor">
+      <div className="vsc-migalhas">
+        <span>{sessao.projeto}</span>
+        <span className="vsc-dim">›</span>
+        <span>{C.resposta}</span>
+        <button
+          type="button"
+          className="vsc-icone-botao"
+          aria-label={C.copiarResposta}
+          title={C.copiarResposta}
+          onClick={() => {
+            void navigator.clipboard.writeText(sessao.resposta ?? "").then(() => {
+              setCopiado(true);
+              window.setTimeout(() => setCopiado(false), 1400);
+            });
+          }}
+        >
+          {copiado ? <Check size={13} /> : <Copy size={13} />}
+        </button>
+      </div>
+      {sessao.pedido && (
+        <div className="vsc-pedido">
+          <span className="vsc-dim">{C.pedido}</span>
+          <span>{sessao.pedido}</span>
+        </div>
+      )}
+      <div className="vsc-markdown privado">
+        <TextoRico texto={sessao.resposta ?? ""} />
+      </div>
+    </div>
+  );
+}
+
+function SemSessoes({ instalacao }: { instalacao: EstadoDaInstalacao | null }) {
+  const irPara = useInterface((s) => s.irPara);
+  const conectado = instalacao?.instalado;
+  return (
+    <div className="vsc-vazio">
+      <Marca marca="claudecode" tamanho={28} />
+      <b>{conectado ? C.semSessoes : C.naoConectado}</b>
+      <span className="vsc-dim">{conectado ? C.semSessoesDica : C.naoConectadoDica}</span>
+      {!conectado && (
+        <button type="button" className="vsc-botao vsc-botao-primario" onClick={() => irPara("configuracoes", { secao: "claude" })}>
+          {C.conectar}
+        </button>
+      )}
+    </div>
+  );
+}
+
+export function VisaoClaude() {
+  const sessoes = useClaudeCode((s) => s.sessoes);
+  const ordem = useClaudeCode((s) => s.ordem);
+  const pedidos = useClaudeCode((s) => s.pedidos);
+  const focada = useClaudeCode((s) => s.focada);
+  const focar = useClaudeCode((s) => s.focar);
+  const fechar = useClaudeCode((s) => s.fechar);
+  const irPara = useInterface((s) => s.irPara);
+  const agora = usarAgora(30000);
+  const [instalacao, setInstalacao] = useState<EstadoDaInstalacao | null>(null);
+  const sessao = sessoes[focada ?? ""] ?? sessoes[ordem[0]];
+  const pedido = pedidos.find((p) => p.sessao === sessao?.id) ?? pedidos[0];
+  const [painel, setPainel] = useState<"resposta" | "atividade">("atividade");
+
+  useEffect(() => {
+    void claudeCode.instalacao().then(setInstalacao).catch(() => setInstalacao(null));
+  }, []);
+
+  useEffect(() => {
+    setPainel(sessao?.estado === "terminou" && sessao.resposta ? "resposta" : "atividade");
+  }, [sessao?.id, sessao?.estado, sessao?.resposta]);
+
+  const ultimo = useMemo(() => [...(sessao?.passos ?? [])].reverse().find((p) => p.tipo === "ferramenta"), [sessao?.passos]);
+
+  return (
+    <div className="vsc">
+      <div className="vsc-abas" role="tablist">
+        {ordem.map((id) => {
+          const s = sessoes[id];
+          if (!s) return null;
+          const temPedido = pedidos.some((p) => p.sessao === id);
+          return (
+            <div key={id} className="vsc-aba" data-ativa={s.id === sessao?.id || undefined} data-estado={temPedido ? "aprovacao" : s.estado}>
+              <button type="button" role="tab" aria-selected={s.id === sessao?.id} className="vsc-aba-botao" onClick={() => focar(id)} title={s.cwd}>
+                <Marca marca="claudecode" tamanho={12} />
+                <span className="vsc-aba-nome">{s.projeto}</span>
+                <span className="vsc-ponto" />
+              </button>
+              <button type="button" className="vsc-aba-fechar" aria-label={C.fechar} title={C.fechar} onClick={() => fechar(id)}>
+                <X size={11} />
+              </button>
+            </div>
+          );
+        })}
+        <button type="button" className="vsc-icone-botao vsc-configurar" aria-label={C.configurar} title={C.configurar} onClick={() => irPara("configuracoes", { secao: "claude" })}>
+          <Settings size={13} />
+        </button>
+      </div>
+
+      <div className="vsc-corpo">
+        {!sessao ? (
+          <SemSessoes instalacao={instalacao} />
+        ) : pedido ? (
+          <Permissao pedido={pedido} fila={pedidos.length} />
+        ) : (
+          <>
+            <div className="vsc-paineis" role="tablist">
+              {sessao.resposta && (
+                <button type="button" role="tab" aria-selected={painel === "resposta"} className="vsc-painel" onClick={() => setPainel("resposta")}>
+                  {C.resposta}
+                </button>
+              )}
+              <button type="button" role="tab" aria-selected={painel === "atividade"} className="vsc-painel" onClick={() => setPainel("atividade")}>
+                {C.atividade}
+              </button>
+            </div>
+            {painel === "resposta" && sessao.resposta ? <Resposta sessao={sessao} /> : <Atividade sessao={sessao} />}
+          </>
+        )}
+      </div>
+
+      {sessao && (
+        <div className="vsc-status" data-estado={pedido ? "aprovacao" : sessao.estado}>
+          <span className="vsc-status-item">
+            {sessao.estado === "trabalhando" || sessao.estado === "pensando" ? <LoaderCircle size={12} className="girando" /> : pedido ? <ShieldAlert size={12} /> : sessao.estado === "erro" ? <CircleX size={12} /> : <CircleCheck size={12} />}
+            {pedido ? C.estados.aprovacao : C.estados[sessao.estado]}
+          </span>
+          {ultimo && sessao.estado === "trabalhando" && <span className="vsc-status-item vsc-status-passo">{ultimo.rotulo} {ultimo.detalhe}</span>}
+          <span className="vsc-status-espaco" />
+          {sessao.modo && <span className="vsc-status-item">{C.modos[sessao.modo] ?? sessao.modo}</span>}
+          {sessao.modelo && <span className="vsc-status-item">{sessao.modelo}</span>}
+          <span className="vsc-status-item">{quandoFoi(sessao.atualizadaEm, agora)}</span>
+        </div>
+      )}
+    </div>
+  );
+}

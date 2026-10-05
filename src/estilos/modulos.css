@@ -3964,3 +3964,103 @@
 }
 .chat-recursos { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
 .chat-recursos-aviso { flex-basis: 100%; font-size: 11px; }
+
+.arquivo-bloco {
+  border-bottom: 1px solid var(--borda);
+}
+
+.arquivo-bloco:last-child {
+  border-bottom: 0;
+}
+
+.arquivo-bloco .arquivo-item {
+  border-bottom: 0;
+}
+
+.arquivo-acoes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--esp-2);
+  padding: 0 0 var(--esp-3) 44px;
+}
+
+.arquivo-lendo {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  font-size: 12px;
+}
+.claude-config-topo {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.claude-config-marca {
+  width: 44px;
+  height: 44px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  background: #1e1e1e;
+}
+
+.claude-config-estado {
+  margin-left: auto;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  background: var(--superficie-2);
+  color: var(--texto-2);
+}
+
+.claude-config-estado[data-tipo="ok"] {
+  color: var(--sucesso);
+  background: color-mix(in srgb, var(--sucesso) 12%, transparent);
+}
+
+.claude-config-estado[data-tipo="alerta"] {
+  color: #d9922b;
+  background: color-mix(in srgb, #d9922b 12%, transparent);
+}
+
+.claude-config-lista {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: var(--texto-2);
+  line-height: 1.5;
+}
+
+.claude-config-caminho {
+  font-size: 12px;
+  word-break: break-all;
+}
+
+.claude-config-diff {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.claude-config-codigo {
+  margin: 0;
+  max-height: 46vh;
+  overflow: auto;
+  padding: 10px;
+  border-radius: 8px;
+  background: #1e1e1e;
+  color: #d4d4d4;
+  font-family: "Cascadia Code", Consolas, "IBM Plex Mono", monospace;
+  font-size: 11.5px;
+  line-height: 1.5;
+  white-space: pre;
+}

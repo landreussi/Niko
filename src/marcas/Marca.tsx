@@ -1,6 +1,6 @@
 import {
   siStripe, siGithub, siVercel, siResend, siNotion, siCaldotcom, siN8n, siAnthropic, siOllama,
-  siNvidia, siOpencode, siQwen, siGooglegemini, siOpenrouter, siMistralai, siHuggingface, siDeepseek, siLmstudio, siGmail, siSupabase, siCloudflare,
+  siNvidia, siOpencode, siQwen, siGooglegemini, siOpenrouter, siMistralai, siHuggingface, siDeepseek, siLmstudio, siGmail, siSupabase, siCloudflare, siClaudecode,
 } from "simple-icons";
 import type { ServicoId } from "../tipos";
 
@@ -10,7 +10,7 @@ interface IconeMarca {
   hex: string;
 }
 
-export type MarcaId = ServicoId | "anthropic" | "ollama" | "nvidia" | "opencode" | "qwen" | "gemini" | "openrouter" | "mistral" | "huggingface" | "deepseek" | "lmstudio";
+export type MarcaId = ServicoId | "anthropic" | "ollama" | "nvidia" | "opencode" | "qwen" | "gemini" | "openrouter" | "mistral" | "huggingface" | "deepseek" | "lmstudio" | "claudecode";
 
 export const MARCAS: Record<MarcaId, IconeMarca> = {
   stripe: siStripe,
@@ -34,6 +34,7 @@ export const MARCAS: Record<MarcaId, IconeMarca> = {
   huggingface: siHuggingface,
   deepseek: siDeepseek,
   lmstudio: siLmstudio,
+  claudecode: siClaudecode,
 };
 
 function escura(hex: string): boolean {

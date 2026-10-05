@@ -69,6 +69,29 @@ function Perfis {
   return $nomes
 }
 
+function AparelhosBluetooth {
+  Add-Type -AssemblyName System.Runtime.WindowsRuntime
+  [Windows.Devices.Enumeration.DeviceInformation, Windows.Devices.Enumeration, ContentType = WindowsRuntime] | Out-Null
+  [Windows.Devices.Enumeration.DeviceInformationKind, Windows.Devices.Enumeration, ContentType = WindowsRuntime] | Out-Null
+  [Windows.Devices.Enumeration.DeviceInformationCollection, Windows.Devices.Enumeration, ContentType = WindowsRuntime] | Out-Null
+  [Windows.Devices.Bluetooth.BluetoothDevice, Windows.Devices.Bluetooth, ContentType = WindowsRuntime] | Out-Null
+  [Windows.Devices.Bluetooth.BluetoothLEDevice, Windows.Devices.Bluetooth, ContentType = WindowsRuntime] | Out-Null
+  $seletores = @([Windows.Devices.Bluetooth.BluetoothDevice]::GetDeviceSelectorFromPairingState($true), [Windows.Devices.Bluetooth.BluetoothLEDevice]::GetDeviceSelectorFromPairingState($true))
+  $lista = @()
+  foreach ($seletor in $seletores) {
+    $operacao = [Windows.Devices.Enumeration.DeviceInformation]::FindAllAsync($seletor, [string[]]@('System.Devices.Aep.IsConnected'), [Windows.Devices.Enumeration.DeviceInformationKind]::AssociationEndpoint)
+    $aparelhos = Esperar $operacao ([Windows.Devices.Enumeration.DeviceInformationCollection])
+    foreach ($aparelho in $aparelhos) {
+      $conectado = $null
+      foreach ($propriedade in $aparelho.Properties) {
+        if ($propriedade.Key -eq 'System.Devices.Aep.IsConnected' -and $null -ne $propriedade.Value) { $conectado = [bool]$propriedade.Value }
+      }
+      $lista += @{ id = $aparelho.Id; nome = $aparelho.Name; ativo = ($conectado -eq $true); conectado = $conectado }
+    }
+  }
+  return @($lista | Sort-Object -Property @{ Expression = 'ativo'; Descending = $true }, nome)
+}
+
 switch ($entrada.acao) {
   'tipo' {
     $b = Get-CimInstance Win32_Battery -ErrorAction SilentlyContinue
@@ -140,7 +163,7 @@ switch ($entrada.acao) {
     @{ ok = $true; radios = EstadoRadios } | ConvertTo-Json -Compress -Depth 4
   }
   'bluetooth' {
-    $lista = @(Get-PnpDevice -Class Bluetooth -ErrorAction SilentlyContinue | Where-Object { $_.InstanceId -match '^BTH(ENUM|LE)\\DEV_' -and $_.FriendlyName } | ForEach-Object { @{ id = $_.InstanceId; nome = $_.FriendlyName; ativo = ($_.Status -eq 'OK') } })
+    $lista = @(AparelhosBluetooth)
     @{ aparelhos = $lista } | ConvertTo-Json -Compress -Depth 4
   }
   'computador' {
@@ -190,7 +213,7 @@ switch ($entrada.acao) {
 }
 `;
 
-const ARQUIVO = join(tmpdir(), "niko-sistema-v5.ps1");
+const ARQUIVO = join(tmpdir(), "niko-sistema-v7.ps1");
 let tipoEmCache: Promise<{ notebook: boolean; bateria: boolean }> | null = null;
 
 function caminhoScript() {
