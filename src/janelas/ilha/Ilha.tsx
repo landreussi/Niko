@@ -233,7 +233,7 @@ export function Ilha() {
     };
   }, [estadoEfetivo, recolher]);
 
-  const claudeIndisponivel = !cfg.ativa || frente.telaCheia || !cfg.blocos.claude;
+  const claudeIndisponivel = !cfg.ativa || !cfg.blocos.claude;
   useEffect(() => {
     if (claudeIndisponivel && pedidosClaude.length > 0) devolverPendentesAoTerminal();
   }, [claudeIndisponivel, pedidosClaude.length]);

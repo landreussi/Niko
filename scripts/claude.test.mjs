@@ -263,3 +263,19 @@ test("evento repetido numa reconexão não duplica a atividade", () => {
   assert.equal(sessao.ferramentasUsadas, 1);
   assert.equal(sessao.projeto, "app");
 });
+
+test("pedido que sai da ilha sem decisão deixa o motivo na atividade", () => {
+  const agora = new Date().toISOString();
+  const { aplicar } = useClaudeCode.getState();
+  aplicar({ id: "pedido-1", recebidoEm: agora, evento: "PermissionRequest", sessao: "s6", cwd: "C:\\projetos\\app", pedidoId: "p-6", dados: { tool_name: "Bash", tool_input: { command: "npm test" } } });
+  assert.equal(useClaudeCode.getState().pedidos.filter((p) => p.pedidoId === "p-6").length, 1);
+  aplicar({ id: "fim-1", recebidoEm: agora, evento: "NikoPedidoEncerrado", sessao: "s6", cwd: "", pedidoId: "p-6", dados: { motivo: "expirou", decisao: null } });
+  const estado = useClaudeCode.getState();
+  assert.equal(estado.pedidos.filter((p) => p.pedidoId === "p-6").length, 0);
+  assert.equal(estado.sessoes.s6.estado, "trabalhando");
+  assert.match(estado.sessoes.s6.passos.at(-1).rotulo, /110 segundos/);
+  aplicar({ id: "pedido-2", recebidoEm: agora, evento: "PermissionRequest", sessao: "s6", cwd: "C:\\projetos\\app", pedidoId: "p-7", dados: { tool_name: "Bash", tool_input: { command: "ls" } } });
+  const passosAntes = useClaudeCode.getState().sessoes.s6.passos.length;
+  aplicar({ id: "fim-2", recebidoEm: agora, evento: "NikoPedidoEncerrado", sessao: "s6", cwd: "", pedidoId: "p-7", dados: { motivo: "decidido", decisao: "allow" } });
+  assert.equal(useClaudeCode.getState().sessoes.s6.passos.length, passosAntes);
+});

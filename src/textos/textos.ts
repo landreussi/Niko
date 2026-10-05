@@ -350,7 +350,11 @@ export const T = {
       expiraEm: (s: number) => `O terminal assume em ${s}s`,
       maisPedidos: (n: number) => `Mais ${n} pedido${n === 1 ? "" : "s"} na fila`,
       decisaoFalhou: "O pedido já expirou. Responda no terminal.",
-      falhaFerramenta: "Falhou",
+      pedidoEncerrado: {
+        expirou: "O pedido de permissão passou de 110 segundos e foi para o terminal.",
+        cancelado: "O pedido de permissão foi respondido ou cancelado no terminal.",
+        terminal: "O pedido de permissão foi para o terminal.",
+      },      falhaFerramenta: "Falhou",
       subagenteComecou: (tipo: string) => `Agente ${tipo} começou`,
       subagenteTerminou: (tipo: string) => `Agente ${tipo} terminou`,
       semSessoes: "Nenhuma sessão ainda.",

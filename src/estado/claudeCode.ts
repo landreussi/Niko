@@ -44,6 +44,8 @@ export interface PedidoDePermissao {
 }
 
 const MAXIMO_PASSOS = 80;
+
+export type MotivoDeEncerramento = keyof typeof T.ilha.claude.pedidoEncerrado;
 const MAXIMO_SESSOES = 8;
 const CAMPOS_ALVO = ["command", "file_path", "path", "url", "query", "pattern", "prompt", "description"] as const;
 
@@ -147,10 +149,15 @@ export const useClaudeCode = create<EstadoClaude>((set, get) => ({
     if (e.evento === "NikoConectado" || jaFoiAplicado(e.id)) return;
     if (e.evento === "NikoPedidoEncerrado") {
       if (e.pedidoId) get().removerPedido(e.pedidoId);
+      const motivo = texto(e.dados.motivo);
+      const aviso = Object.hasOwn(T.ilha.claude.pedidoEncerrado, motivo) ? T.ilha.claude.pedidoEncerrado[motivo as MotivoDeEncerramento] : null;
       set((s) => {
         const sessao = s.sessoes[e.sessao];
-        if (!sessao || sessao.estado !== "aprovacao" || s.pedidos.some((p) => p.sessao === e.sessao)) return {};
-        return { sessoes: { ...s.sessoes, [e.sessao]: { ...sessao, estado: "trabalhando" } } };
+        if (!sessao) return {};
+        const passos = aviso ? [...sessao.passos, novoPasso(e, "aviso", aviso)].slice(-MAXIMO_PASSOS) : sessao.passos;
+        const aindaEsperando = s.pedidos.some((p) => p.sessao === e.sessao);
+        const estado = sessao.estado === "aprovacao" && !aindaEsperando ? "trabalhando" : sessao.estado;
+        return { sessoes: { ...s.sessoes, [e.sessao]: { ...sessao, passos, estado } } };
       });
       return;
     }

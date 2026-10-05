@@ -73,6 +73,12 @@ function reagir(e: EventoClaude) {
       void notificarSeEscondida(T.ilha.claude.notificacao.erro(projeto));
       ilha.revelar({ texto: T.ilha.claude.erroAviso(projeto), tipo: "alerta", marca: "claudecode", aba: "claude" }, 6000);
       return;
+    case "NikoPedidoEncerrado": {
+      const motivo = e.dados.motivo;
+      if (!abaLigada() || (motivo !== "expirou" && motivo !== "cancelado")) return;
+      ilha.revelar({ texto: T.ilha.claude.pedidoEncerrado[motivo], tipo: "alerta", marca: "claudecode", aba: "claude" }, 6000);
+      return;
+    }
     case "Notification":
       if (!abaLigada()) return;
       if (sessao?.estado === "esperando") {
