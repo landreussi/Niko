@@ -11,6 +11,7 @@ import { Marca } from "../../../marcas/Marca";
 import { TextoRico } from "../../../componentes/TextoRico";
 import { T } from "../../../textos/textos";
 import "./claude.css";
+import { EtapasAnimadas } from "../animacoes/EtapasAnimadas";
 
 const ESPERA_MS = 110_000;
 const C = T.ilha.claude;
@@ -64,14 +65,14 @@ function Permissao({ pedido, fila }: { pedido: PedidoDePermissao; fila: number }
   const agora = usarAgora(1000);
   const [enviando, setEnviando] = useState(false);
   const restante = Math.max(0, Math.ceil((Date.parse(pedido.recebidoEm) + ESPERA_MS - agora) / 1000));
-  const decidir = (decisao: "allow" | "deny") => {
+  const decidir = (decisao: "allow" | "deny" | "terminal") => {
     if (enviando) return;
     setEnviando(true);
     claudeCode
       .decidir(pedido.pedidoId, decisao)
       .then(() => {
         useClaudeCode.getState().removerPedido(pedido.pedidoId);
-        void tocarSom(decisao === "allow" ? "approve" : "slap", "avisos");
+        void tocarSom(decisao === "allow" ? "approve" : decisao === "deny" ? "slap" : "close", "avisos");
       })
       .catch(() => {
         useClaudeCode.getState().removerPedido(pedido.pedidoId);
@@ -93,6 +94,9 @@ function Permissao({ pedido, fila }: { pedido: PedidoDePermissao; fila: number }
           {fila > 1 ? ` . ${C.maisPedidos(fila - 1)}` : ""}
         </span>
         <span className="vsc-barra-tempo" style={{ ["--resto" as string]: `${(restante / (ESPERA_MS / 1000)) * 100}%` }} />
+        <button type="button" className="vsc-botao vsc-botao-link" disabled={enviando} onClick={() => decidir("terminal")}>
+          {C.noTerminal}
+        </button>
         <button type="button" className="vsc-botao" disabled={enviando} onClick={() => decidir("deny")}>
           {C.negar}
         </button>
@@ -106,12 +110,22 @@ function Permissao({ pedido, fila }: { pedido: PedidoDePermissao; fila: number }
 }
 
 function Atividade({ sessao }: { sessao: SessaoClaude }) {
-  const fim = useRef<HTMLDivElement>(null);
+  const lista = useRef<HTMLDivElement>(null);
+  const noFim = useRef(true);
   useEffect(() => {
-    fim.current?.scrollIntoView({ block: "end" });
-  }, [sessao.passos.length]);
+    const el = lista.current;
+    if (el && noFim.current) el.scrollTop = el.scrollHeight;
+  }, [sessao.passos.length, sessao.id]);
   return (
-    <div className="vsc-atividade" role="log">
+    <div
+      ref={lista}
+      className="vsc-atividade"
+      role="log"
+      onScroll={(e) => {
+        const el = e.currentTarget;
+        noFim.current = el.scrollHeight - el.scrollTop - el.clientHeight < 24;
+      }}
+    >
       {sessao.passos.map((p) => {
         const Icone = iconeDoPasso(p);
         return (
@@ -130,7 +144,6 @@ function Atividade({ sessao }: { sessao: SessaoClaude }) {
           <span className="vsc-rotulo">{C.estados[sessao.estado]}</span>
         </div>
       )}
-      <div ref={fim} />
     </div>
   );
 }
@@ -254,6 +267,7 @@ export function VisaoClaude() {
                 {C.atividade}
               </button>
             </div>
+            {painel === "atividade" && <EtapasAnimadas contexto={sessao.id} etapas={sessao.passos.filter((p) => p.tipo === "ferramenta" || p.tipo === "fim" || p.tipo === "erro").map((p) => ({ id: p.id, texto: `${p.rotulo} ${p.detalhe ?? ""}`.trim() }))} />}
             {painel === "resposta" && sessao.resposta ? <Resposta sessao={sessao} /> : <Atividade sessao={sessao} />}
           </>
         )}

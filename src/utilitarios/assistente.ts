@@ -25,6 +25,7 @@ export interface RespostaAssistente {
   trocas: string[];
   falha: string | null;
   parado: boolean;
+  cortada?: "cortado" | "so_raciocinio";
 }
 
 export function modeloDoProvedor(p: Provedor): string {
@@ -143,6 +144,7 @@ export async function perguntarAssistente(opcoes: {
           if (ev.tipo === "texto" && ev.texto) {
             textoPasso += ev.texto;
           } else if (ev.tipo === "ferramenta" && ev.chamada) chamadas.push(ev.chamada);
+          else if (ev.tipo === "aviso" && (ev.texto === "cortado" || ev.texto === "so_raciocinio")) resposta.cortada = ev.texto;
           else if (ev.tipo === "aviso" && ev.texto === "sem_ferramentas") {
             semFerramentas.add(chave);
             modeloSemFerramentas = true;
@@ -241,8 +243,9 @@ export async function perguntarAssistente(opcoes: {
       ...(resposta.confirmacoes.length ? [T.chat.ferramentas.confira(resposta.confirmacoes.length)] : []),
       ...(errosFerramenta.length ? [T.chat.confianca.falhaFerramenta([...new Set(errosFerramenta)].join("; "))] : []),
     ].join("\n\n");
-  } else if (afirmaExecucao(resposta.texto)) resposta.texto = T.chat.confianca.semExecucao;
+  } else if (!opcoes.apenasAnalise && afirmaExecucao(resposta.texto)) resposta.texto = T.chat.confianca.semExecucao;
   if (modeloSemFerramentas && !opcoes.apenasAnalise) resposta.texto = [resposta.texto, T.chat.confianca.semFerramentas].filter(Boolean).join("\n\n");
+  if (resposta.cortada && resposta.texto.trim()) resposta.texto = `${resposta.texto}\n\n${T.chat.confianca.respostaCortada}`;
   opcoes.aoTexto?.(resposta.texto);
   return resposta;
 }

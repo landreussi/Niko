@@ -16,6 +16,7 @@ export interface EstadoDaInstalacao {
   instalado: boolean;
   parcial: boolean;
   eventos: string[];
+  desatualizado: boolean;
   conectado: boolean;
 }
 
@@ -39,7 +40,7 @@ export const claudeCode = {
   previa: (acao: "instalar" | "remover") => pedir<PreviaDaInstalacao>(`previa?acao=${acao}`),
   instalar: () => pedir<{ caminho: string; copia: string | null }>("instalar", { method: "POST", body: JSON.stringify({ confirmacao: "INSTALAR" }) }),
   remover: () => pedir<{ caminho: string; copia: string | null }>("remover", { method: "POST", body: JSON.stringify({ confirmacao: "REMOVER" }) }),
-  decidir: (pedidoId: string, decisao: "allow" | "deny") => pedir<{ ok: boolean }>("decisao", { method: "POST", body: JSON.stringify({ pedidoId, decisao }) }),
+  decidir: (pedidoId: string, decisao: "allow" | "deny" | "terminal") => pedir<{ ok: boolean }>("decisao", { method: "POST", body: JSON.stringify({ pedidoId, decisao }) }),
 };
 
 export function ouvirClaudeCode(aoReceber: (e: EventoClaude) => void, aoMudarConexao: (ligado: boolean) => void): () => void {

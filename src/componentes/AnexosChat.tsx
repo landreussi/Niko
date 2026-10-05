@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion, useMotionValue, useSpring, useTransform, useAnimate, useVelocity } from "motion/react";
-import { Check, FileCode2, FileText, Image as ImagemIcone, X } from "lucide-react";
+import { Check, FileCode2, FileSpreadsheet, FileText, Image as ImagemIcone, Presentation, X } from "lucide-react";
 import { Personagem } from "../personagens/Personagem";
 import { lerAnexo, tipoDoAnexo, formatarTamanho, MAXIMO_ANEXOS, type AnexoPronto, type FalhaAnexo } from "../utilitarios/anexos";
 import { gerarId } from "../utilitarios/basicos";
@@ -8,6 +8,7 @@ import { mensagemDeLeitura } from "../utilitarios/leitorDeArquivos";
 import { tocarSom } from "../ponte/sons";
 import { T } from "../textos/textos";
 import type { AgenteId } from "../tipos";
+import { TrajetoDoArquivo } from "../janelas/ilha/animacoes/TrajetoDoArquivo";
 
 export interface AnexoEmAndamento {
   id: string;
@@ -152,7 +153,8 @@ export function ZonaDeSoltar({ ativo, agente, compacta, texto = T.chat.anexos.so
       const distancia = Math.hypot(e.clientX - (r.left + meio + alvoX), e.clientY - (r.top + r.height * 0.42));
       setPerto((p) => (p ? distancia < 140 : distancia < 90));
     };
-    const soltou = () => {
+    const soltou = (evento: DragEvent) => {
+      if (!evento.dataTransfer?.files.length || !caixa.current?.parentElement?.contains(evento.target as Node)) return;
       setEngoliu(true);
       if (escopo.current) void animar(escopo.current, { scaleY: [1, 0.86, 1.12, 0.95, 1], scaleX: [1, 1.14, 0.94, 1.03, 1] }, { duration: 0.5, ease: "easeOut" });
     };
@@ -185,7 +187,7 @@ export function ZonaDeSoltar({ ativo, agente, compacta, texto = T.chat.anexos.so
           <span className="zona-soltar-brilho" />
           <motion.div className="zona-soltar-boneco" style={{ x, rotate: inclinacao }}>
             <div ref={escopo}>
-              <Personagem agente={agente} estado={engoliu ? "sucesso" : perto ? "ouvindo" : "pensando"} tamanho={compacta ? 54 : 84} interativo={false} halo={false} />
+              <Personagem agente={agente} estado={engoliu ? "pensando" : perto ? "ouvindo" : "pensando"} tamanho={compacta ? 54 : 84} interativo={false} halo={false} />
             </div>
           </motion.div>
           <div className="zona-soltar-texto" style={{ opacity: perto ? 0.35 : 1 }}>
@@ -194,17 +196,37 @@ export function ZonaDeSoltar({ ativo, agente, compacta, texto = T.chat.anexos.so
               {tipos.map((t) => <span key={t}>{t}</span>)}
             </span>
           </div>
+          {compacta && <TrajetoDoArquivo zona={caixa} />}
         </motion.div>
       )}
     </AnimatePresence>
   );
 }
 
+type TipoVisual = "pdf" | "word" | "slides" | "planilha" | "imagem" | "texto" | "codigo";
+
+function tipoVisual(nome: string, imagem: boolean): TipoVisual {
+  if (imagem) return "imagem";
+  const e = nome.toLowerCase().split(".").pop() ?? "";
+  if (e === "pdf") return "pdf";
+  if (["docx", "odt", "rtf"].includes(e)) return "word";
+  if (["pptx", "odp"].includes(e)) return "slides";
+  if (["xlsx", "ods", "csv", "tsv"].includes(e)) return "planilha";
+  if (["md", "txt", "log", "json"].includes(e)) return "texto";
+  return "codigo";
+}
+
+function IconeDoTipo({ tipo }: { tipo: TipoVisual }) {
+  if (tipo === "imagem") return <ImagemIcone size={18} />;
+  if (tipo === "slides") return <Presentation size={18} />;
+  if (tipo === "planilha") return <FileSpreadsheet size={18} />;
+  if (tipo === "codigo") return <FileCode2 size={18} />;
+  return <FileText size={18} />;
+}
+
 function IconeAnexo({ a }: { a: AnexoEmAndamento }) {
   if (a.pronto?.anexo.imagem) return <img src={a.pronto.anexo.imagem} alt="" className="anexo-miniatura" />;
-  if (a.tipo === "imagem") return <ImagemIcone size={15} />;
-  if (/\.(md|txt|csv|json|log)$/i.test(a.nome)) return <FileText size={15} />;
-  return <FileCode2 size={15} />;
+  return <IconeDoTipo tipo={tipoVisual(a.nome, a.tipo === "imagem")} />;
 }
 
 export function ChipsAnexos({ lista, agente, aoRemover }: { lista: AnexoEmAndamento[]; agente: AgenteId; aoRemover: (id: string) => void }) {
@@ -222,11 +244,11 @@ export function ChipsAnexos({ lista, agente, aoRemover }: { lista: AnexoEmAndame
             animate={{ opacity: 1, y: 0, scale: 1, transition: { type: "spring", visualDuration: 0.32, bounce: 0.35 } }}
             exit={{ opacity: 0, scale: 0.85, transition: { duration: 0.15 } }}
           >
-            <span className="anexo-icone"><IconeAnexo a={a} /></span>
+            <span className="anexo-icone" data-tipo={tipoVisual(a.nome, a.tipo === "imagem")}><IconeAnexo a={a} /></span>
             <span className="anexo-info">
               <span className="anexo-nome cortar">{a.nome}</span>
               {a.pronto ? (
-                <span className="anexo-sub">{formatarTamanho(a.tamanho)}</span>
+                <span className="anexo-sub">{T.chat.anexos.tiposVisuais[tipoVisual(a.nome, a.tipo === "imagem")]} . {formatarTamanho(a.tamanho)}</span>
               ) : (
                 <span className="anexo-barra">
                   <motion.span className="anexo-barra-cheia" style={{ width: `${Math.round(a.progresso * 100)}%` }} />
@@ -259,10 +281,10 @@ export function AnexosDaMensagem({ anexos }: { anexos?: { nome: string; tamanho:
     <div className="anexos-mensagem">
       {anexos.map((a) => (
         <span key={a.nome} className="anexo-chip anexo-chip-enviado" title={a.nome}>
-          <span className="anexo-icone">{a.imagem ? <img src={a.imagem} alt="" className="anexo-miniatura" /> : a.texto != null ? <FileCode2 size={15} /> : <FileText size={15} />}</span>
+          <span className="anexo-icone" data-tipo={tipoVisual(a.nome, Boolean(a.imagem))}>{a.imagem ? <img src={a.imagem} alt="" className="anexo-miniatura" /> : <IconeDoTipo tipo={tipoVisual(a.nome, false)} />}</span>
           <span className="anexo-info">
             <span className="anexo-nome cortar">{a.nome}</span>
-            <span className="anexo-sub">{formatarTamanho(a.tamanho)}</span>
+            <span className="anexo-sub">{T.chat.anexos.tiposVisuais[tipoVisual(a.nome, Boolean(a.imagem))]} . {formatarTamanho(a.tamanho)}</span>
           </span>
         </span>
       ))}

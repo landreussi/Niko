@@ -1,6 +1,6 @@
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { Plus, Search, Send, Download, Trash2, Copy, Check, Sparkles, Terminal, Square, Settings2, Info, RotateCcw, Play, Zap, AlertTriangle, Paperclip } from "lucide-react";
+import { Plus, Search, Send, Download, Trash2, Copy, Check, Sparkles, Terminal, Square, Settings2, Info, RotateCcw, Play, Zap, AlertTriangle, Paperclip, Lightbulb, ListChecks, ScanText, type LucideIcon } from "lucide-react";
 import { TextoRico } from "../../componentes/TextoRico";
 import { CartoesDaMensagem } from "../../componentes/CartaoAcao";
 import { EscolhaDoAgente } from "../../componentes/EscolhaDoAgente";
@@ -19,6 +19,8 @@ import { provedoresEmOrdem, escolherAgente, type ProvedorEmUso } from "../../uti
 import { EVENTO_NOVO } from "../../janelas/area-de-trabalho/usarAtalhos";
 import type { AgenteId, Conversa, Mensagem } from "../../tipos";
 import type { AcaoAnexo } from "../../utilitarios/recursosChat";
+
+const ICONES_ACAO_ANEXO: Record<AcaoAnexo, LucideIcon> = { resumir: Sparkles, explicar: Lightbulb, perguntas: ListChecks, extrair: ScanText };
 
 function grupoDaData(iso: string): string {
   const d = new Date(iso);
@@ -378,24 +380,48 @@ export default function Chat() {
                 ))}
               </div>
             )}
-            <ChipsAnexos lista={anexos.lista} agente={mascote} aoRemover={anexos.remover} />
-            <div className="chat-recursos" aria-label={T.chat.recursos.capacidades}>
-              {([["/capacidades", T.chat.recursos.capacidades], ["/relatorio", T.chat.recursos.relatorio], ["/pomodoro status", T.chat.recursos.timer]] as const).map(([pedido, rotulo]) => (
-                <Botao key={pedido} pequeno variante="fantasma" disabled={fase !== null} onClick={() => consultar(pedido)}>{rotulo}</Botao>
-              ))}
-            </div>
-            {anexos.lista.length > 0 && anexos.lista.every((a) => a.tipo === "texto" || a.tipo === "imagem") && (
-              <div className="chat-recursos" aria-label={T.chat.anexos.acoesRotulo}>
-                {(Object.keys(T.chat.anexos.acoes) as AcaoAnexo[]).map((acao) => (
-                  <Botao key={acao} pequeno disabled={fase !== null || anexos.carregando || !anexos.prontos().some((a) => a.anexo.texto?.trim() || a.imagemCompleta)} onClick={() => enviar(acao)}>{T.chat.anexos.acoes[acao]}</Botao>
-                ))}
-                <span className="texto-3 chat-recursos-aviso">{T.chat.anexos.limiteAviso}</span>
+            {anexos.lista.length > 0 ? (
+              <div className="painel-anexos">
+                <div className="painel-anexos-topo">
+                  <Paperclip size={13} />
+                  <span>{T.chat.anexos.painelTitulo(anexos.lista.length)}</span>
+                </div>
+                <ChipsAnexos lista={anexos.lista} agente={mascote} aoRemover={anexos.remover} />
+                {anexos.lista.every((a) => a.tipo === "texto" || a.tipo === "imagem") && (
+                  <div className="painel-anexos-acoes" role="group" aria-label={T.chat.anexos.acoesRotulo}>
+                    <span className="painel-anexos-pergunta">{T.chat.anexos.oQueFazer}</span>
+                    <div className="painel-anexos-botoes">
+                      {(Object.keys(T.chat.anexos.acoes) as AcaoAnexo[]).map((acao) => {
+                        const Icone = ICONES_ACAO_ANEXO[acao];
+                        return (
+                          <button
+                            key={acao}
+                            type="button"
+                            className="acao-anexo"
+                            data-local={acao === "extrair" || undefined}
+                            disabled={fase !== null || anexos.carregando || !anexos.prontos().some((a) => a.anexo.texto?.trim() || a.imagemCompleta)}
+                            onClick={() => enviar(acao)}
+                          >
+                            <Icone size={15} />
+                            {T.chat.anexos.acoes[acao]}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <span className="texto-3 painel-anexos-dica">{T.chat.anexos.ouPergunte} {T.chat.anexos.dicaAcoes}</span>
+                  </div>
+                )}
               </div>
+            ) : (
+              !atual?.mensagens.length && (
+                <div className="chat-recursos" aria-label={T.chat.recursos.capacidades}>
+                  {([["/capacidades", T.chat.recursos.capacidades], ["/relatorio", T.chat.recursos.relatorio], ["/pomodoro status", T.chat.recursos.timer]] as const).map(([pedido, rotulo]) => (
+                    <Botao key={pedido} pequeno variante="fantasma" disabled={fase !== null} onClick={() => consultar(pedido)}>{rotulo}</Botao>
+                  ))}
+                </div>
+              )
             )}
             <div className="chat-mascote">
-            <motion.div className="chat-mascote-boneco" key={mascote} initial={{ scale: 0.6, opacity: 0, y: 6 }} animate={{ scale: 1, opacity: 1, y: 0 }} transition={{ type: "spring", visualDuration: 0.3, bounce: 0.45 }}>
-              <Personagem agente={mascote} estado={fase ? "pensando" : texto.trim() ? "ouvindo" : undefined} tamanho={44} rotulo={nomes[mascote]} />
-            </motion.div>
             <div className="chat-caixa">
               <textarea
                 ref={campo}

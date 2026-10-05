@@ -599,3 +599,14 @@
 .ilha-claude-compacta[data-estado="aprovacao"] {
   color: #f0a060;
 }
+
+.vsc-botao.vsc-botao-link {
+  background: transparent !important;
+  color: var(--vsc-azul-claro) !important;
+  padding: 0 6px;
+}
+
+.vsc-botao.vsc-botao-link:hover {
+  background: rgba(255, 255, 255, 0.06) !important;
+  text-decoration: underline;
+}

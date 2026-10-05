@@ -1,5 +1,6 @@
 import { useEffect } from "react";
-import { ouvirClaudeCode, type EventoClaude } from "../../../ponte/claudeCode";
+import { claudeCode, ouvirClaudeCode, type EventoClaude } from "../../../ponte/claudeCode";
+import { frenteEmTelaCheia } from "../../../desktop/desktop";
 import { useClaudeCode } from "../../../estado/claudeCode";
 import { useIlha } from "../../../estado/ilha";
 import { useConfig } from "../../../estado/configuracoes";
@@ -13,6 +14,11 @@ function garantirAba() {
   if (!cfg.ilha.blocos.claude) cfg.definirIlha({ blocos: { ...cfg.ilha.blocos, claude: true } });
 }
 
+function devolverAoTerminal(pedidoId: string) {
+  useClaudeCode.getState().removerPedido(pedidoId);
+  void claudeCode.decidir(pedidoId, "terminal").catch(() => undefined);
+}
+
 function reagir(e: EventoClaude) {
   const estado = useClaudeCode.getState();
   const sessao = estado.sessoes[e.sessao];
@@ -20,19 +26,33 @@ function reagir(e: EventoClaude) {
   const silencio = useConfig.getState().naoPerturbe;
   const ilha = useIlha.getState();
   switch (e.evento) {
-    case "PermissionRequest":
-      if (!e.pedidoId) return;
-      garantirAba();
-      estado.focar(e.sessao);
-      void tocarSom("approval", "avisos");
-      ilha.abrir("claude");
+    case "PermissionRequest": {
+      const pedidoId = e.pedidoId;
+      if (!pedidoId) return;
+      if (!useConfig.getState().ilha.ativa) {
+        devolverAoTerminal(pedidoId);
+        return;
+      }
+      void frenteEmTelaCheia().then((cheia) => {
+        if (cheia) {
+          devolverAoTerminal(pedidoId);
+          return;
+        }
+        if (!useClaudeCode.getState().pedidos.some((p) => p.pedidoId === pedidoId)) return;
+        garantirAba();
+        useClaudeCode.getState().focar(e.sessao);
+        void tocarSom("approval", "avisos");
+        const ilhaAgora = useIlha.getState();
+        if (ilhaAgora.estado === "escondida") ilhaAgora.definirEstado("compacta");
+      });
       return;
+    }
     case "Stop":
       garantirAba();
       if (silencio) return;
       estado.focar(e.sessao);
       void tocarSom("finish", "avisos");
-      ilha.abrir("claude");
+      if (ilha.estado !== "expandida") ilha.revelar({ texto: T.ilha.claude.terminouAviso(projeto), tipo: "sucesso", marca: "claudecode", aba: "claude" }, 7000, "normal");
       return;
     case "StopFailure":
       garantirAba();

@@ -13,6 +13,7 @@ const C = T.configuracoes.claudeCode;
 function situacao(e: EstadoDaInstalacao | null): { rotulo: string; tipo: "ok" | "alerta" | "neutro" } {
   if (!e) return { rotulo: C.estados.desconectado, tipo: "neutro" };
   if (e.invalido) return { rotulo: C.estados.invalido, tipo: "alerta" };
+  if (e.desatualizado) return { rotulo: C.estados.desatualizado, tipo: "alerta" };
   if (e.instalado && e.conectado) return { rotulo: C.estados.conectado, tipo: "ok" };
   if (e.instalado) return { rotulo: C.estados.instalado, tipo: "ok" };
   if (e.parcial) return { rotulo: C.estados.parcial, tipo: "alerta" };
@@ -64,7 +65,7 @@ export function SecaoClaudeCode() {
   };
 
   const s = situacao(estado);
-  const instalado = Boolean(estado?.instalado || estado?.parcial);
+  const instalado = Boolean(estado?.instalado || estado?.parcial || estado?.desatualizado);
 
   return (
     <div className="coluna" style={{ gap: 16 }}>

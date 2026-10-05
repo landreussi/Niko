@@ -93,6 +93,16 @@ interface EstadoClaude {
   removerPedido: (pedidoId: string) => void;
 }
 
+const MAXIMO_VISTOS = 2000;
+const eventosAplicados = new Set<string>();
+
+function jaFoiAplicado(id: string): boolean {
+  if (eventosAplicados.has(id)) return true;
+  eventosAplicados.add(id);
+  if (eventosAplicados.size > MAXIMO_VISTOS) eventosAplicados.delete(eventosAplicados.values().next().value as string);
+  return false;
+}
+
 function novoPasso(e: EventoClaude, tipo: PassoClaude["tipo"], rotulo: string, detalhe?: string, ferramenta?: string): PassoClaude {
   return { id: e.id, tipo, rotulo, detalhe, ferramenta, hora: e.recebidoEm };
 }
@@ -116,7 +126,7 @@ export const useClaudeCode = create<EstadoClaude>((set, get) => ({
     }),
 
   aplicar: (e) => {
-    if (e.evento === "NikoConectado") return;
+    if (e.evento === "NikoConectado" || jaFoiAplicado(e.id)) return;
     if (e.evento === "NikoPedidoEncerrado") {
       if (e.pedidoId) get().removerPedido(e.pedidoId);
       set((s) => {

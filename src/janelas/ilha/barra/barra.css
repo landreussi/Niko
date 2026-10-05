@@ -874,3 +874,136 @@ button.ilha-rapido-icone:hover:not(:disabled),
     transition: none;
   }
 }
+
+.ilha-rapido-bluetooth {
+  gap: 6px;
+}
+
+.bt-topo {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 2px 2px;
+}
+
+.bt-titulo {
+  flex: 1;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--i-dim);
+}
+
+.bt-botao-icone {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  color: var(--i-dim);
+}
+
+.bt-botao-icone:hover:not(:disabled) {
+  background: var(--i-elevado-2);
+  color: inherit;
+}
+
+.bt-grupo {
+  display: block;
+  padding: 6px 4px 2px;
+  font-size: 10.5px;
+  color: var(--i-dim);
+}
+
+.bt-aparelho {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px;
+  border-radius: 12px;
+  text-align: left;
+  color: inherit;
+  transition: background 0.15s;
+}
+
+.bt-aparelho:hover {
+  background: var(--i-elevado-2);
+}
+
+.bt-icone {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--i-elevado-2);
+  color: var(--i-dim);
+}
+
+.bt-aparelho[data-ligado] .bt-icone {
+  background: #3b82f6;
+  color: #fff;
+}
+
+.bt-texto {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.bt-nome {
+  font-size: 13px;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bt-estado {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: var(--i-dim);
+}
+
+.bt-ponto {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--i-dim);
+  opacity: 0.6;
+}
+
+.bt-aparelho[data-ligado] .bt-ponto {
+  background: #34d399;
+  opacity: 1;
+}
+
+.bt-acao {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+  font-size: 11px;
+  color: var(--i-dim);
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.bt-aparelho:hover .bt-acao,
+.bt-aparelho:focus-visible .bt-acao {
+  opacity: 1;
+}
+
+.bt-dica {
+  margin: 2px 4px 0;
+  font-size: 10.5px;
+  line-height: 1.4;
+  color: var(--i-dim);
+}

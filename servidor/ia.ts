@@ -273,7 +273,7 @@ export async function* conversar(provedorId: string, sistema: string, mensagens:
           signal: controle.signal,
           body: JSON.stringify({
             model: modeloFinal,
-            max_tokens: 2000,
+            max_tokens: 4096,
             system: sistema,
             messages: historicoAnthropic(usar ? validas : validas.filter((m) => m.papel !== "ferramenta")),
             stream: true,
@@ -288,7 +288,7 @@ export async function* conversar(provedorId: string, sistema: string, mensagens:
           model: modeloFinal,
           stream: true,
           ...(comUso ? { stream_options: { include_usage: true } } : {}),
-          max_tokens: 2000,
+          max_tokens: 4096,
           messages: [{ role: "system", content: sistema }, ...historicoCompativel(usar ? validas : validas.filter((m) => m.papel !== "ferramenta").map((m) => ({ ...m, chamadas: undefined })))],
           ...(usar ? { tools: ferramentas.map((f) => ({ type: "function", function: { name: f.nome, description: f.descricao, parameters: f.parametros } })) } : {}),
         }),
@@ -313,6 +313,9 @@ export async function* conversar(provedorId: string, sistema: string, mensagens:
     }
     const blocosAnthropic = new Map<number, { id: string; nome: string; json: string }>();
     const chamadasCompativel = new Map<number, { id: string; nome: string; json: string }>();
+    let teveTexto = false;
+    let teveRaciocinio = false;
+    let cortado = false;
     armar(60000);
     for await (const dado of linhasSse(resposta.body)) {
       armar(60000);
@@ -344,13 +347,19 @@ export async function* conversar(provedorId: string, sistema: string, mensagens:
           entrada = uso?.input_tokens ?? 0;
         } else if (tipo === "message_delta") {
           saida = (json.usage as { output_tokens?: number } | undefined)?.output_tokens ?? saida;
+          if ((json.delta as { stop_reason?: string } | undefined)?.stop_reason === "max_tokens") cortado = true;
         } else if (tipo === "error") {
           yield { tipo: "erro", texto: JSON.stringify(json.error).slice(0, 200) };
           return;
         }
       } else {
-        const escolha = (json.choices as { delta?: { content?: string; tool_calls?: { index?: number; id?: string; function?: { name?: string; arguments?: string } }[] } }[] | undefined)?.[0];
-        if (escolha?.delta?.content) yield { tipo: "texto", texto: escolha.delta.content };
+        const escolha = (json.choices as { finish_reason?: string | null; delta?: { content?: string; reasoning_content?: string; reasoning?: string; tool_calls?: { index?: number; id?: string; function?: { name?: string; arguments?: string } }[] } }[] | undefined)?.[0];
+        if (escolha?.delta?.content) {
+          yield { tipo: "texto", texto: escolha.delta.content };
+          teveTexto = true;
+        }
+        if (escolha?.delta?.reasoning_content || escolha?.delta?.reasoning) teveRaciocinio = true;
+        if (escolha?.finish_reason === "length") cortado = true;
         escolha?.delta?.tool_calls?.forEach((c, posicao) => {
           const indice = c.index ?? posicao;
           const atual = chamadasCompativel.get(indice) ?? { id: "", nome: "", json: "" };
@@ -369,6 +378,7 @@ export async function* conversar(provedorId: string, sistema: string, mensagens:
     for (const [indice, c] of [...chamadasCompativel.entries()].sort((a, b) => a[0] - b[0])) {
       if (c.nome) yield { tipo: "ferramenta", chamada: { id: c.id || `chamada_${indice}_${randomUUID().slice(0, 6)}`, nome: c.nome, argumentos: lerArgumentos(c.json) } };
     }
+    if (cortado) yield { tipo: "aviso", texto: teveTexto ? "cortado" : teveRaciocinio ? "so_raciocinio" : "cortado" };
     yield { tipo: "fim", entrada, saida, modelo: modeloFinal, provedor: p.nome };
   } catch (e) {
     yield { tipo: "erro", texto: motivo ?? ((e as Error).name === "AbortError" ? "cancelado" : `rede ${(e as Error).message}`) };

@@ -14,6 +14,7 @@ process.env.NIKO_PORTA = "47999";
 
 const vite = await createServer({ configFile: false, server: { middlewareMode: true, hmr: false, watch: null }, appType: "custom", optimizeDeps: { noDiscovery: true } });
 const claude = await vite.ssrLoadModule("/servidor/claude.ts");
+const { useClaudeCode } = await vite.ssrLoadModule("/src/estado/claudeCode.ts");
 const pastaClaude = join(raizTemporaria, ".claude");
 const settings = join(pastaClaude, "settings.json");
 const lerSettings = () => JSON.parse(readFileSync(settings, "utf8"));
@@ -153,4 +154,54 @@ test("descarta campos enormes e recorta textos longos", async () => {
   assert.equal(evento.dados.tool_response, undefined);
   assert.equal(evento.dados.transcript_path, undefined);
   assert.ok(evento.dados.extra.length < 4100);
+});
+
+test("recusa hooks com formato inesperado em vez de apagar", () => {
+  mkdirSync(pastaClaude, { recursive: true });
+  writeFileSync(settings, JSON.stringify({ hooks: ["algo"] }));
+  assert.throws(() => claude.instalarGanchos({ confirmacao: "INSTALAR" }), /settings_invalido/);
+  assert.deepEqual(lerSettings(), { hooks: ["algo"] });
+  writeFileSync(settings, "{}");
+});
+
+test("detecta conexão desatualizada quando o segredo não bate", () => {
+  claude.instalarGanchos({ confirmacao: "INSTALAR" });
+  const dados = lerSettings();
+  dados.hooks.Stop[0].hooks[0].headers["x-niko-gancho"] = "outro";
+  writeFileSync(settings, JSON.stringify(dados));
+  const estado = claude.estadoDaInstalacao();
+  assert.equal(estado.desatualizado, true);
+  assert.equal(estado.instalado, false);
+  claude.instalarGanchos({ confirmacao: "INSTALAR" });
+  assert.equal(claude.estadoDaInstalacao().desatualizado, false);
+  assert.ok(!readdirSync(pastaClaude).some((n) => n.endsWith(".niko-gravando")));
+});
+
+test("devolver ao terminal responde vazio para o Claude Code perguntar lá", async () => {
+  const controle = new AbortController();
+  const fluxo = await fetch(`${base}/ponte/claude/eventos`, { signal: controle.signal });
+  const leitor = fluxo.body.getReader();
+  let buffer = "";
+  const resposta = enviar({ hook_event_name: "PermissionRequest", session_id: "s4", tool_name: "Bash", tool_input: { command: "npm run build" } }, { "x-niko-gancho": segredo() });
+  let pedido;
+  while (!pedido) {
+    buffer += new TextDecoder().decode((await leitor.read()).value);
+    pedido = buffer.split("\n").filter(Boolean).map((l) => JSON.parse(l)).find((e) => e.sessao === "s4" && e.pedidoId);
+  }
+  claude.decidirPedido({ pedidoId: pedido.pedidoId, decisao: "terminal" });
+  const r = await resposta;
+  assert.equal(r.status, 200);
+  assert.equal(await r.text(), "");
+  assert.throws(() => claude.decidirPedido({ pedidoId: "x", decisao: "talvez" }), /decisao_invalida/);
+  controle.abort();
+});
+
+test("evento repetido numa reconexão não duplica a atividade", () => {
+  const evento = { id: "evento-unico", recebidoEm: new Date().toISOString(), evento: "PreToolUse", sessao: "s5", cwd: "C:\\projetos\\app", dados: { tool_name: "Bash", tool_input: { command: "npm test" } } };
+  useClaudeCode.getState().aplicar(evento);
+  useClaudeCode.getState().aplicar(evento);
+  const sessao = useClaudeCode.getState().sessoes.s5;
+  assert.equal(sessao.passos.length, 1);
+  assert.equal(sessao.ferramentasUsadas, 1);
+  assert.equal(sessao.projeto, "app");
 });

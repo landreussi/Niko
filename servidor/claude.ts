@@ -1,5 +1,5 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
@@ -67,17 +67,20 @@ function urlDoGancho() {
   return `http://127.0.0.1:${porta()}${CAMINHO_EVENTO}`;
 }
 
+let segredoEmMemoria: string | null = null;
+
 function segredo(): string {
+  if (segredoEmMemoria) return segredoEmMemoria;
   const arquivo = join(pastaDados(), "gancho-claude.json");
   try {
     const lido = JSON.parse(readFileSync(arquivo, "utf8")) as { segredo?: string };
-    if (typeof lido.segredo === "string" && lido.segredo.length >= 32) return lido.segredo;
+    if (typeof lido.segredo === "string" && lido.segredo.length >= 32) return (segredoEmMemoria = lido.segredo);
   } catch {
     mkdirSync(pastaDados(), { recursive: true });
   }
   const novo = randomBytes(32).toString("hex");
   writeFileSync(arquivo, JSON.stringify({ segredo: novo }), "utf8");
-  return novo;
+  return (segredoEmMemoria = novo);
 }
 
 function segredoConfere(recebido: unknown): boolean {
@@ -103,6 +106,8 @@ function lerSettings(): { texto: string | null; dados: Settings } {
   try {
     const dados = JSON.parse(texto.replace(/^﻿/, "")) as unknown;
     if (!dados || typeof dados !== "object" || Array.isArray(dados)) throw new Error();
+    const hooks = (dados as Settings).hooks;
+    if (hooks !== undefined && (!hooks || typeof hooks !== "object" || Array.isArray(hooks))) throw new Error();
     return { texto, dados: dados as Settings };
   } catch {
     throw new Error("settings_invalido");
@@ -168,9 +173,17 @@ export function estadoDaInstalacao() {
     invalido = true;
   }
   const hooks = (dados.hooks ?? {}) as Record<string, unknown>;
+  const ganchosDoNiko = Object.values(hooks)
+    .flatMap((grupos) => (Array.isArray(grupos) ? grupos : []))
+    .flatMap((g) => (Array.isArray((g as { hooks?: unknown[] })?.hooks) ? (g as { hooks: unknown[] }).hooks : []))
+    .filter(ehGanchoDoNiko);
+  const atual = (h: unknown) => {
+    const g = h as { url: string; headers: Record<string, unknown> };
+    return g.url === urlDoGancho() && g.headers[CABECALHO_SEGREDO] === segredo();
+  };
   const instalados = EVENTOS_INSTALADOS.filter((evento) => {
     const grupos = hooks[evento];
-    return Array.isArray(grupos) && grupos.some((g) => Array.isArray((g as { hooks?: unknown[] })?.hooks) && (g as { hooks: unknown[] }).hooks.some((h) => ehGanchoDoNiko(h) && (h as { url: string }).url === urlDoGancho()));
+    return Array.isArray(grupos) && grupos.some((g) => Array.isArray((g as { hooks?: unknown[] })?.hooks) && (g as { hooks: unknown[] }).hooks.some((h) => ehGanchoDoNiko(h) && atual(h)));
   });
   return {
     caminho,
@@ -180,6 +193,7 @@ export function estadoDaInstalacao() {
     instalado: instalados.length === EVENTOS_INSTALADOS.length,
     parcial: instalados.length > 0 && instalados.length < EVENTOS_INSTALADOS.length,
     eventos: instalados,
+    desatualizado: ganchosDoNiko.some((h) => !atual(h)),
     conectado: ouvintes.size > 0,
   };
 }
@@ -198,7 +212,9 @@ function gravarComCopia(conteudo: Settings) {
     copia = `${caminho}.niko-${new Date().toISOString().replace(/[:.]/g, "-")}.bak`;
     copyFileSync(caminho, copia);
   }
-  writeFileSync(caminho, `${JSON.stringify(conteudo, null, 2)}\n`, "utf8");
+  const temporario = `${caminho}.niko-gravando`;
+  writeFileSync(temporario, `${JSON.stringify(conteudo, null, 2)}\n`, "utf8");
+  renameSync(temporario, caminho);
   return { caminho, copia };
 }
 
@@ -321,9 +337,9 @@ function encerrarPedido(pedidoId: string, decisao: "allow" | "deny" | null, moti
 
 export function decidirPedido(corpo: Record<string, unknown>) {
   const pedidoId = typeof corpo.pedidoId === "string" ? corpo.pedidoId : "";
-  const decisao = corpo.decisao === "allow" || corpo.decisao === "deny" ? corpo.decisao : null;
-  if (!decisao) throw new Error("decisao_invalida");
-  if (!encerrarPedido(pedidoId, decisao, "decidido")) throw new Error("pedido_expirou");
+  const decisao = corpo.decisao === "allow" || corpo.decisao === "deny" ? corpo.decisao : corpo.decisao === "terminal" ? null : undefined;
+  if (decisao === undefined) throw new Error("decisao_invalida");
+  if (!encerrarPedido(pedidoId, decisao, decisao ? "decidido" : "terminal")) throw new Error("pedido_expirou");
   return { ok: true };
 }
 

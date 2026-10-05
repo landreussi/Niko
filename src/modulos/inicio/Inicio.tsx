@@ -57,7 +57,7 @@ const LARGURA: Record<BlocoInicio, string> = {
   conexoes: "bento-4",
   revisoes: "bento-4",
   consumo: "bento-4",
-  conquistas: "bento-4",
+  conquistas: "bento-12",
   mapa: "bento-12",
 };
 
@@ -597,15 +597,17 @@ function BlocoConquistas() {
         </div>
       ))}
       {proximas.length > 0 && <span className="rotulo-secao" style={{ marginTop: 6 }}>{T.inicio.proximasConquistas}</span>}
-      {proximas.map((c, i) => (
-        <div key={c.codigo} className={`linha texto-3 ${extra(i, 2)}`} title={T.conquistas.itens[c.codigo]?.regra}>
-          <Trophy size={14} style={{ flex: "0 0 auto" }} />
-          <span className="coluna" style={{ gap: 0, minWidth: 0 }}>
-            <span className="cortar" style={{ color: "var(--texto-2)" }}>{T.conquistas.itens[c.codigo]?.nome}</span>
-            <span className="cortar" style={{ fontSize: 11 }}>{T.conquistas.itens[c.codigo]?.regra}</span>
-          </span>
-        </div>
-      ))}
+      <div className="conquistas-grade">
+        {proximas.map((c, i) => (
+          <div key={c.codigo} className={`linha texto-3 conquista-proxima ${extra(i, 6)}`} title={T.conquistas.itens[c.codigo]?.regra}>
+            <Trophy size={14} style={{ flex: "0 0 auto" }} />
+            <span className="coluna" style={{ gap: 0, minWidth: 0 }}>
+              <span className="cortar" style={{ color: "var(--texto-2)" }}>{T.conquistas.itens[c.codigo]?.nome}</span>
+              <span className="cortar" style={{ fontSize: 11 }}>{T.conquistas.itens[c.codigo]?.regra}</span>
+            </span>
+          </div>
+        ))}
+      </div>
       <Botao pequeno variante="fantasma" icone={<ChevronRight size={13} />} onClick={() => irPara("conquistas")}>{T.rotas.conquistas}</Botao>
     </div>
   );

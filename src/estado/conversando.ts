@@ -13,7 +13,7 @@ import { lerTextoDeImagem, mensagemDeLeitura } from "../utilitarios/leitorDeArqu
 import { tocarSom } from "../ponte/sons";
 import { T } from "../textos/textos";
 import { controlarPomodoro, detectarPedidoLocal, montarPedidoAnexo, textoPomodoro, textoRelatorioSemanal, type AcaoAnexo } from "../utilitarios/recursosChat";
-import { textoCapacidades } from "../utilitarios/ferramentasIa";
+import { textoCapacidadesResumido } from "../utilitarios/ferramentasIa";
 
 export type FaseConversa = "escolhendo" | "respondendo" | null;
 
@@ -114,6 +114,10 @@ async function perguntar(conversaId: string, pedido: string, agente: AgenteId, r
     if (r.confirmacoes.length) void tocarSom("approval", "avisos");
   }
   if (r.parado && !r.texto.trim()) adicionar(conversaId, { autor: "agente", agenteId: agente, texto: T.chat.paradoAntes, repetir: pedido, analiseAnexo: apenasAnalise });
+  if (!r.parado && r.falha === null && !r.texto.trim() && !r.confirmacoes.length) {
+    void tocarSom("error", "avisos");
+    adicionar(conversaId, { autor: "agente", agenteId: agente, texto: r.cortada === "so_raciocinio" ? T.chat.confianca.soRaciocinio : T.chat.confianca.respostaVazia, erro: true, repetir: pedido, analiseAnexo: apenasAnalise });
+  }
   if (r.falha !== null && !r.parado) {
     void tocarSom("error", "avisos");
     adicionar(conversaId, { autor: "agente", agenteId: agente, texto: mensagemDeErroIa(r.falha, r.trocas), detalhe: r.falha.slice(0, 600), erro: true, repetir: pedido, analiseAnexo: apenasAnalise });
@@ -145,7 +149,14 @@ export async function enviarAoTime(conversaId: string, texto: string, anexos: An
     try { pedido = montarPedidoAnexo(opcoes.acaoAnexo, analisaveis.map((a) => a.anexo)); }
     catch (erro) { await responder(conversaId, "tutor", (erro as Error).message); return; }
     if (opcoes.acaoAnexo === "extrair") {
-      await responder(conversaId, "tutor", pedido.slice(pedido.indexOf(T.chat.anexos.delimitador) + T.chat.anexos.delimitador.length).trim());
+      const blocos = analisaveis
+        .filter((a) => a.anexo.texto?.trim())
+        .map((a) => {
+          const original = a.anexo.texto ?? "";
+          const trecho = original.slice(0, 45000).replace(/^```/gm, " ```");
+          return `**${T.chat.anexos.extraidoTitulo(a.anexo.nome)}**\n\n\`\`\`texto\n${trecho}\n\`\`\`${trecho.length < original.length ? `\n\n${T.chat.anexos.recorte}` : ""}`;
+        });
+      await responder(conversaId, "tutor", blocos.join("\n\n"));
       return;
     }
     if (limiteAtingido()) { await responder(conversaId, "operador", T.chat.limiteAtingido); return; }
@@ -156,7 +167,7 @@ export async function enviarAoTime(conversaId: string, texto: string, anexos: An
   const contextoPomodoro = ultima?.autor === "agente" && /pomodoro|foco|timer/i.test(ultima.texto) && (Boolean(ultima.acoes?.length) || ultima.texto.startsWith("Pomodoro:"));
   const local = anexos.length ? null : detectarPedidoLocal(semMencao, contextoPomodoro);
   if (local) {
-    if (local === "capacidades") await responder(conversaId, mencao ?? "organizador", textoCapacidades());
+    if (local === "capacidades") await responder(conversaId, mencao ?? "organizador", textoCapacidadesResumido());
     else if (local === "relatorio") await responder(conversaId, mencao ?? "organizador", textoRelatorioSemanal());
     else if (local === "timer") await responder(conversaId, mencao ?? "organizador", textoPomodoro());
     else {

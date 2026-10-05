@@ -50,33 +50,51 @@ export function ListaDeBluetooth() {
     }
   };
 
+  const conectados = aparelhos?.filter((a) => a.conectado === true) ?? [];
+  const outros = aparelhos?.filter((a) => a.conectado !== true) ?? [];
+
+  const linha = (aparelho: AparelhoBluetooth) => {
+    const ligado = aparelho.conectado === true;
+    const acao = ligado ? S.desconectarBluetoothWindows : aparelho.conectado === false ? S.conectarBluetoothWindows : S.gerenciarBluetoothWindows;
+    return (
+      <button key={aparelho.id} type="button" className="bt-aparelho" data-ligado={ligado || undefined} onClick={() => void abrirWindows()} title={acao}>
+        <span className="bt-icone" aria-hidden="true"><Bluetooth size={15} /></span>
+        <span className="bt-texto">
+          <span className="bt-nome" title={aparelho.nome}>{aparelho.nome}</span>
+          <span className="bt-estado">
+            <i className="bt-ponto" />
+            {ligado ? S.bluetoothConectado : aparelho.conectado === false ? S.bluetoothDesconectado : S.bluetoothEstadoDesconhecido}
+          </span>
+        </span>
+        <span className="bt-acao">
+          {acao.replace(/ no Windows$/, "")}
+          <ExternalLink size={11} />
+        </span>
+      </button>
+    );
+  };
+
   return (
     <section className="ilha-rapido-redes ilha-rapido-bluetooth" aria-label={S.aparelhos} aria-busy={ocupado}>
+      <div className="bt-topo">
+        <span className="bt-titulo">{S.aparelhos}</span>
+        <button type="button" className="bt-botao-icone" disabled={ocupado} aria-label={S.atualizar} title={S.atualizar} onClick={() => atualizar.current()}>
+          <RefreshCw size={13} className={ocupado ? "girando" : undefined} />
+        </button>
+        <button type="button" className="bt-botao-icone" aria-label={S.abrirWindows} title={S.abrirWindows} onClick={() => void abrirWindows()}>
+          <ExternalLink size={13} />
+        </button>
+      </div>
       {aparelhos === null && !erro && <p className="ilha-rapido-vazio">{T.geral.carregando}</p>}
       {aparelhos?.length === 0 && <p className="ilha-rapido-vazio">{S.semAparelhos}</p>}
       <div className="ilha-rapido-bluetooth-lista">
-        {aparelhos?.map((aparelho) => (
-          <div key={aparelho.id} className="ilha-rapido-rede" data-atual={aparelho.conectado === true || undefined}>
-            <div className="ilha-rapido-linha">
-              <span className="ilha-rapido-icone" aria-hidden="true"><Bluetooth size={14} /></span>
-              <span className="ilha-rapido-rede-nome ilha-rapido-bluetooth-nome">
-                <span className="cortar" title={aparelho.nome}>{aparelho.nome}</span>
-                <small>{aparelho.conectado === true ? S.bluetoothConectado : aparelho.conectado === false ? S.bluetoothDesconectado : S.bluetoothEstadoDesconhecido}</small>
-              </span>
-              <button type="button" className="ilha-rapido-texto ilha-rapido-texto-pequeno" onClick={() => void abrirWindows()}>
-                {aparelho.conectado === true ? S.desconectarBluetoothWindows : aparelho.conectado === false ? S.conectarBluetoothWindows : S.gerenciarBluetoothWindows}
-                <ExternalLink size={11} />
-              </button>
-            </div>
-          </div>
-        ))}
+        {conectados.length > 0 && <span className="bt-grupo">{S.bluetoothConectados}</span>}
+        {conectados.map(linha)}
+        {outros.length > 0 && <span className="bt-grupo">{S.bluetoothPareados}</span>}
+        {outros.map(linha)}
       </div>
       {erro && <p className="ilha-rapido-vazio ilha-rapido-erro" role="alert">{erro}</p>}
-      <p className="ilha-rapido-vazio">{S.bluetoothDicaWindows}</p>
-      <div className="ilha-rapido-redes-rodape">
-        <button type="button" className="ilha-rapido-icone" disabled={ocupado} aria-label={S.atualizar} title={S.atualizar} onClick={() => atualizar.current()}><RefreshCw size={13} /></button>
-        <button type="button" className="ilha-rapido-icone" aria-label={S.abrirWindows} title={S.abrirWindows} onClick={() => void abrirWindows()}><ExternalLink size={13} /></button>
-      </div>
+      <p className="bt-dica" title={S.bluetoothDicaWindows}>{S.bluetoothDicaCurta}</p>
     </section>
   );
 }

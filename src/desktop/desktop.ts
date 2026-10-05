@@ -223,6 +223,11 @@ export interface EstadoDaFrente {
 
 const FRENTE_LIVRE: EstadoDaFrente = { cobre: false, telaCheia: false, maximizada: false, frente: "area_de_trabalho" };
 
+export async function frenteEmTelaCheia(): Promise<boolean> {
+  const r = await invocar<EstadoDaFrente>("frente_cobre_tela");
+  return Boolean(r?.telaCheia);
+}
+
 export function usarEstadoDaFrente(ativo: boolean): EstadoDaFrente {
   const [estado, setEstado] = useState<EstadoDaFrente>(FRENTE_LIVRE);
   useEffect(() => {

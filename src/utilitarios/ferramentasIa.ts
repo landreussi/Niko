@@ -178,7 +178,7 @@ const FERRAMENTAS: FerramentaNiko[] = [
   },
   {
     definicao: { nome: "listar_capacidades", descricao: T.chat.recursos.capacidadesDescricao, parametros: { type: "object", properties: {} } },
-    executar: () => ({ tipo: "dados", conteudo: { ferramentas: definicoesFerramentas(), limites: T.chat.recursos.capacidadesLimites, modelo: T.chat.recursos.capacidadesModelo }, textoVerificado: textoCapacidades() }),
+    executar: () => ({ tipo: "dados", conteudo: { ferramentas: definicoesFerramentas(), limites: T.chat.recursos.capacidadesLimites, modelo: T.chat.recursos.capacidadesModelo }, textoVerificado: textoCapacidadesResumido() }),
   },
   {
     definicao: { nome: "ler_relatorio_semanal", descricao: T.chat.recursos.relatorioDescricao, parametros: { type: "object", properties: {} } },
@@ -596,6 +596,27 @@ export function textoCapacidades(): string {
   const S = T.chat.recursos;
   const ferramentas = definicoesFerramentas().map((f) => `- ${f.nome}: ${f.descricao}`);
   return [S.capacidadesIntroducao, ferramentas.join("\n"), S.capacidadesModelo, S.capacidadesLimites, ...(useConfig.getState().nuncaFinanceiro ? [S.capacidadesPrivacidade] : []), S.capacidadesComandos].join("\n\n");
+}
+
+export function textoCapacidadesResumido(): string {
+  const R = T.chat.recursos.resumoCapacidades;
+  const nomes = new Set(definicoesFerramentas().map((f) => f.nome));
+  const consultas = [
+    ["ler_tarefas", "tarefas"], ["ler_agenda", "agenda"], ["ler_habitos", "habitos"], ["ler_metas", "metas"], ["ler_estudos", "estudos"], ["ler_pomodoro", "pomodoro"],
+    ["ler_financas", "financas"], ["ler_conexoes", "conexoes"], ["buscar_emails", "emails"], ["ler_computador", "computador"],
+  ].filter(([f]) => nomes.has(f)).map(([, c]) => R.consultas[c]);
+  const acoes = [
+    ["criar_tarefa", "tarefa"], ["criar_evento", "agenda"], ["lancar_transacao", "financas"], ["marcar_habito", "habito"], ["adicionar_compras", "compras"], ["criar_rascunho_email", "email"], ["iniciar_pomodoro", "foco"],
+  ].filter(([f]) => nomes.has(f)).map(([, c]) => R.acoes[c]);
+  const lista = (itens: string[]) => (itens.length > 1 ? `${itens.slice(0, -1).join(", ")} e ${itens.at(-1)}` : itens.join(""));
+  return [
+    R.titulo,
+    R.consultar(lista(consultas)),
+    R.fazer(lista(acoes)),
+    ...(nomes.has("ler_arquivo") ? [R.arquivos] : []),
+    R.semIa,
+    [R.limites, ...(useConfig.getState().nuncaFinanceiro ? [R.financeiroBloqueado] : [])].join(" "),
+  ].join("\n\n");
 }
 
 export async function executarFerramenta(nome: string, argumentos: Argumentos): Promise<ResultadoFerramenta> {
