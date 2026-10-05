@@ -156,6 +156,22 @@ test("descarta campos enormes e recorta textos longos", async () => {
   assert.ok(evento.dados.extra.length < 4100);
 });
 
+test("corta objetos aninhados fundo demais em vez de guardar tudo na memória", async () => {
+  let fundo = { valor: "fim" };
+  for (let i = 0; i < 30; i++) fundo = { dentro: fundo };
+  const r = await enviar({ hook_event_name: "PreToolUse", session_id: "s-fundo", tool_name: "Read", tool_input: { file_path: "a.ts", fundo } }, { "x-niko-gancho": segredo() });
+  assert.equal(r.status, 200);
+  const controle = new AbortController();
+  const fluxo = await fetch(`${base}/ponte/claude/eventos`, { signal: controle.signal });
+  const leitor = fluxo.body.getReader();
+  let texto = "";
+  while (!texto.includes("NikoConectado")) texto += new TextDecoder().decode((await leitor.read()).value);
+  controle.abort();
+  const evento = texto.split("\n").filter(Boolean).map((l) => JSON.parse(l)).find((e) => e.sessao === "s-fundo");
+  assert.equal(evento.dados.tool_input.file_path, "a.ts");
+  assert.ok(!JSON.stringify(evento.dados).includes("fim"));
+});
+
 test("recusa hooks com formato inesperado em vez de apagar", () => {
   mkdirSync(pastaClaude, { recursive: true });
   writeFileSync(settings, JSON.stringify({ hooks: ["algo"] }));
@@ -220,6 +236,12 @@ test("sempre permitir só aceita a regra sugerida pelo Claude Code", async () =>
 test("abrir projeto recusa pastas que não vieram de uma sessão", () => {
   assert.throws(() => claude.abrirProjeto({ cwd: "C:\\Windows", como: "pasta" }), /projeto_desconhecido/);
   assert.throws(() => claude.abrirProjeto({ cwd: raizTemporaria, como: "pasta" }), /projeto_desconhecido/);
+});
+
+test("abrir projeto recusa caminho relativo mesmo vindo de uma sessão", async () => {
+  const r = await enviar({ hook_event_name: "SessionStart", session_id: "s-relativo", cwd: "." }, { "x-niko-gancho": segredo() });
+  assert.equal(r.status, 200);
+  assert.throws(() => claude.abrirProjeto({ cwd: ".", como: "pasta" }), /projeto_desconhecido/);
 });
 
 test("diff marca linhas removidas e adicionadas", async () => {

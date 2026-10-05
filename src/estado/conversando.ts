@@ -125,10 +125,26 @@ async function perguntar(conversaId: string, pedido: string, agente: AgenteId, r
   limpar();
 }
 
+async function semTravarOChat(conversaId: string, tarefa: () => Promise<void>) {
+  try {
+    await tarefa();
+  } catch (erro) {
+    console.error("Falha ao responder no chat", erro);
+    const agente = useConversando.getState().agente ?? "organizador";
+    limpar();
+    void tocarSom("error", "avisos");
+    useComunicacao.getState().adicionarMensagem(conversaId, { autor: "agente", agenteId: agente, texto: mensagemDeErroIa((erro as Error)?.message || "erro", []), erro: true });
+  }
+}
+
 export async function enviarAoTime(conversaId: string, texto: string, anexos: AnexoPronto[] = [], opcoes: { acaoAnexo?: AcaoAnexo } = {}) {
   const limpo = texto.trim() || (opcoes.acaoAnexo ? T.chat.anexos.pedidos[opcoes.acaoAnexo] : anexos.length ? T.chat.anexos.semTexto : "");
   if (!limpo || ocupado()) return;
   useConversando.setState({ conversaId, fase: "escolhendo", agente: "organizador", parcial: "" });
+  await semTravarOChat(conversaId, () => processarEnvio(conversaId, texto, limpo, anexos, opcoes));
+}
+
+async function processarEnvio(conversaId: string, texto: string, limpo: string, anexos: AnexoPronto[], opcoes: { acaoAnexo?: AcaoAnexo }) {
   const enviada = useComunicacao.getState().adicionarMensagem(conversaId, { autor: "usuario", agenteId: "organizador", texto: limpo, anexos: anexos.length ? anexos.map((a) => a.anexo) : undefined });
   guardarImagens(enviada.id, anexos.flatMap((a) => (a.imagemCompleta ? [a.imagemCompleta] : [])));
   void tocarSom("send");
@@ -221,7 +237,7 @@ export async function tentarDeNovo(conversaId: string, mensagem: Mensagem) {
     await responder(conversaId, "operador", T.chat.limiteAtingido, {}, 0);
     return;
   }
-  await perguntar(conversaId, pedido, mensagem.agenteId, true, anteriores, undefined, Boolean(mensagem.analiseAnexo));
+  await semTravarOChat(conversaId, () => perguntar(conversaId, pedido, mensagem.agenteId, true, anteriores, undefined, Boolean(mensagem.analiseAnexo)));
 }
 
 export async function usarSugestao(conversaId: string, comando: string) {

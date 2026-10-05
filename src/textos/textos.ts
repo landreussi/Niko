@@ -743,6 +743,7 @@ export const T = {
         ocr: "Texto reconhecido na imagem com o OCR do Windows. Pode errar letras.",
       },
       enviadoAoChat: "Enviei para o chat. O Nanquim está lendo.",
+      chatOcupado: "O chat ainda está respondendo. Espere terminar e tente de novo.",
       leitura: {
         formato_antigo: (nome: string) => `${nome} está num formato antigo do Office. Salve como .docx, .pptx ou .xlsx para eu ler.`,
         sem_suporte: (nome: string) => `Ainda não consigo ler o texto de ${nome}.`,

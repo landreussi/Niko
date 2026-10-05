@@ -56,12 +56,18 @@ export function linhasDoDiff(antes: string, depois: string): LinhaDoDiff[] {
   return saida;
 }
 
+const contagensCalculadas = new WeakMap<AlteracaoDeArquivo, { mais: number; menos: number }>();
+
 export function contarMudancas(alteracao: AlteracaoDeArquivo): { mais: number; menos: number } {
+  const pronta = contagensCalculadas.get(alteracao);
+  if (pronta) return pronta;
   let mais = 0;
   let menos = 0;
   for (const t of alteracao.trechos) for (const l of linhasDoDiff(t.antes, t.depois)) {
     if (l.tipo === "mais") mais++;
     else if (l.tipo === "menos") menos++;
   }
-  return { mais, menos };
+  const contagem = { mais, menos };
+  contagensCalculadas.set(alteracao, contagem);
+  return contagem;
 }

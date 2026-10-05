@@ -9,13 +9,14 @@ import { T } from "../../../textos/textos";
 
 const TOLERANCIA_MS = 1500;
 
-function garantirAba() {
-  const cfg = useConfig.getState();
-  if (!cfg.ilha.blocos.claude) cfg.definirIlha({ blocos: { ...cfg.ilha.blocos, claude: true } });
+function abaLigada() {
+  const { ilha } = useConfig.getState();
+  return ilha.ativa && ilha.blocos.claude;
 }
 
 async function notificarSeEscondida(corpo: string) {
-  if (!useConfig.getState().notificarClaude) return;
+  const cfg = useConfig.getState();
+  if (!cfg.notificarClaude || cfg.naoPerturbe) return;
   const ilha = useIlha.getState();
   if (ilha.estado === "expandida" && ilha.aba === "claude") return;
   if (ilha.estado !== "escondida" && !(await frenteCobreAIlha())) return;
@@ -25,6 +26,10 @@ async function notificarSeEscondida(corpo: string) {
 function devolverAoTerminal(pedidoId: string) {
   useClaudeCode.getState().removerPedido(pedidoId);
   void claudeCode.decidir(pedidoId, "terminal").catch(() => undefined);
+}
+
+export function devolverPendentesAoTerminal() {
+  for (const p of useClaudeCode.getState().pedidos) devolverAoTerminal(p.pedidoId);
 }
 
 function reagir(e: EventoClaude) {
@@ -37,7 +42,7 @@ function reagir(e: EventoClaude) {
     case "PermissionRequest": {
       const pedidoId = e.pedidoId;
       if (!pedidoId) return;
-      if (!useConfig.getState().ilha.ativa) {
+      if (!abaLigada()) {
         devolverAoTerminal(pedidoId);
         return;
       }
@@ -47,7 +52,6 @@ function reagir(e: EventoClaude) {
           return;
         }
         if (!useClaudeCode.getState().pedidos.some((p) => p.pedidoId === pedidoId)) return;
-        garantirAba();
         useClaudeCode.getState().focar(e.sessao);
         void tocarSom("approval", "avisos");
         void notificarSeEscondida(T.ilha.claude.notificacao.permissao(projeto));
@@ -57,20 +61,20 @@ function reagir(e: EventoClaude) {
       return;
     }
     case "Stop":
-      garantirAba();
-      if (silencio) return;
+      if (silencio || !abaLigada()) return;
       estado.focar(e.sessao);
       void tocarSom("finish", "avisos");
       void notificarSeEscondida(T.ilha.claude.notificacao.terminou(projeto));
       if (ilha.estado !== "expandida") ilha.revelar({ texto: T.ilha.claude.terminouAviso(projeto), tipo: "sucesso", marca: "claudecode", aba: "claude" }, 7000, "normal");
       return;
     case "StopFailure":
-      garantirAba();
+      if (!abaLigada()) return;
       void tocarSom("error", "avisos");
       void notificarSeEscondida(T.ilha.claude.notificacao.erro(projeto));
       ilha.revelar({ texto: T.ilha.claude.erroAviso(projeto), tipo: "alerta", marca: "claudecode", aba: "claude" }, 6000);
       return;
     case "Notification":
+      if (!abaLigada()) return;
       if (sessao?.estado === "esperando") {
         void tocarSom("question", "avisos");
         ilha.revelar({ texto: T.ilha.claude.esperandoAviso(projeto), tipo: "info", marca: "claudecode", aba: "claude" }, 6000);
@@ -79,27 +83,27 @@ function reagir(e: EventoClaude) {
         ilha.revelar({ texto: T.ilha.claude.limiteAviso(projeto), tipo: "alerta", marca: "claudecode", aba: "claude" }, 6000);
       }
       return;
-    case "SessionStart":
-    case "UserPromptSubmit":
-      garantirAba();
-      return;
     default:
       return;
   }
 }
 
-export function usarClaudeCode() {
+export function usarClaudeCode(ligado: boolean) {
   useEffect(() => {
+    if (!ligado) {
+      useClaudeCode.getState().definirConectado(false);
+      return;
+    }
     let conectadoEm = Date.now();
     return ouvirClaudeCode(
       (e) => {
         useClaudeCode.getState().aplicar(e);
         if (Date.parse(e.recebidoEm) >= conectadoEm - TOLERANCIA_MS) reagir(e);
       },
-      (ligado) => {
-        if (ligado) conectadoEm = Date.now();
-        useClaudeCode.getState().definirConectado(ligado);
+      (conectado) => {
+        if (conectado) conectadoEm = Date.now();
+        useClaudeCode.getState().definirConectado(conectado);
       },
     );
-  }, []);
+  }, [ligado]);
 }

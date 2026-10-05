@@ -21,7 +21,7 @@ import {
 import { alguemCobre } from "../geometria";
 import { VisaoChat } from "./VisaoChat";
 import { VisaoClaude } from "./claude/VisaoClaude";
-import { usarClaudeCode } from "./claude/usarClaudeCode";
+import { usarClaudeCode, devolverPendentesAoTerminal } from "./claude/usarClaudeCode";
 import { useClaudeCode, sessaoAtiva } from "../../estado/claudeCode";
 import { useAtualizacao } from "../../estado/atualizacao";
 import { NATIVO, usarAreaInterativa, usarCursorFora, usarEstadoDaFrente } from "../../desktop/desktop";
@@ -125,7 +125,7 @@ export function Ilha() {
   const agentes = useAgentes();
   const pomodoro = usePomodoro();
   const midia = useMidia();
-  usarClaudeCode();
+  usarClaudeCode(cfg.ativa && cfg.blocos.claude);
   const pedidosClaude = useClaudeCode((s) => s.pedidos);
   const minuto = useAgora(60_000, true);
   const agenteDaVez = agenteDoRodizio(favorito, minuto);
@@ -228,6 +228,11 @@ export function Ilha() {
       window.removeEventListener("pointerdown", aoClicarFora, true);
     };
   }, [estadoEfetivo, recolher]);
+
+  const claudeIndisponivel = !cfg.ativa || frente.telaCheia || !cfg.blocos.claude;
+  useEffect(() => {
+    if (claudeIndisponivel && pedidosClaude.length > 0) devolverPendentesAoTerminal();
+  }, [claudeIndisponivel, pedidosClaude.length]);
 
   useEffect(() => {
     if (!frente.telaCheia) return;

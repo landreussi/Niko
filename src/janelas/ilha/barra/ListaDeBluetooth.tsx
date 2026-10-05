@@ -33,7 +33,9 @@ export function ListaDeBluetooth() {
     };
     atualizar.current = () => void ler();
     void ler();
-    const relogio = window.setInterval(() => void ler(), 5000);
+    const relogio = window.setInterval(() => {
+      if (!document.hidden) void ler();
+    }, 5000);
     return () => {
       vivo = false;
       window.clearInterval(relogio);

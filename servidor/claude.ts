@@ -2,7 +2,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
 import { spawn } from "node:child_process";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { isAbsolute, join } from "node:path";
 import { randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import { pastaDados } from "./ia";
 
@@ -15,6 +15,7 @@ const ESPERA_DECISAO_MS = 110_000;
 const TEMPO_HOOK_RAPIDO = 5;
 const TEMPO_HOOK_DECISAO = 120;
 const MAXIMO_HISTORICO = 300;
+const PROFUNDIDADE_MAXIMA = 6;
 
 export const EVENTOS_INSTALADOS = [
   "SessionStart",
@@ -252,10 +253,11 @@ export function removerGanchos(corpo: Record<string, unknown>) {
   return gravarComCopia(semGanchosDoNiko(lerSettings().dados));
 }
 
-function cortar(valor: unknown, limite = LIMITE_CAMPO): unknown {
+function cortar(valor: unknown, limite = LIMITE_CAMPO, profundidade = 0): unknown {
   if (typeof valor === "string") return valor.length > limite ? `${valor.slice(0, limite)}…` : valor;
-  if (Array.isArray(valor)) return valor.slice(0, 50).map((v) => cortar(v, limite));
-  if (valor && typeof valor === "object") return Object.fromEntries(Object.entries(valor as Record<string, unknown>).slice(0, 40).map(([k, v]) => [k, cortar(v, limite)]));
+  if ((Array.isArray(valor) || (valor && typeof valor === "object")) && profundidade >= PROFUNDIDADE_MAXIMA) return null;
+  if (Array.isArray(valor)) return valor.slice(0, 50).map((v) => cortar(v, limite, profundidade + 1));
+  if (valor && typeof valor === "object") return Object.fromEntries(Object.entries(valor as Record<string, unknown>).slice(0, 40).map(([k, v]) => [k, cortar(v, limite, profundidade + 1)]));
   return valor;
 }
 
@@ -395,15 +397,23 @@ function caminhoDoVsCode(): string | null {
   return candidatos.find((c) => c && existsSync(c)) ?? null;
 }
 
+function abrirDesacoplado(programa: string, argumentos: string[]) {
+  const ambiente = { ...process.env };
+  delete ambiente.ELECTRON_RUN_AS_NODE;
+  const filho = spawn(programa, argumentos, { detached: true, stdio: "ignore", windowsHide: false, env: ambiente });
+  filho.on("error", () => undefined);
+  filho.unref();
+}
+
 export function abrirProjeto(corpo: Record<string, unknown>) {
   const cwd = typeof corpo.cwd === "string" ? corpo.cwd : "";
-  if (!projetosConhecidos.has(cwd) || !existsSync(cwd) || !statSync(cwd).isDirectory()) throw new Error("projeto_desconhecido");
+  if (!projetosConhecidos.has(cwd) || !isAbsolute(cwd) || !existsSync(cwd) || !statSync(cwd).isDirectory()) throw new Error("projeto_desconhecido");
   if (corpo.como === "vscode") {
     const code = caminhoDoVsCode();
     if (!code) throw new Error("vscode_nao_encontrado");
-    spawn(code, [cwd], { detached: true, stdio: "ignore", windowsHide: false }).unref();
+    abrirDesacoplado(code, [cwd]);
   } else if (corpo.como === "pasta") {
-    spawn("explorer.exe", [cwd], { detached: true, stdio: "ignore", windowsHide: false }).unref();
+    abrirDesacoplado("explorer.exe", [cwd]);
   } else throw new Error("acao_invalida");
   return { ok: true };
 }

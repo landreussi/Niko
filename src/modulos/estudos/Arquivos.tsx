@@ -4,7 +4,7 @@ import { Botao, ConfirmarModal, Modal, Vazio, AvisoFaixa } from "../../component
 import { ZonaDeSoltar, useArrastarArquivos } from "../../componentes/AnexosChat";
 import { useInterface } from "../../estado/interface";
 import { useComunicacao } from "../../estado/comunicacao";
-import { enviarAoTime } from "../../estado/conversando";
+import { enviarAoTime, ocupado as chatOcupado } from "../../estado/conversando";
 import { extrairTexto, podeExtrairTexto, type TextoExtraido } from "../../utilitarios/leitorDeArquivos";
 import type { AcaoAnexo } from "../../utilitarios/recursosChat";
 import { tocarSom } from "../../ponte/sons";
@@ -227,11 +227,19 @@ export function Arquivos({ materia }: { materia: Materia }) {
   const analisar = useCallback(
     async (a: ArquivoDaMateria, acao: AcaoAnexo) => {
       if (lendo) return;
+      if (acao !== "extrair" && chatOcupado()) {
+        avisar(T.estudos.arquivos.chatOcupado);
+        return;
+      }
       setLendo({ id: a.id, progresso: 0 });
       try {
         const extraido = await extrairTexto(await lerConteudo(materia.id, a.id), a.nome, (p) => setLendo({ id: a.id, progresso: p }));
         if (acao === "extrair") {
           setTextoAberto({ arquivo: a, extraido });
+          return;
+        }
+        if (chatOcupado()) {
+          avisar(T.estudos.arquivos.chatOcupado);
           return;
         }
         const conversa = useComunicacao.getState().criarConversa("tutor");
