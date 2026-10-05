@@ -144,7 +144,7 @@ export const CONFIG_PADRAO: Configuracoes = {
   ilha: {
     ativa: true,
     modo: "inteligente",
-    blocos: { calendario: true, hoje: true, captura: true, midia: true, foco: true, habitos: true, agenda: true, chat: true, conexoes: true, avisos: true, claude: false },
+    blocos: { calendario: true, hoje: true, captura: true, midia: true, foco: true, habitos: true, agenda: true, chat: true, conexoes: true, avisos: true, claude: true },
     ordemAbas: ABAS_ILHA,
     repouso: "agente",
     tamanho: "media",
@@ -200,7 +200,7 @@ export const useConfig = create<Configuracoes & AcoesConfig>()(
     {
       name: chave("configuracoes"),
       storage: armazenamento,
-      version: 7,
+      version: 8,
       migrate: (salvo, versao) => {
         const s = (salvo ?? {}) as Partial<Configuracoes>;
         if (versao < 2) {
@@ -241,6 +241,7 @@ export const useConfig = create<Configuracoes & AcoesConfig>()(
             s.ilha = { ...s.ilha, ordemAbas: ((s.ilha.ordemAbas as string[] | undefined) ?? []).filter((a) => a !== "sistema") as AbaIlha[], blocos: blocos as Configuracoes["ilha"]["blocos"] };
           }
         }
+        if (versao < 8 && s.ilha) s.ilha = { ...s.ilha, blocos: { ...(s.ilha.blocos ?? {}), claude: true } as Configuracoes["ilha"]["blocos"] };
         if (s.ia) s.ia = { ...s.ia, reservas: s.ia.reservas ?? [], modelos: s.ia.modelos ?? (s.ia.provedorId && s.ia.modelo ? { [s.ia.provedorId]: s.ia.modelo } : {}) };
         return s as Configuracoes & AcoesConfig;
       },
