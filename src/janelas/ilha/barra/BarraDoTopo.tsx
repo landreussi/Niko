@@ -16,7 +16,7 @@ import { Personalizacao } from "./Personalizacao";
 import { criarAlternadorDoIniciar } from "./acoesDaBarra";
 import { useIlha } from "../../../estado/ilha";
 import { BateriaDesenhada, IconeDeVolume, IconeDeWifi, wifiLigado } from "./IconesDeStatus";
-import { variaveisDaBorda } from "../../aparencia";
+import { atributosDoFundo, variaveisDaBorda } from "../../aparencia";
 import type { AparenciaDeBorda } from "../../../utilitarios/cores";
 import "./barra.css";
 
@@ -225,7 +225,7 @@ export function BarraDoTopo({ visivel, escala, larguraDaIlha, aparencia, aoAbrir
           <motion.div
             key="barra"
             className="ilha-barra"
-            data-fundo-claro={aparencia.claro || undefined}
+            {...atributosDoFundo(aparencia)}
             style={{ ...variaveis, height: altura, ["--escala-barra" as string]: escala, ["--faixa" as string]: `${ALTURA_DA_FAIXA}px`, ["--raio-aba" as string]: `${RAIO_DAS_ORELHAS}px` }}
             initial={{ y: "-100%" }}
             animate={{ y: 0 }}
@@ -250,7 +250,7 @@ export function BarraDoTopo({ visivel, escala, larguraDaIlha, aparencia, aoAbrir
           </motion.div>
         )}
       </AnimatePresence>
-      <div className="ilha-pops" data-fundo-claro={aparencia.claro || undefined} style={variaveis}>
+      <div className="ilha-pops" {...atributosDoFundo(aparencia)} style={variaveis}>
         <AnimatePresence>
           {visivel && pop?.tipo === "personalizar" && <Personalizacao key="personalizar" topo={topoDosPops} aoFechar={() => setPop(null)} />}
           {visivel && pop?.tipo === "painel" && <PainelRapido key="painel" topo={topoDosPops} aoFechar={() => setPop(null)} />}

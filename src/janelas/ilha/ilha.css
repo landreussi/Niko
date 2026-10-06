@@ -419,6 +419,10 @@
   color: #ff8d97;
 }
 
+[data-fundo-claro] .ilha-erro {
+  color: #c4313f;
+}
+
 .ilha-ok {
   font-size: 11px;
   color: var(--i-verde);
@@ -458,7 +462,7 @@
 }
 
 .ilha-botao-primario:hover:not(:disabled) {
-  background: #fff;
+  background: rgb(var(--i-rgb));
 }
 
 .ilha-botao-redondo {

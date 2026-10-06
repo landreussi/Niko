@@ -30,7 +30,7 @@ import { BarraDoTopo, ALTURA_DA_FAIXA } from "./barra/BarraDoTopo";
 import { alternarAbaDaBarra } from "./barra/acoesDaBarra";
 import { EspacoDoPersonagem, PersonagemContinuo } from "./animacoes/PersonagemContinuo";
 import { EtapaDeTrabalho, EtapasAnimadas } from "./animacoes/EtapasAnimadas";
-import { usarAparenciaDeBorda, variaveisDaBorda } from "../aparencia";
+import { atributosDoFundo, usarAparenciaDeBorda, variaveisDaBorda } from "../aparencia";
 import type { AgenteId, EstadoAgente } from "../../tipos";
 import "./ilha.css";
 
@@ -438,7 +438,7 @@ export function Ilha() {
         ref={raiz}
         className="ilha-raiz"
         data-privacidade={privacidade ? "sim" : "nao"}
-        data-fundo-claro={aparencia.claro || undefined}
+        {...atributosDoFundo(aparencia)}
         style={{
           ...variaveisDaBorda(aparencia),
           transform: `translateX(-50%) scale(${escala})`,

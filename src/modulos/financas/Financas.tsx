@@ -2,13 +2,13 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { addMonths, format, setDate, getDaysInMonth } from "date-fns";
 import {
   Plus, Trash2, Pencil, Upload, Download, ArrowDownLeft, ArrowUpRight, ArrowLeftRight, Wallet, CreditCard, PiggyBank, Banknote, Landmark, Repeat,
-  Target, Users, ShoppingCart, BarChart3, LayoutDashboard, Sparkles, X, Check, Scale, ListFilter,
+  Target, Users, ShoppingCart, BarChart3, LayoutDashboard, Sparkles, X, Check, Scale, ListFilter, Tags,
 } from "lucide-react";
 import { CabecalhoAba } from "../../componentes/CabecalhoAba";
 import { Cartao, Botao, Campo, Modal, Segmentado, Vazio, ConfirmarModal, Progresso, AvisoFaixa, CaixaMarcar, LinhaAlternador } from "../../componentes/basicos";
 import { BarrasHorizontais, BarrasVerticais } from "../../componentes/Graficos";
 import {
-  useFinancas, saldoDaConta, gastoPorCategoria, receitasDoMes, gastosDoMes, parteDoUsuario, saldosComPessoas, simplificarDividas, dataDeCaixa, EU,
+  useFinancas, saldoDaConta, gastoPorCategoria, receitasDoMes, gastosDoMes, parteDoUsuario, saldosComPessoas, simplificarDividas, dataDeCaixa, EU, CORES_CATEGORIA, geradoAteInicial,
 } from "../../estado/financas";
 import { useInterface } from "../../estado/interface";
 import { useConfig } from "../../estado/configuracoes";
@@ -20,6 +20,8 @@ import { baixarArquivo, contem, lerArquivoTexto, normalizarTexto, somar } from "
 import { detectarAssinaturas, assinaturasComValorNovo, lerCsv, lerOfx } from "../../utilitarios/assinaturas";
 import { tocarSom } from "../../ponte/sons";
 import { EVENTO_NOVO } from "../../janelas/area-de-trabalho/usarAtalhos";
+import { SeletorDeCategoria } from "../../componentes/SeletorDeCategoria";
+import { categoriaPelaDescricao } from "../../utilitarios/comandos";
 import type { Conta, TipoConta, TipoTransacao, Transacao } from "../../tipos";
 
 type Aba = keyof typeof T.financas.abas;
@@ -81,6 +83,7 @@ function FormTransacao({ aberto, aoFechar, editando }: { aberto: boolean; aoFech
   const [valor, setValor] = useState("");
   const [descricao, setDescricao] = useState("");
   const [categoriaId, setCategoriaId] = useState("");
+  const [novaCategoria, setNovaCategoria] = useState("");
   const [contaId, setContaId] = useState("");
   const [destinoId, setDestinoId] = useState("");
   const [data, setData] = useState(hojeISO());
@@ -90,6 +93,7 @@ function FormTransacao({ aberto, aoFechar, editando }: { aberto: boolean; aoFech
   useEffect(() => {
     if (!aberto) return;
     setErros({});
+    setNovaCategoria("");
     if (editando) {
       setTipo(editando.tipo);
       setValor(centavosParaCampo(editando.valor));
@@ -111,8 +115,9 @@ function FormTransacao({ aberto, aoFechar, editando }: { aberto: boolean; aoFech
     }
   }, [aberto, editando]);
 
-  const categorias = fin.categorias.filter((c) => c.tipo === (tipo === "receita" ? "receita" : "despesa"));
-  const sugerida = !categoriaId && descricao ? fin.categorizar(descricao) : undefined;
+  const tipoCategoria = tipo === "receita" ? "receita" : "despesa";
+  const sugerida = !categoriaId && !novaCategoria && descricao ? fin.categorias.find((c) => c.id === fin.categorizar(descricao) && c.tipo === tipoCategoria)?.id : undefined;
+  const precisaCategoria = tipo !== "transferencia" && !editando?.ajuste;
 
   const salvar = (e: React.FormEvent) => {
     e.preventDefault();
@@ -125,13 +130,16 @@ function FormTransacao({ aberto, aoFechar, editando }: { aberto: boolean; aoFech
     if (!dataValida(data)) novos.data = T.validacao.dataInvalida;
     const n = Number(parcelas);
     if (!Number.isInteger(n) || n < 1 || n > 48) novos.parcelas = T.validacao.entre(1, 48);
+    const categoriaValida = fin.categorias.some((c) => c.id === (categoriaId || sugerida) && c.tipo === tipoCategoria);
+    if (precisaCategoria && !categoriaValida && !novaCategoria.trim()) novos.categoria = T.financas.categoriaObrigatoria;
     setErros(novos);
     if (Object.keys(novos).length || v.valor == null) return;
+    const categoriaFinal = !precisaCategoria ? undefined : categoriaValida ? categoriaId || sugerida : fin.obterOuCriarCategoria(novaCategoria, tipoCategoria).id;
     const dados = {
       tipo,
       valor: v.valor,
       descricao: descricao.trim(),
-      categoriaId: tipo === "transferencia" ? undefined : categoriaId || sugerida || undefined,
+      categoriaId: categoriaFinal,
       contaId,
       contaDestinoId: tipo === "transferencia" ? destinoId : undefined,
       data,
@@ -157,7 +165,7 @@ function FormTransacao({ aberto, aoFechar, editando }: { aberto: boolean; aoFech
         <Segmentado<TipoTransacao>
           rotulo={T.financas.tipoConta}
           valor={tipo}
-          aoMudar={(t) => { setTipo(t); setCategoriaId(""); }}
+          aoMudar={(t) => { setTipo(t); setCategoriaId(""); setNovaCategoria(""); }}
           opcoes={[
             { valor: "despesa", rotulo: T.financas.tipos.despesa, icone: <ArrowUpRight size={13} /> },
             { valor: "receita", rotulo: T.financas.tipos.receita, icone: <ArrowDownLeft size={13} /> },
@@ -186,11 +194,15 @@ function FormTransacao({ aberto, aoFechar, editando }: { aberto: boolean; aoFech
               </select>
             </Campo>
           ) : (
-            <Campo id="t-cat" rotulo={T.financas.categoria} dica={sugerida ? T.financas.sugerida(fin.categorias.find((c) => c.id === sugerida)?.nome ?? "") : undefined}>
-              <select id="t-cat" className="seletor" value={categoriaId} onChange={(e) => setCategoriaId(e.target.value)}>
-                <option value="">{T.financas.semCategoria}</option>
-                {categorias.map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
-              </select>
+            <Campo id="t-cat" rotulo={T.financas.categoria} obrigatorio={precisaCategoria} erro={erros.categoria} dica={sugerida ? T.financas.sugerida(fin.categorias.find((c) => c.id === sugerida)?.nome ?? "") : undefined}>
+              <SeletorDeCategoria
+                id="t-cat"
+                tipo={tipoCategoria}
+                categoriaId={categoriaId || sugerida || ""}
+                novaCategoria={novaCategoria}
+                invalido={!!erros.categoria}
+                aoMudar={(id, nova) => { setCategoriaId(id); setNovaCategoria(nova); setErros((e) => ({ ...e, categoria: "" })); }}
+              />
             </Campo>
           )}
         </div>
@@ -260,14 +272,35 @@ function Importar({ aberto, aoFechar }: { aberto: boolean; aoFechar: () => void 
   const [contaId, setContaId] = useState("");
   const [previa, setPrevia] = useState<{ linhas: { data: string; descricao: string; valor: number }[]; invalidas: number } | null>(null);
   const [erro, setErro] = useState("");
+  const [escolhas, setEscolhas] = useState<Record<number, string>>({});
+  const [padrao, setPadrao] = useState<Record<"despesa" | "receita", { id: string; nova: string }>>({ despesa: { id: "", nova: "" }, receita: { id: "", nova: "" } });
   const arquivo = useRef<HTMLInputElement>(null);
   useEffect(() => {
     if (aberto) {
+      fin.garantirCategorias();
       setPrevia(null);
       setErro("");
+      setEscolhas({});
+      setPadrao({ despesa: { id: "", nova: "" }, receita: { id: "", nova: "" } });
       setContaId(fin.contas[0]?.id ?? "");
     }
   }, [aberto]);
+
+  const tipoDaLinha = (valor: number) => (valor < 0 ? "despesa" : "receita") as "despesa" | "receita";
+  const sugestoes = useMemo(
+    () =>
+      (previa?.linhas ?? []).map((l) => {
+        const tipo = tipoDaLinha(l.valor);
+        const doTipo = fin.categorias.filter((c) => c.tipo === tipo);
+        const pelaRegra = doTipo.find((c) => c.id === fin.categorizar(l.descricao));
+        return (pelaRegra ?? categoriaPelaDescricao(doTipo, l.descricao))?.id ?? "";
+      }),
+    [previa, fin.categorias, fin.regras],
+  );
+  const categoriaDaLinha = (i: number) => (fin.categorias.some((c) => c.id === escolhas[i]) ? escolhas[i] : sugestoes[i]) ?? "";
+  const tiposSemCategoria = (["despesa", "receita"] as const).filter((tipo) => previa?.linhas.some((l, i) => tipoDaLinha(l.valor) === tipo && !categoriaDaLinha(i)));
+  const padraoValido = (tipo: "despesa" | "receita") => fin.categorias.some((c) => c.id === padrao[tipo].id && c.tipo === tipo) || !!padrao[tipo].nova.trim();
+  const faltaPadrao = tiposSemCategoria.some((tipo) => !padraoValido(tipo));
 
   return (
     <Modal aberto={aberto} titulo={T.financas.importarExtrato} aoFechar={aoFechar} largo>
@@ -317,22 +350,53 @@ function Importar({ aberto, aoFechar }: { aberto: boolean; aoFechar: () => void 
                     <tr key={i}>
                       <td>{formatar(l.data, "dd/MM/yyyy")}</td>
                       <td>{l.descricao}</td>
+                      <td>
+                        <select className="seletor" style={{ height: 28, minWidth: 140 }} aria-label={T.financas.categoria} value={categoriaDaLinha(i)} onChange={(e) => setEscolhas((x) => ({ ...x, [i]: e.target.value }))}>
+                          <option value="">{T.financas.categoriaPadraoOpcao}</option>
+                          {fin.categorias.filter((c) => c.tipo === tipoDaLinha(l.valor)).map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
+                        </select>
+                      </td>
                       <td className="direita numero">{formatarDinheiro(l.valor)}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
+            {tiposSemCategoria.length > 0 && (
+              <div className="formulario-linha">
+                {tiposSemCategoria.map((tipo) => (
+                  <Campo key={tipo} id={`i-padrao-${tipo}`} rotulo={T.financas.categoriaPadrao(tipo === "despesa" ? T.financas.tipos.despesa : T.financas.tipos.receita)} obrigatorio dica={T.financas.categoriaPadraoDica}>
+                    <SeletorDeCategoria
+                      id={`i-padrao-${tipo}`}
+                      tipo={tipo}
+                      categoriaId={padrao[tipo].id}
+                      novaCategoria={padrao[tipo].nova}
+                      invalido={!padraoValido(tipo)}
+                      aoMudar={(id, nova) => setPadrao((p) => ({ ...p, [tipo]: { id, nova } }))}
+                    />
+                  </Campo>
+                ))}
+              </div>
+            )}
           </>
         )}
         <div className="formulario-acoes">
           <Botao onClick={aoFechar}>{T.geral.cancelar}</Botao>
           <Botao
             variante="primario"
-            disabled={!previa || !contaId}
+            disabled={!previa || !contaId || faltaPadrao}
+            title={faltaPadrao ? T.financas.categoriaObrigatoria : undefined}
             onClick={() => {
-              if (!previa) return;
-              const r = fin.importar(previa.linhas.map((l) => ({ tipo: l.valor < 0 ? "despesa" : "receita", valor: Math.abs(l.valor), descricao: l.descricao, contaId, data: l.data })));
+              if (!previa || faltaPadrao) return;
+              const padraoFinal = (tipo: "despesa" | "receita") =>
+                fin.categorias.some((c) => c.id === padrao[tipo].id && c.tipo === tipo) ? padrao[tipo].id : fin.obterOuCriarCategoria(padrao[tipo].nova, tipo).id;
+              const finais = Object.fromEntries(tiposSemCategoria.map((tipo) => [tipo, padraoFinal(tipo)]));
+              const r = fin.importar(
+                previa.linhas.map((l, i) => {
+                  const tipo = tipoDaLinha(l.valor);
+                  return { tipo, valor: Math.abs(l.valor), descricao: l.descricao, contaId, data: l.data, categoriaId: categoriaDaLinha(i) || finais[tipo] };
+                }),
+              );
               avisar(T.financas.importados(r.importados, r.duplicados));
               aoFechar();
             }}
@@ -699,6 +763,105 @@ function Orcamento({ mes, modo }: { mes: string; modo: Modo }) {
   );
 }
 
+function GerenciarCategorias() {
+  const fin = useFinancas();
+  const [editando, setEditando] = useState<{ id: string | null; tipo: "despesa" | "receita"; nome: string; cor: string } | null>(null);
+  const [erro, setErro] = useState("");
+  const [excluindo, setExcluindo] = useState<{ id: string; destinoId: string } | null>(null);
+  const alvoExclusao = fin.categorias.find((c) => c.id === excluindo?.id);
+  const usos = (id: string) => fin.transacoes.filter((t) => t.categoriaId === id).length + fin.recorrentes.filter((r) => r.categoriaId === id).length;
+
+  useEffect(() => fin.garantirCategorias(), []);
+
+  const salvar = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editando) return;
+    const nome = editando.nome.trim().slice(0, 40);
+    if (!nome) return setErro(T.validacao.obrigatorio);
+    const repetida = fin.categorias.some((c) => c.id !== editando.id && c.tipo === editando.tipo && normalizarTexto(c.nome) === normalizarTexto(nome));
+    if (repetida) return setErro(T.validacao.duplicado);
+    if (editando.id) fin.atualizarCategoria(editando.id, { nome, cor: editando.cor });
+    else fin.criarCategoria({ nome, cor: editando.cor, orcamento: 0, tipo: editando.tipo });
+    setEditando(null);
+  };
+
+  const formulario = (
+    <form className="linha" style={{ flexWrap: "wrap" }} noValidate onSubmit={salvar}>
+      {editando && !editando.id && (
+        <Segmentado<"despesa" | "receita">
+          rotulo={T.financas.tipoConta}
+          valor={editando.tipo}
+          aoMudar={(tipo) => setEditando({ ...editando, tipo })}
+          opcoes={[{ valor: "despesa", rotulo: T.financas.tipos.despesa }, { valor: "receita", rotulo: T.financas.tipos.receita }]}
+        />
+      )}
+      <input className="campo" style={{ maxWidth: 220 }} autoFocus maxLength={40} value={editando?.nome ?? ""} placeholder={T.financas.nomeCategoria} aria-label={T.financas.nomeCategoria} aria-invalid={!!erro} onChange={(e) => { setEditando((x) => x && { ...x, nome: e.target.value }); setErro(""); }} />
+      <span className="linha" style={{ gap: 4 }}>
+        {CORES_CATEGORIA.map((cor) => (
+          <button key={cor} type="button" className="ponto-cor" aria-label={cor} aria-pressed={editando?.cor === cor} style={{ background: cor, width: 18, height: 18, outline: editando?.cor === cor ? "2px solid var(--texto)" : undefined, outlineOffset: 2 }} onClick={() => setEditando((x) => x && { ...x, cor })} />
+        ))}
+      </span>
+      <Botao pequeno type="submit" variante="primario" icone={<Check size={13} />}>{T.geral.salvar}</Botao>
+      <Botao pequeno onClick={() => setEditando(null)}>{T.geral.cancelar}</Botao>
+      {erro && <span className="campo-erro">{erro}</span>}
+    </form>
+  );
+
+  return (
+    <Cartao
+      titulo={T.financas.categorias}
+      icone={<Tags size={16} />}
+      acoes={!editando || editando.id ? <Botao pequeno variante="primario" icone={<Plus size={13} />} onClick={() => { setEditando({ id: null, tipo: "despesa", nome: "", cor: CORES_CATEGORIA[fin.categorias.length % CORES_CATEGORIA.length] }); setErro(""); }}>{T.financas.novaCategoria}</Botao> : undefined}
+    >
+      <p className="campo-dica" style={{ marginBottom: 8 }}>{T.financas.categoriasDica}</p>
+      {editando && !editando.id && formulario}
+      {(["despesa", "receita"] as const).map((tipo) => (
+        <div key={tipo} className="lista" style={{ marginTop: 8 }}>
+          <span className="texto-3" style={{ fontSize: 12 }}>{tipo === "despesa" ? T.financas.tipos.despesa : T.financas.tipos.receita}</span>
+          {fin.categorias.filter((c) => c.tipo === tipo).map((c) => (
+            <div key={c.id} className="lista-item">
+              <span className="ponto-cor" style={{ background: c.cor }} />
+              {editando?.id === c.id ? formulario : (
+                <>
+                  <span className="lista-item-principal">{c.nome}</span>
+                  <div className="lista-item-acoes">
+                    <Botao pequeno soIcone variante="fantasma" icone={<Pencil size={13} />} aria-label={T.geral.editar} onClick={() => { setEditando({ id: c.id, tipo: c.tipo, nome: c.nome, cor: c.cor }); setErro(""); }} />
+                    <Botao
+                      pequeno
+                      soIcone
+                      variante="fantasma"
+                      icone={<Trash2 size={13} />}
+                      aria-label={T.financas.excluirCategoria(c.nome)}
+                      title={fin.categorias.filter((x) => x.tipo === tipo).length <= 1 ? T.financas.ultimaCategoria : undefined}
+                      disabled={fin.categorias.filter((x) => x.tipo === tipo).length <= 1}
+                      onClick={() => setExcluindo({ id: c.id, destinoId: fin.categorias.find((x) => x.tipo === tipo && x.id !== c.id)?.id ?? "" })}
+                    />
+                  </div>
+                </>
+              )}
+            </div>
+          ))}
+        </div>
+      ))}
+      <Modal aberto={!!alvoExclusao} titulo={alvoExclusao ? T.financas.excluirCategoria(alvoExclusao.nome) : ""} aoFechar={() => setExcluindo(null)}>
+        {alvoExclusao && excluindo && (
+          <div className="formulario">
+            <Campo id="cat-destino" rotulo={T.financas.moverPara} dica={T.financas.excluirCategoriaDica(usos(alvoExclusao.id))}>
+              <select id="cat-destino" className="seletor" value={excluindo.destinoId} onChange={(e) => setExcluindo({ ...excluindo, destinoId: e.target.value })}>
+                {fin.categorias.filter((c) => c.tipo === alvoExclusao.tipo && c.id !== alvoExclusao.id).map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
+              </select>
+            </Campo>
+            <div className="formulario-acoes">
+              <Botao onClick={() => setExcluindo(null)}>{T.geral.cancelar}</Botao>
+              <Botao variante="perigo" disabled={!excluindo.destinoId} onClick={() => { fin.excluirCategoria(excluindo.id, excluindo.destinoId); setExcluindo(null); }}>{T.geral.excluir}</Botao>
+            </div>
+          </div>
+        )}
+      </Modal>
+    </Cartao>
+  );
+}
+
 function Recorrentes() {
   const fin = useFinancas();
   const [aberto, setAberto] = useState(false);
@@ -709,6 +872,7 @@ function Recorrentes() {
   const [mesAnual, setMesAnual] = useState(String(new Date().getMonth() + 1));
   const [contaId, setContaId] = useState("");
   const [categoriaId, setCategoriaId] = useState("");
+  const [novaCategoria, setNovaCategoria] = useState("");
   const [erros, setErros] = useState<Record<string, string>>({});
   const candidatas = useMemo(() => detectarAssinaturas(fin.transacoes, fin.recorrentes, fin.assinaturasIgnoradas), [fin.transacoes, fin.recorrentes, fin.assinaturasIgnoradas]);
   const mudaram = useMemo(() => assinaturasComValorNovo(fin.transacoes, fin.recorrentes), [fin.transacoes, fin.recorrentes]);
@@ -719,7 +883,8 @@ function Recorrentes() {
     setDia(String(pre?.dia ?? 5));
     setFrequencia(pre?.frequencia ?? "mensal");
     setContaId(pre?.contaId ?? fin.contas[0]?.id ?? "");
-    setCategoriaId(pre?.categoriaId ?? "");
+    setCategoriaId(pre?.categoriaId ?? (pre ? fin.categorizar(pre.descricao) ?? "" : ""));
+    setNovaCategoria("");
     setErros({});
     setAberto(true);
   };
@@ -776,8 +941,11 @@ function Recorrentes() {
             const d = Number(dia);
             if (!Number.isInteger(d) || d < 1 || d > 31) novos.dia = T.validacao.entre(1, 31);
             if (!contaId) novos.conta = T.validacao.contaObrigatoria;
+            const categoriaValida = fin.categorias.some((c) => c.id === categoriaId && c.tipo === "despesa");
+            if (!categoriaValida && !novaCategoria.trim()) novos.categoria = T.financas.categoriaObrigatoria;
             setErros(novos);
             if (Object.keys(novos).length || v.valor == null) return;
+            const categoriaFinal = categoriaValida ? categoriaId : fin.obterOuCriarCategoria(novaCategoria, "despesa").id;
             const hoje = new Date();
             fin.criarRecorrente({
               descricao: descricao.trim(),
@@ -786,9 +954,9 @@ function Recorrentes() {
               frequencia,
               mesAnual: frequencia === "anual" ? Number(mesAnual) : undefined,
               contaId,
-              categoriaId: categoriaId || undefined,
+              categoriaId: categoriaFinal,
               ativa: true,
-              geradoAte: d <= hoje.getDate() ? paraISO(setDate(hoje, Math.min(d, getDaysInMonth(hoje)))) : undefined,
+              geradoAte: geradoAteInicial({ dia: d, frequencia, mesAnual: frequencia === "anual" ? Number(mesAnual) : undefined }, hoje),
             });
             setAberto(false);
           }}
@@ -823,11 +991,15 @@ function Recorrentes() {
                 {fin.contas.map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
               </select>
             </Campo>
-            <Campo id="r-cat" rotulo={T.financas.categoria}>
-              <select id="r-cat" className="seletor" value={categoriaId} onChange={(e) => setCategoriaId(e.target.value)}>
-                <option value="">{T.financas.semCategoria}</option>
-                {fin.categorias.filter((c) => c.tipo === "despesa").map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
-              </select>
+            <Campo id="r-cat" rotulo={T.financas.categoria} obrigatorio erro={erros.categoria}>
+              <SeletorDeCategoria
+                id="r-cat"
+                tipo="despesa"
+                categoriaId={categoriaId}
+                novaCategoria={novaCategoria}
+                invalido={!!erros.categoria}
+                aoMudar={(id, nova) => { setCategoriaId(id); setNovaCategoria(nova); setErros((e) => ({ ...e, categoria: "" })); }}
+              />
             </Campo>
           </div>
           <div className="formulario-acoes">
@@ -947,6 +1119,8 @@ function Divisao() {
   const [contaAcerto, setContaAcerto] = useState("");
   const [valorAcerto, setValorAcerto] = useState("");
   const [erros, setErros] = useState<Record<string, string>>({});
+  const [categoriaDiv, setCategoriaDiv] = useState({ id: "", nova: "" });
+  const sugeridaDiv = !categoriaDiv.id && !categoriaDiv.nova && descricao ? fin.categorias.find((c) => c.id === fin.categorizar(descricao) && c.tipo === "despesa")?.id : undefined;
   const saldos = saldosComPessoas(fin);
   const simplificacao = simplificarDividas(fin);
   const nomeDe = (id: string) => (id === EU ? T.financas.eu : fin.pessoas.find((p) => p.id === id)?.nome ?? "");
@@ -980,9 +1154,13 @@ function Divisao() {
         if (valores[0]) valores[0].valor += diferenca;
       }
     }
+    const escolhida = categoriaDiv.id || sugeridaDiv;
+    const categoriaValida = fin.categorias.some((c) => c.id === escolhida && c.tipo === "despesa");
+    if (!categoriaValida && !categoriaDiv.nova.trim()) novos.categoria = T.financas.categoriaObrigatoria;
     setErros(novos);
     if (Object.keys(novos).length || v.valor == null) return;
-    fin.dividir({ descricao: descricao.trim(), total: v.valor, pagadorId: pagador, partes: valores, data: hojeISO(), contaId: pagador === EU ? contaId : undefined, categoriaId: fin.categorizar(descricao) });
+    const categoriaId = categoriaValida ? escolhida : fin.obterOuCriarCategoria(categoriaDiv.nova, "despesa").id;
+    fin.dividir({ descricao: descricao.trim(), total: v.valor, pagadorId: pagador, partes: valores, data: hojeISO(), contaId: pagador === EU ? contaId : undefined, categoriaId });
     setNova(false);
     void tocarSom("pop");
   };
@@ -1030,7 +1208,7 @@ function Divisao() {
           </div>
         )}
       </Cartao>
-      <Cartao className="col-8" titulo={T.financas.abas.divisao} icone={<Scale size={16} />} acoes={<Botao pequeno variante="primario" icone={<Plus size={13} />} disabled={fin.pessoas.length === 0} title={fin.pessoas.length === 0 ? T.financas.crieAPessoa : undefined} onClick={() => { setDescricao(""); setTotal(""); setPagador(EU); setParticipantes([EU, ...fin.pessoas.map((p) => p.id)]); setModoDiv("iguais"); setPartes({}); setContaId(fin.contas[0]?.id ?? ""); setErros({}); setNova(true); }}>{T.financas.novaDivisao}</Botao>}>
+      <Cartao className="col-8" titulo={T.financas.abas.divisao} icone={<Scale size={16} />} acoes={<Botao pequeno variante="primario" icone={<Plus size={13} />} disabled={fin.pessoas.length === 0} title={fin.pessoas.length === 0 ? T.financas.crieAPessoa : undefined} onClick={() => { setDescricao(""); setTotal(""); setPagador(EU); setParticipantes([EU, ...fin.pessoas.map((p) => p.id)]); setModoDiv("iguais"); setPartes({}); setContaId(fin.contas[0]?.id ?? ""); setCategoriaDiv({ id: "", nova: "" }); setErros({}); setNova(true); }}>{T.financas.novaDivisao}</Botao>}>
         {simplificacao.length > 0 && (
           <div className="coluna" style={{ gap: 4, marginBottom: 12 }}>
             <span className="rotulo-secao">{T.financas.simplificacao}</span>
@@ -1076,6 +1254,16 @@ function Divisao() {
                 </select>
               </Campo>
             )}
+            <Campo id="dv-cat" rotulo={T.financas.categoria} obrigatorio erro={erros.categoria}>
+              <SeletorDeCategoria
+                id="dv-cat"
+                tipo="despesa"
+                categoriaId={categoriaDiv.id || sugeridaDiv || ""}
+                novaCategoria={categoriaDiv.nova}
+                invalido={!!erros.categoria}
+                aoMudar={(id, nova) => { setCategoriaDiv({ id, nova }); setErros((e) => ({ ...e, categoria: "" })); }}
+              />
+            </Campo>
           </div>
           <div className="campo-grupo">
             <span className="campo-rotulo">{T.financas.modoDivisao}</span>
@@ -1148,6 +1336,7 @@ function Compras({ mes }: { mes: string }) {
   const [finalizando, setFinalizando] = useState(false);
   const [totalReal, setTotalReal] = useState("");
   const [contaId, setContaId] = useState("");
+  const [categoriaCompra, setCategoriaCompra] = useState({ id: "", nova: "" });
   const lista = fin.listas.find((l) => l.id === listaId) ?? fin.listas[0];
   const estimado = lista ? somar(lista.itens, (i) => i.precoEstimado * i.quantidade) : 0;
   const marcados = lista ? lista.itens.filter((i) => i.marcado) : [];
@@ -1265,7 +1454,7 @@ function Compras({ mes }: { mes: string }) {
               <span className="texto-2">{T.financas.totalEstimado}: <b className="privado">{formatarDinheiro(estimado)}</b></span>
               {categoria && categoria.orcamento > 0 && <span className="texto-3" style={{ fontSize: 12 }}>{T.financas.sobraOrcamento(formatarDinheiro(categoria.orcamento - gastoCategoria))}</span>}
             </div>
-            <Botao variante="primario" disabled={marcados.length === 0 || fin.contas.length === 0} onClick={() => { setTotalReal(centavosParaCampo(somar(marcados, (i) => i.precoEstimado * i.quantidade))); setContaId(fin.contas[0]?.id ?? ""); setErros({}); setFinalizando(true); }}>
+            <Botao variante="primario" disabled={marcados.length === 0 || fin.contas.length === 0} onClick={() => { setTotalReal(centavosParaCampo(somar(marcados, (i) => i.precoEstimado * i.quantidade))); setContaId(fin.contas[0]?.id ?? ""); setCategoriaCompra({ id: lista.categoriaId ?? "", nova: "" }); setErros({}); setFinalizando(true); }}>
               {T.financas.finalizarCompra} ({marcados.length})
             </Botao>
           </div>
@@ -1278,8 +1467,15 @@ function Compras({ mes }: { mes: string }) {
           onSubmit={(e) => {
             e.preventDefault();
             const v = validarValor(totalReal);
-            if (v.erro || v.valor == null || !lista) return setErros({ total: v.erro ?? T.validacao.valorInvalido });
-            fin.finalizarCompra(lista.id, contaId, v.valor);
+            const categoriaValida = fin.categorias.some((c) => c.id === categoriaCompra.id && c.tipo === "despesa");
+            const novos: Record<string, string> = {};
+            if (v.erro || v.valor == null) novos.total = v.erro ?? T.validacao.valorInvalido;
+            if (!categoriaValida && !categoriaCompra.nova.trim()) novos.categoria = T.financas.categoriaObrigatoria;
+            setErros(novos);
+            if (Object.keys(novos).length || v.valor == null || !lista) return;
+            const categoriaId = categoriaValida ? categoriaCompra.id : fin.obterOuCriarCategoria(categoriaCompra.nova, "despesa").id;
+            if (!lista.categoriaId) useFinancas.setState((s) => ({ listas: s.listas.map((x) => (x.id === lista.id ? { ...x, categoriaId } : x)) }));
+            fin.finalizarCompra(lista.id, contaId, v.valor, categoriaId);
             setFinalizando(false);
             void useAgentes.getState().trabalhar("operador", T.financas.compraDescricao(lista.nome), 400);
           }}
@@ -1289,6 +1485,16 @@ function Compras({ mes }: { mes: string }) {
             <select id="fc-conta" className="seletor" value={contaId} onChange={(e) => setContaId(e.target.value)}>
               {fin.contas.map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
             </select>
+          </Campo>
+          <Campo id="fc-cat" rotulo={T.financas.categoria} obrigatorio erro={erros.categoria}>
+            <SeletorDeCategoria
+              id="fc-cat"
+              tipo="despesa"
+              categoriaId={categoriaCompra.id}
+              novaCategoria={categoriaCompra.nova}
+              invalido={!!erros.categoria}
+              aoMudar={(id, nova) => { setCategoriaCompra({ id, nova }); setErros((e) => ({ ...e, categoria: "" })); }}
+            />
           </Campo>
           <div className="formulario-acoes">
             <Botao onClick={() => setFinalizando(false)}>{T.geral.cancelar}</Botao>
@@ -1450,7 +1656,12 @@ export default function Financas() {
       {aba === "transacoes" && <Cartao><Transacoes mes={mes} buscaInicial={parametros.busca} /></Cartao>}
       {aba === "contas" && <Contas />}
       {aba === "cartoes" && <Cartoes />}
-      {aba === "orcamento" && <Cartao><Orcamento mes={mes} modo={modo} /></Cartao>}
+      {aba === "orcamento" && (
+        <div className="coluna" style={{ gap: 20 }}>
+          <Cartao><Orcamento mes={mes} modo={modo} /></Cartao>
+          <GerenciarCategorias />
+        </div>
+      )}
       {aba === "recorrentes" && <Recorrentes />}
       {aba === "economia" && <Economia />}
       {aba === "divisao" && <Divisao />}

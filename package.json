@@ -21,6 +21,7 @@
         "midia:testar": "node --test scripts/midia.test.mjs"
     },
     "dependencies": {
+        "22": "^0.0.0",
         "@dnd-kit/core": "^6.3.1",
         "@dnd-kit/sortable": "^10.0.0",
         "@dnd-kit/utilities": "^3.2.2",
@@ -50,6 +51,7 @@
         "zustand": "^5.0.15"
     },
     "devDependencies": {
+        "@rolldown/binding-win32-x64-msvc": "^1.2.12",
         "@tauri-apps/cli": "^2.12.1",
         "@types/node": "^26.6.4",
         "@types/react": "^19.3.0",

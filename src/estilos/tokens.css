@@ -37,8 +37,11 @@
   --escala: 1;
 }
 
-[data-tema="claro"] {
+/* Ilha, barra e dock têm fundo próprio: os tokens seguem o fundo escolhido, não o tema do app. */
+[data-tema="claro"],
+[data-fundo-claro] {
   color-scheme: light;
+  --cor-organizador: #1c1c1e;
   --fundo: #f6f6f5;
   --superficie: #ffffff;
   --superficie-2: #f1f1f0;
@@ -55,7 +58,8 @@
   --foco: rgba(124, 92, 224, 0.35);
 }
 
-[data-tema="escuro"] {
+[data-tema="escuro"],
+[data-fundo-escuro] {
   color-scheme: dark;
   --fundo: #0e0e10;
   --superficie: #161618;

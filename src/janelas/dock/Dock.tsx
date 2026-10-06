@@ -12,7 +12,7 @@ import { tocarSom } from "../../ponte/sons";
 import { ALTURA_DOCK, alguemCobre } from "../geometria";
 import { ICONE_ROTA } from "../sistema/rotas";
 import { COR_AGENTE } from "../../personagens/cores";
-import { usarAparenciaDeBorda, variaveisDaBorda } from "../aparencia";
+import { atributosDoFundo, usarAparenciaDeBorda, variaveisDaBorda } from "../aparencia";
 import "./dock.css";
 
 interface PropsItemDock {
@@ -317,7 +317,7 @@ export function Dock() {
       <motion.div
         ref={caixa}
         className="dock"
-        data-fundo-claro={aparencia.claro || undefined}
+        {...atributosDoFundo(aparencia)}
         style={{ ...variaveisDaBorda(aparencia), height: ALTURA_DOCK, background: fundo }}
         initial={false}
         animate={{ y: escondido ? ALTURA_DOCK + 8 : 0 }}

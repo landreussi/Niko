@@ -25,7 +25,8 @@ import { funcaoLigada } from "../../utilitarios/funcoes";
 import { useFinancas } from "../../estado/financas";
 import { interpretarQuando } from "../../utilitarios/linguagem";
 import { capturar, tiposDeCapturaLigados, type TipoCaptura } from "../../utilitarios/captura";
-import { confirmarComando } from "../../utilitarios/comandos";
+import { confirmarComando, faltaCategoria, tipoDeCategoriaDoCartao } from "../../utilitarios/comandos";
+import { SeletorDeCategoria } from "../../componentes/SeletorDeCategoria";
 import { formatarDinheiro } from "../../utilitarios/dinheiro";
 import { tocarSom } from "../../ponte/sons";
 import { addMonths, eachDayOfInterval, endOfMonth, endOfWeek, isSameMonth, startOfMonth, startOfWeek } from "date-fns";
@@ -176,6 +177,7 @@ export function VisaoCaptura() {
       {confirmacao ? (
         <ConfirmacaoIlha
           confirmacao={confirmacao}
+          aoMudar={(dados) => setConfirmacao({ ...confirmacao, dados: { ...confirmacao.dados, ...dados } })}
           aoFim={(texto) => {
             setConfirmacao(null);
             if (texto) {
@@ -212,8 +214,10 @@ export function VisaoCaptura() {
   );
 }
 
-function ConfirmacaoIlha({ confirmacao, aoFim }: { confirmacao: CartaoConfirmacao; aoFim: (texto?: string) => void }) {
+function ConfirmacaoIlha({ confirmacao, aoMudar, aoFim }: { confirmacao: CartaoConfirmacao; aoMudar: (dados: CartaoConfirmacao["dados"]) => void; aoFim: (texto?: string) => void }) {
   const d = confirmacao.dados;
+  const tipoCategoria = tipoDeCategoriaDoCartao(confirmacao);
+  const semCategoria = faltaCategoria(confirmacao);
   return (
     <div className="coluna" style={{ gap: 8 }}>
       <div className="ilha-confirmacao">
@@ -221,8 +225,20 @@ function ConfirmacaoIlha({ confirmacao, aoFim }: { confirmacao: CartaoConfirmaca
         <span>{T.chat.rotulos.descricao}: <b>{String(d.descricao)}</b></span>
         {Array.isArray(d.pessoas) && <span>{T.chat.rotulos.pessoas}: <b>{d.pessoas.join(", ")}</b></span>}
       </div>
+      {tipoCategoria && (
+        <div className="permissao-categoria" data-falta={semCategoria || undefined}>
+          {semCategoria && T.financas.categoriaObrigatoria}
+          <SeletorDeCategoria
+            tipo={tipoCategoria}
+            categoriaId={String(d.categoriaId ?? "")}
+            novaCategoria={String(d.novaCategoria ?? "")}
+            invalido={semCategoria}
+            aoMudar={(categoriaId, novaCategoria) => aoMudar({ categoriaId, novaCategoria })}
+          />
+        </div>
+      )}
       <div className="linha">
-        <button type="button" className="ilha-botao ilha-botao-primario" onClick={() => void Promise.resolve(confirmarComando(confirmacao)).then((texto) => aoFim(texto))}>
+        <button type="button" className="ilha-botao ilha-botao-primario" disabled={semCategoria} onClick={() => void Promise.resolve(confirmarComando(confirmacao)).then((texto) => aoFim(texto))}>
           {T.chat.confirmar}
         </button>
         <button type="button" className="ilha-botao" onClick={() => aoFim()}>
