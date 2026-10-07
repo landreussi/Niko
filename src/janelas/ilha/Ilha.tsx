@@ -28,7 +28,7 @@ import { useClaudeCode, sessaoAtiva, nomeDoModelo } from "../../estado/claudeCod
 import { useAtualizacao } from "../../estado/atualizacao";
 import { NATIVO, usarAreaInterativa, usarCursorFora, usarEstadoDaFrente } from "../../desktop/desktop";
 import { BarraDoTopo, ALTURA_DA_FAIXA } from "./barra/BarraDoTopo";
-import { alternarAbaDaBarra } from "./barra/acoesDaBarra";
+import { abaVizinha, alternarAbaDaBarra } from "./barra/acoesDaBarra";
 import { EspacoDoPersonagem, PersonagemContinuo } from "./animacoes/PersonagemContinuo";
 import { EtapaDeTrabalho, EtapasAnimadas } from "./animacoes/EtapasAnimadas";
 import { atributosDoFundo, usarAparenciaDeBorda, variaveisDaBorda } from "../aparencia";
@@ -85,6 +85,8 @@ const ALTURA_COMPACTA = 30;
 const AGENTE_DA_ABA: Partial<Record<VisaoIlha, AgenteId>> = { hoje: "organizador", foco: "tutor", conexoes: "java", claude: "java" };
 const RODIZIO_MS = 8 * 60_000;
 const ABAS_SEM_LATERAL: VisaoIlha[] = ["chat", "midia"];
+const LIMIAR_DA_ROLAGEM = 40;
+const INTERVALO_ENTRE_TROCAS_MS = 180;
 
 function agenteDoRodizio(favorito: AgenteId, agora: number): AgenteId {
   const ordem: AgenteId[] = [favorito, ...AGENTES.filter((a) => a !== favorito)];
@@ -172,6 +174,7 @@ export function Ilha() {
   const capturaDisponivel = tiposDeCapturaLigados(desligadas).length > 0;
   const abaAtual: VisaoIlha = aba === "captura" && capturaDisponivel ? "captura" : abas.includes(aba as AbaIlha) ? aba : abas[0] ?? "hoje";
   const abaAntesDaCaptura = useRef<AbaIlha>("hoje");
+  const rolagemDasAbas = useRef({ acumulado: 0, ultimaTroca: 0 });
   const frente = usarEstadoDaFrente(cfg.ativa);
   const [lateraisLivresNativo, setLateraisLivresNativo] = useState(true);
   useEffect(() => {
@@ -525,7 +528,24 @@ export function Ilha() {
                   animate={{ opacity: 1, filter: "blur(0px)", scale: 1, transition: { delay: 0.16, duration: 0.3 } }}
                   exit={{ opacity: 0, filter: "blur(8px)", scale: 0.97, transition: { duration: 0.16 } }}
                 >
-                  <div className="ilha-cabecalho">
+                  <div
+                    className="ilha-cabecalho"
+                    onWheel={(e) => {
+                      const r = rolagemDasAbas.current;
+                      const delta = Math.abs(e.deltaY) >= Math.abs(e.deltaX) ? e.deltaY : e.deltaX;
+                      const agoraMs = Date.now();
+                      if (agoraMs - r.ultimaTroca < INTERVALO_ENTRE_TROCAS_MS) return;
+                      r.acumulado += delta;
+                      if (Math.abs(r.acumulado) < LIMIAR_DA_ROLAGEM) return;
+                      const passo = r.acumulado > 0 ? 1 : -1;
+                      r.acumulado = 0;
+                      r.ultimaTroca = agoraMs;
+                      const proxima = abaVizinha(abas, abaAtual === "captura" ? abaAntesDaCaptura.current : abaAtual, passo);
+                      if (!proxima || proxima === abaAtual) return;
+                      void tocarSom("blip");
+                      abrir(proxima);
+                    }}
+                  >
                     <div className="ilha-abas" role="tablist" aria-label={T.app.nome}>
                       {abas.map((a, i) => {
                         const Icone = ICONE_ABA[a];

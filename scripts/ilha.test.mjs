@@ -7,7 +7,7 @@ globalThis.localStorage = { getItem: () => null, setItem: () => undefined };
 globalThis.window = { setTimeout, clearTimeout };
 const servidor = await createServer({ configFile: false, server: { middlewareMode: true, hmr: false, watch: null }, appType: "custom", optimizeDeps: { noDiscovery: true } });
 after(() => servidor.close());
-const { alternarAbaDaBarra, criarAlternadorDoIniciar } = await servidor.ssrLoadModule("/src/janelas/ilha/barra/acoesDaBarra.ts");
+const { abaVizinha, alternarAbaDaBarra, criarAlternadorDoIniciar } = await servidor.ssrLoadModule("/src/janelas/ilha/barra/acoesDaBarra.ts");
 const { useIlha } = await servidor.ssrLoadModule("/src/estado/ilha.ts");
 const { controle, sistema } = await servidor.ssrLoadModule("/src/ponte/ponteLocal.ts");
 
@@ -19,8 +19,27 @@ test("clicar novamente na mesma aba recolhe a ilha", () => {
   assert.equal(useIlha.getState().estado, "compacta");
 });
 
+test("rolar sobre as abas anda uma aba por vez e para nas pontas", () => {
+  const abas = ["hoje", "conexoes", "chat"];
+  assert.equal(abaVizinha(abas, "hoje", 1), "conexoes");
+  assert.equal(abaVizinha(abas, "conexoes", -1), "hoje");
+  assert.equal(abaVizinha(abas, "chat", 1), "chat");
+  assert.equal(abaVizinha(abas, "hoje", -1), "hoje");
+  assert.equal(abaVizinha(abas, "midia", 1), "hoje");
+  assert.equal(abaVizinha([], "hoje", 1), undefined);
+});
+
+test("botão de tarefas da barra abre a seção certa sem recolher outra seção do Hoje", () => {
+  useIlha.setState({ estado: "expandida", aba: "hoje", secaoHoje: "agenda" });
+  alternarAbaDaBarra("hoje", "tarefas");
+  assert.equal(useIlha.getState().estado, "expandida");
+  assert.equal(useIlha.getState().secaoHoje, "tarefas");
+  alternarAbaDaBarra("hoje", "tarefas");
+  assert.equal(useIlha.getState().estado, "compacta");
+});
+
 test("trocar de aba não recolhe uma ilha expandida", () => {
-  useIlha.setState({ estado: "expandida", aba: "calendario" });
+  useIlha.setState({ estado: "expandida", aba: "chat" });
   alternarAbaDaBarra("hoje");
   assert.equal(useIlha.getState().estado, "expandida");
   assert.equal(useIlha.getState().aba, "hoje");

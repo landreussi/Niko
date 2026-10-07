@@ -9,6 +9,13 @@ export function alternarAbaDaBarra(aba: AbaIlha, secao?: SecaoHoje) {
   else ilha.abrir(aba);
 }
 
+export function abaVizinha(abas: AbaIlha[], atual: AbaIlha, passo: 1 | -1): AbaIlha | undefined {
+  if (abas.length === 0) return undefined;
+  const indice = abas.indexOf(atual);
+  if (indice < 0) return abas[0];
+  return abas[Math.min(abas.length - 1, Math.max(0, indice + passo))];
+}
+
 export function criarAlternadorDoIniciar(ler: () => Promise<{ aberto: boolean }>, executar: (abertoAntes?: boolean) => Promise<unknown>) {
   let leitura: Promise<boolean | undefined> | null = null;
   let ocupado = false;
