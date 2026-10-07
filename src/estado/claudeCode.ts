@@ -134,6 +134,44 @@ function jaFoiAplicado(id: string): boolean {
   return false;
 }
 
+const CHAVE_FECHADAS = "niko:claude-sessoes-fechadas";
+const MAXIMO_FECHADAS = 60;
+
+function lerFechadas(): Record<string, number> {
+  try {
+    const dados = JSON.parse(localStorage.getItem(CHAVE_FECHADAS) ?? "{}") as unknown;
+    return dados && typeof dados === "object" && !Array.isArray(dados) ? (dados as Record<string, number>) : {};
+  } catch {
+    return {};
+  }
+}
+
+function gravarFechadas(fechadas: Record<string, number>) {
+  const recentes = Object.entries(fechadas).sort((a, b) => b[1] - a[1]).slice(0, MAXIMO_FECHADAS);
+  try {
+    localStorage.setItem(CHAVE_FECHADAS, JSON.stringify(Object.fromEntries(recentes)));
+  } catch {
+    return;
+  }
+}
+
+function sessaoFoiFechadaAntes(e: EventoClaude): boolean {
+  const fechadas = lerFechadas();
+  const fechadaEm = fechadas[e.sessao];
+  if (fechadaEm === undefined) return false;
+  if (Date.parse(e.recebidoEm) <= fechadaEm) return true;
+  delete fechadas[e.sessao];
+  gravarFechadas(fechadas);
+  return false;
+}
+
+function semASessao(s: { sessoes: Record<string, SessaoClaude>; ordem: string[]; focada: string | null; pedidos: PedidoDePermissao[] }, id: string) {
+  const sessoes = { ...s.sessoes };
+  delete sessoes[id];
+  const ordem = s.ordem.filter((x) => x !== id);
+  return { sessoes, ordem, focada: s.focada === id ? ordem[0] ?? null : s.focada, pedidos: s.pedidos.filter((p) => p.sessao !== id) };
+}
+
 function novoPasso(e: EventoClaude, tipo: PassoClaude["tipo"], rotulo: string, detalhe?: string, ferramenta?: string): PassoClaude {
   return { id: e.id, tipo, rotulo, detalhe, ferramenta, hora: e.recebidoEm };
 }
@@ -148,13 +186,10 @@ export const useClaudeCode = create<EstadoClaude>((set, get) => ({
   definirConectado: (conectado) => set({ conectado }),
   focar: (id) => set({ focada: id }),
   removerPedido: (pedidoId) => set((s) => ({ pedidos: s.pedidos.filter((p) => p.pedidoId !== pedidoId) })),
-  fechar: (id) =>
-    set((s) => {
-      const sessoes = { ...s.sessoes };
-      delete sessoes[id];
-      const ordem = s.ordem.filter((x) => x !== id);
-      return { sessoes, ordem, focada: s.focada === id ? ordem[0] ?? null : s.focada, pedidos: s.pedidos.filter((p) => p.sessao !== id) };
-    }),
+  fechar: (id) => {
+    gravarFechadas({ ...lerFechadas(), [id]: Date.now() });
+    set((s) => semASessao(s, id));
+  },
 
   aplicar: (e) => {
     if (e.evento === "NikoConectado" || jaFoiAplicado(e.id)) return;
@@ -172,7 +207,11 @@ export const useClaudeCode = create<EstadoClaude>((set, get) => ({
       });
       return;
     }
-    if (!e.sessao) return;
+    if (!e.sessao || sessaoFoiFechadaAntes(e)) return;
+    if (e.evento === "SessionEnd") {
+      set((s) => (s.sessoes[e.sessao] ? semASessao(s, e.sessao) : {}));
+      return;
+    }
     set((s) => {
       const d = e.dados;
       const anterior = s.sessoes[e.sessao];
@@ -252,10 +291,6 @@ export const useClaudeCode = create<EstadoClaude>((set, get) => ({
           break;
         case "SubagentStop":
           passos.push(novoPasso(e, "subagente", T.ilha.claude.subagenteTerminou(texto(d.agent_type) || "")));
-          break;
-        case "SessionEnd":
-          sessao.estado = "ociosa";
-          pedidos = pedidos.filter((p) => p.sessao !== e.sessao);
           break;
         default:
           return {};

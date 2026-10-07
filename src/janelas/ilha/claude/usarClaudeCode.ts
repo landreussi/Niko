@@ -28,6 +28,11 @@ function devolverAoTerminal(pedidoId: string) {
   void claudeCode.decidir(pedidoId, "terminal").catch(() => undefined);
 }
 
+export function fecharSessao(id: string) {
+  for (const p of useClaudeCode.getState().pedidos) if (p.sessao === id) devolverAoTerminal(p.pedidoId);
+  useClaudeCode.getState().fechar(id);
+}
+
 export function devolverPendentesAoTerminal() {
   for (const p of useClaudeCode.getState().pedidos) devolverAoTerminal(p.pedidoId);
 }

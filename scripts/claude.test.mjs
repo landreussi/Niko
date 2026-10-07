@@ -11,6 +11,8 @@ process.env.USERPROFILE = raizTemporaria;
 process.env.HOME = raizTemporaria;
 process.env.APPDATA = join(raizTemporaria, "AppData");
 process.env.NIKO_PORTA = "47999";
+const memoriaLocal = new Map();
+globalThis.localStorage ??= { getItem: (k) => memoriaLocal.get(k) ?? null, setItem: (k, v) => memoriaLocal.set(k, String(v)), removeItem: (k) => memoriaLocal.delete(k) };
 
 const vite = await createServer({ configFile: false, server: { middlewareMode: true, hmr: false, watch: null }, appType: "custom", optimizeDeps: { noDiscovery: true } });
 const claude = await vite.ssrLoadModule("/servidor/claude.ts");
@@ -262,6 +264,22 @@ test("evento repetido numa reconexão não duplica a atividade", () => {
   assert.equal(sessao.passos.length, 1);
   assert.equal(sessao.ferramentasUsadas, 1);
   assert.equal(sessao.projeto, "app");
+});
+
+test("sessão encerrada some da ilha e aba fechada não volta com eventos antigos", () => {
+  const { aplicar, fechar } = useClaudeCode.getState();
+  const antes = new Date(Date.now() - 60_000).toISOString();
+  aplicar({ id: "s7-inicio", recebidoEm: antes, evento: "SessionStart", sessao: "s7", cwd: "C:\\projetos\\app", dados: {} });
+  aplicar({ id: "s8-inicio", recebidoEm: antes, evento: "SessionStart", sessao: "s8", cwd: "C:\\projetos\\app", dados: {} });
+  assert.ok(useClaudeCode.getState().sessoes.s7);
+  aplicar({ id: "s7-fim", recebidoEm: antes, evento: "SessionEnd", sessao: "s7", cwd: "C:\\projetos\\app", dados: { reason: "clear" } });
+  assert.equal(useClaudeCode.getState().sessoes.s7, undefined);
+  assert.ok(!useClaudeCode.getState().ordem.includes("s7"));
+  fechar("s8");
+  aplicar({ id: "s8-antigo", recebidoEm: antes, evento: "PreToolUse", sessao: "s8", cwd: "C:\\projetos\\app", dados: { tool_name: "Read", tool_input: { file_path: "a.ts" } } });
+  assert.equal(useClaudeCode.getState().sessoes.s8, undefined);
+  aplicar({ id: "s8-novo", recebidoEm: new Date(Date.now() + 1000).toISOString(), evento: "UserPromptSubmit", sessao: "s8", cwd: "C:\\projetos\\app", dados: { prompt: "continua" } });
+  assert.ok(useClaudeCode.getState().sessoes.s8);
 });
 
 test("pedido que sai da ilha sem decisão deixa o motivo na atividade", () => {

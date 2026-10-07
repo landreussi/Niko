@@ -15,6 +15,7 @@ import { T } from "../../../textos/textos";
 import "./claude.css";
 import { EtapasAnimadas } from "../animacoes/EtapasAnimadas";
 import { abrirConfiguracoesClaude } from "./navegacao";
+import { fecharSessao } from "./usarClaudeCode";
 
 const ESPERA_MS = 110_000;
 const C = T.ilha.claude;
@@ -258,7 +259,6 @@ export function VisaoClaude() {
   const pedidos = useClaudeCode((s) => s.pedidos);
   const focada = useClaudeCode((s) => s.focada);
   const focar = useClaudeCode((s) => s.focar);
-  const fechar = useClaudeCode((s) => s.fechar);
   const agora = usarAgora(30000);
   const [instalacao, setInstalacao] = useState<EstadoDaInstalacao | null>(null);
   const sessao = sessoes[focada ?? ""] ?? sessoes[ordem[0]];
@@ -288,7 +288,7 @@ export function VisaoClaude() {
                 <span className="vsc-aba-nome">{s.projeto}</span>
                 <span className="vsc-ponto" />
               </button>
-              <button type="button" className="vsc-aba-fechar" aria-label={C.fechar} title={C.fechar} onClick={() => fechar(id)}>
+              <button type="button" className="vsc-aba-fechar" aria-label={C.fechar} title={C.fechar} onClick={() => fecharSessao(id)}>
                 <X size={11} />
               </button>
             </div>
