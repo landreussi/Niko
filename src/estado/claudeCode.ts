@@ -66,10 +66,10 @@ function texto(valor: unknown): string {
   return typeof valor === "string" ? valor : "";
 }
 
-export function nomeDoProjeto(cwd: string): string {
+export function nomeDoProjeto(cwd: string, reserva = "Claude Code"): string {
   const limpo = cwd.replace(/[\\/]+$/, "");
   const i = Math.max(limpo.lastIndexOf("\\"), limpo.lastIndexOf("/"));
-  return (i >= 0 ? limpo.slice(i + 1) : limpo) || "Claude Code";
+  return (i >= 0 ? limpo.slice(i + 1) : limpo) || reserva;
 }
 
 export function rotuloDaFerramenta(ferramenta: string): string {
@@ -217,10 +217,11 @@ export const useClaudeCode = create<EstadoClaude>((set, get) => ({
     set((s) => {
       const d = e.dados;
       const anterior = s.sessoes[e.sessao];
+      const nomeReserva = T.ilha.claude.nomes[e.ferramenta ?? "claude"] ?? "Claude Code";
       const base: SessaoClaude = anterior ?? {
         id: e.sessao,
         ferramenta: e.ferramenta ?? "claude",
-        projeto: nomeDoProjeto(e.cwd),
+        projeto: nomeDoProjeto(e.cwd, nomeReserva),
         cwd: e.cwd,
         estado: "ociosa",
         passos: [],
@@ -228,7 +229,7 @@ export const useClaudeCode = create<EstadoClaude>((set, get) => ({
         iniciadaEm: e.recebidoEm,
         atualizadaEm: e.recebidoEm,
       };
-      const sessao: SessaoClaude = { ...base, cwd: e.cwd || base.cwd, projeto: e.cwd ? nomeDoProjeto(e.cwd) : base.projeto, atualizadaEm: e.recebidoEm, modo: texto(d.permission_mode) || base.modo, modelo: texto(d.model) || base.modelo };
+      const sessao: SessaoClaude = { ...base, cwd: e.cwd || base.cwd, projeto: e.cwd ? nomeDoProjeto(e.cwd, nomeReserva) : base.projeto, atualizadaEm: e.recebidoEm, modo: texto(d.permission_mode) || base.modo, modelo: texto(d.model) || base.modelo };
       const passos = [...sessao.passos];
       let pedidos = s.pedidos;
       switch (e.evento) {

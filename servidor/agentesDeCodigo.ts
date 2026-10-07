@@ -77,7 +77,7 @@ function argumentos(v: unknown): Corpo {
 export function normalizarEvento(ferramenta: FerramentaDeCodigo, eventoDaRota: string, corpo: Corpo): Corpo | null {
   if (ferramenta === "copilot") {
     const nome = EVENTOS_DO_COPILOT[eventoDaRota];
-    if (!nome) return null;
+    if (!nome || (eventoDaRota === "errorOccurred" && corpo.recoverable === true)) return null;
     const erro = objeto(corpo.error);
     return {
       hook_event_name: nome,
@@ -168,8 +168,15 @@ function ehDoNiko(valor: unknown, ferramenta: FerramentaDeCodigo) {
 
 function lerJson(textoAtual: string | null): Corpo {
   if (!textoAtual || !textoAtual.trim()) return {};
-  const dados = JSON.parse(textoAtual.replace(/^﻿/, "")) as unknown;
+  let dados: unknown;
+  try {
+    dados = JSON.parse(textoAtual.replace(/^﻿/, ""));
+  } catch {
+    throw new Error("configuracao_invalida");
+  }
   if (!dados || typeof dados !== "object" || Array.isArray(dados)) throw new Error("configuracao_invalida");
+  const hooks = (dados as Corpo).hooks;
+  if (hooks !== undefined && (!hooks || typeof hooks !== "object" || Array.isArray(hooks))) throw new Error("configuracao_invalida");
   return dados as Corpo;
 }
 
@@ -191,7 +198,7 @@ const INSTALADORES: Record<Exclude<FerramentaDeCodigo, "claude">, Instalador> = 
         Object.keys(EVENTOS_DO_COPILOT).map((evento) => {
           const decide = evento === "permissionRequest";
           const comando = comandoDoGancho("copilot", evento, chave, decide);
-          return [evento, [{ type: "command", bash: comando, powershell: comando, timeoutSec: decide ? TEMPO_DO_GANCHO_DECISAO_S : TEMPO_DO_GANCHO_RAPIDO_S }]];
+          return [evento, [{ type: "command", bash: `${comando} || true`, powershell: `${comando}; exit 0`, timeoutSec: decide ? TEMPO_DO_GANCHO_DECISAO_S : TEMPO_DO_GANCHO_RAPIDO_S }]];
         }),
       );
       return `${JSON.stringify({ version: 1, hooks }, null, 2)}\n`;
@@ -240,6 +247,7 @@ const INSTALADORES: Record<Exclude<FerramentaDeCodigo, "claude">, Instalador> = 
     detectado: () => existsSync(casa(".kimi-code")),
     propor: (atual, chave) => {
       const base = semBlocoToml(atual ?? "").replace(/\s*$/, "");
+      if (/^\s*hooks\s*=/m.test(base)) throw new Error("hooks_em_linha");
       const entradas = EVENTOS_DO_KIMI.map((evento) => {
         const g = gancho("kimi", evento, chave);
         return `[[hooks]]\nevent = "${evento}"\ncommand = '${g.command}'\ntimeout = ${g.timeout}`;
@@ -296,6 +304,7 @@ export const NikoPlugin = async ({ directory }) => ({
     else if (event.type === "session.error") enviar({ ...base, hook_event_name: "StopFailure", error_message: String(p.error?.data?.message ?? p.error?.name ?? "") });
     else if (event.type === "session.deleted") enviar({ ...base, hook_event_name: "SessionEnd" });
     else if (event.type === "permission.asked" || event.type === "permission.updated") enviar({ ...base, hook_event_name: "Notification", notification_type: "agent_needs_input", message: "" });
+    else if (event.type === "permission.replied") enviar({ ...base, hook_event_name: "NikoPensando" });
   },
   "chat.message": async (input, output) => {
     const partes = Array.isArray(output?.parts) ? output.parts : [];
