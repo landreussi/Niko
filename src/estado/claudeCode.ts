@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { EventoClaude, RegraSugerida } from "../ponte/claudeCode";
+import type { EventoClaude, FerramentaDeCodigo, RegraSugerida } from "../ponte/claudeCode";
 import { alteracaoDaFerramenta, type AlteracaoDeArquivo } from "../utilitarios/diff";
 import { T } from "../textos/textos";
 
@@ -17,6 +17,7 @@ export interface PassoClaude {
 
 export interface SessaoClaude {
   id: string;
+  ferramenta: FerramentaDeCodigo;
   projeto: string;
   cwd: string;
   estado: EstadoSessao;
@@ -33,6 +34,7 @@ export interface SessaoClaude {
 
 export interface PedidoDePermissao {
   pedidoId: string;
+  ferramentaDeCodigo: FerramentaDeCodigo;
   sessao: string;
   projeto: string;
   ferramenta: string;
@@ -217,6 +219,7 @@ export const useClaudeCode = create<EstadoClaude>((set, get) => ({
       const anterior = s.sessoes[e.sessao];
       const base: SessaoClaude = anterior ?? {
         id: e.sessao,
+        ferramenta: e.ferramenta ?? "claude",
         projeto: nomeDoProjeto(e.cwd),
         cwd: e.cwd,
         estado: "ociosa",
@@ -231,6 +234,9 @@ export const useClaudeCode = create<EstadoClaude>((set, get) => ({
       switch (e.evento) {
         case "SessionStart":
           if (!anterior) sessao.estado = "ociosa";
+          break;
+        case "NikoPensando":
+          sessao.estado = "pensando";
           break;
         case "UserPromptSubmit": {
           const pedido = texto(d.prompt_text) || texto(d.prompt);
@@ -261,7 +267,7 @@ export const useClaudeCode = create<EstadoClaude>((set, get) => ({
           const ferramenta = texto(d.tool_name) || "Tool";
           const entrada = (d.tool_input ?? {}) as Record<string, unknown>;
           sessao.estado = "aprovacao";
-          pedidos = [...pedidos.filter((p) => p.pedidoId !== e.pedidoId), { pedidoId: e.pedidoId, sessao: e.sessao, projeto: sessao.projeto, ferramenta, alvo: alvoDaFerramenta(entrada), entrada: formatarEntrada(entrada), recebidoEm: e.recebidoEm, alteracao: alteracaoDaFerramenta(ferramenta, entrada), sugestoes: sugestoesDoEvento(d) }];
+          pedidos = [...pedidos.filter((p) => p.pedidoId !== e.pedidoId), { pedidoId: e.pedidoId, ferramentaDeCodigo: sessao.ferramenta, sessao: e.sessao, projeto: sessao.projeto, ferramenta, alvo: alvoDaFerramenta(entrada), entrada: formatarEntrada(entrada), recebidoEm: e.recebidoEm, alteracao: alteracaoDaFerramenta(ferramenta, entrada), sugestoes: sugestoesDoEvento(d) }];
           break;
         }
         case "Notification": {

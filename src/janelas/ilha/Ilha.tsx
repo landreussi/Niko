@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import {
-  Plus, Music, Timer, CalendarDays, MessageCircle, Plug, Bell, Volume2, VolumeX, AppWindow, ChevronUp, Check, CircleAlert, Download, SquareTerminal, ShieldAlert, LoaderCircle,
+  Plus, Music, Timer, CalendarDays, MessageCircle, Plug, Bell, Volume2, VolumeX, AppWindow, ChevronUp, Check, CircleAlert, Download, CodeXml, ShieldAlert, LoaderCircle,
   type LucideIcon,
 } from "lucide-react";
 import { useConfig, type AbaIlha, type SecaoHoje, type VisaoIlha } from "../../estado/configuracoes";
@@ -22,6 +22,7 @@ import { alguemCobre } from "../geometria";
 import { VisaoChat } from "./VisaoChat";
 import { VisaoClaude } from "./claude/VisaoClaude";
 import { usarClaudeCode, devolverPendentesAoTerminal } from "./claude/usarClaudeCode";
+import { MARCA_DA_FERRAMENTA, nomeDaFerramenta } from "./claude/ferramentas";
 import { abaLigada } from "../../utilitarios/funcoes";
 import { tiposDeCapturaLigados } from "../../utilitarios/captura";
 import { useClaudeCode, sessaoAtiva, nomeDoModelo } from "../../estado/claudeCode";
@@ -45,7 +46,7 @@ const ICONE_ABA: Record<AbaIlha, LucideIcon> = {
   chat: MessageCircle,
   conexoes: Plug,
   avisos: Bell,
-  claude: SquareTerminal,
+  claude: CodeXml,
 };
 
 const VISAO_ABA: Record<VisaoIlha, () => React.JSX.Element | null> = {
@@ -188,10 +189,9 @@ export function Ilha() {
     [],
   );
 
-  const claudeInstalado = useConfig((s) => s.claudeInstalado);
   const desligadas = useConfig((s) => s.funcoesDesligadas);
   const comAvisos = agentes.alertas.length > 0 || (estado === "expandida" && aba === "avisos");
-  const abas = cfg.ordemAbas.filter((a) => cfg.blocos[a] && (a !== "claude" || claudeInstalado) && (a !== "avisos" || comAvisos) && abaLigada(a, desligadas));
+  const abas = cfg.ordemAbas.filter((a) => cfg.blocos[a] && (a !== "avisos" || comAvisos) && abaLigada(a, desligadas));
   const capturaDisponivel = tiposDeCapturaLigados(desligadas).length > 0;
   const abaAtual: VisaoIlha = aba === "captura" && capturaDisponivel ? "captura" : abas.includes(aba as AbaIlha) ? aba : abas[0] ?? "hoje";
   const abaAntesDaCaptura = useRef<AbaIlha>("hoje");
@@ -397,10 +397,10 @@ export function Ilha() {
         return (
           <>
             <div className="ilha-compacta-lado">
-              <Marca marca="claudecode" tamanho={16} />
+              <Marca marca={MARCA_DA_FERRAMENTA[pedidosClaude[0]?.ferramentaDeCodigo ?? "claude"]} tamanho={16} />
             </div>
             <span className="ilha-compacta-texto ilha-claude-compacta" data-estado="aprovacao">
-              {T.ilha.claude.permissaoCompacta(pedidosClaude[0]?.projeto ?? "")}
+              {T.ilha.claude.permissaoCompacta(nomeDaFerramenta(pedidosClaude[0]?.ferramentaDeCodigo), pedidosClaude[0]?.projeto ?? "")}
             </span>
             <div className="ilha-compacta-lado">
               <ShieldAlert size={15} color="#f0a060" />
@@ -412,7 +412,7 @@ export function Ilha() {
         return (
           <>
             <div className="ilha-compacta-lado">
-              <Marca marca="claudecode" tamanho={16} />
+              <Marca marca={MARCA_DA_FERRAMENTA[claudeAtivo?.ferramenta ?? "claude"]} tamanho={16} />
             </div>
             {passo && claudeAtivo ? <EtapasAnimadas contexto={claudeAtivo.id} etapas={claudeAtivo.passos.filter((p) => p.tipo === "ferramenta" || p.tipo === "fim" || p.tipo === "erro").map((p) => ({ id: p.id, texto: `${p.rotulo} ${p.detalhe ?? ""}`.trim() }))} compacta /> : <span className="ilha-compacta-texto brilho-texto">{T.ilha.claude.estados[claudeAtivo?.estado ?? "pensando"]}</span>}
             <div className="ilha-compacta-lado">
@@ -589,7 +589,7 @@ export function Ilha() {
                               abrir(a);
                             }}
                           >
-                            {a === "claude" ? <Marca marca="claudecode" tamanho={14} monocromatica={a !== abaAtual} /> : <Icone size={14} />}
+                            <Icone size={14} />
                             {a === abaAtual && <span className="ilha-aba-nome">{T.ilha.abas[a]}</span>}
                             {a === "claude" && pedidosClaude.length > 0 && <span className="ilha-aba-selo">{pedidosClaude.length}</span>}
                             {a === "avisos" && naoVistos > 0 && <span className="ilha-aba-selo">{naoVistos}</span>}
