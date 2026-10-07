@@ -22,12 +22,13 @@
 }
 
 .botao-primario {
-  background: var(--primario);
-  color: var(--primario-texto);
+  background: var(--botao-primario);
+  color: var(--botao-primario-texto);
+  border-color: var(--botao-primario-borda);
 }
 
 .botao-primario:hover:not(:disabled) {
-  opacity: 0.88;
+  background: var(--botao-primario-hover);
 }
 
 .botao-secundario {

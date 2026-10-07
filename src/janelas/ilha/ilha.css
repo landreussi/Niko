@@ -462,12 +462,13 @@
 }
 
 .ilha-botao-primario {
-  background: var(--i-tinta);
-  color: var(--i-tinta-inversa);
+  background: rgba(var(--i-rgb), 0.18);
+  color: var(--i-tinta);
+  box-shadow: inset 0 0 0 1px rgba(var(--i-rgb), 0.08);
 }
 
 .ilha-botao-primario:hover:not(:disabled) {
-  background: rgb(var(--i-rgb));
+  background: rgba(var(--i-rgb), 0.24);
 }
 
 .ilha-botao-redondo {
