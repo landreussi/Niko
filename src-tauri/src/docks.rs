@@ -5,7 +5,7 @@ use std::time::Duration;
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, Monitor, PhysicalPosition, PhysicalSize, WebviewWindow};
 
-use crate::{barra_windows, criar_sobreposta, Estado, ALTURA_DOCK};
+use crate::{barra_windows, criar_sobreposta, Estado, ALTURA_DOCK, ALTURA_ILHA};
 
 pub const ROTULO_PRINCIPAL: &str = "dock";
 const ESCOLHA_TODOS: &str = "todos";
@@ -87,7 +87,18 @@ pub fn posicionar(janela: &WebviewWindow, monitor: &Monitor) {
     let _ = janela.set_position(destino);
 }
 
+pub fn posicionar_ilha(app: &AppHandle) {
+    let Some(janela) = app.get_webview_window("ilha") else { return };
+    let Some((monitor, _)) = monitores_ordenados(app).into_iter().next() else { return };
+    let altura = (ALTURA_ILHA * monitor.scale_factor()).round() as u32;
+    let destino = *monitor.position();
+    let _ = janela.set_position(destino);
+    let _ = janela.set_size(PhysicalSize::new(monitor.size().width, altura));
+    let _ = janela.set_position(destino);
+}
+
 pub fn reposicionar_todos(app: &AppHandle) {
+    posicionar_ilha(app);
     for (monitor, info) in monitores_ordenados(app) {
         if let Some(janela) = app.get_webview_window(&info.rotulo) {
             posicionar(&janela, &monitor);
@@ -139,6 +150,7 @@ pub fn sincronizar(app: &AppHandle) {
         posicionar(&janela, monitor);
     }
 
+    posicionar_ilha(app);
     if let Ok(mut atual) = ASSINATURA.lock() {
         *atual = assinatura(&monitores);
     }
