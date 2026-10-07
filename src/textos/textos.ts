@@ -263,8 +263,10 @@ export const T = {
         temas: { claro: "Claro", escuro: "Escuro", sistema: "Sistema" },
         destaque: "Cor de destaque",
         cores: "Cor da ilha e do dock",
+        grupos: { aparencia: "Aparência", ilha: "Ilha", dock: "Dock" },
         monitores: {
-          titulo: "Dock nos monitores",
+          titulo: "Em quais monitores",
+          naoReconhecido: "Segundo monitor não reconhecido. Ligue outro monitor para escolher.",
           osDois: "Os dois",
           todos: "Todos",
           principal: "Principal",

@@ -1,5 +1,5 @@
 import { motion } from "motion/react";
-import { Check, ExternalLink, Image, Settings2 } from "lucide-react";
+import { Check, ExternalLink, Image, MonitorX, Paintbrush, PanelBottom, PanelTop, Settings2, SunMoon, type LucideIcon } from "lucide-react";
 import { useConfig, type RepousoIlha, type Tema } from "../../../estado/configuracoes";
 import { useInterface } from "../../../estado/interface";
 import { useIlha } from "../../../estado/ilha";
@@ -12,14 +12,16 @@ import { T } from "../../../textos/textos";
 import { usarMonitores } from "../../../desktop/desktop";
 import { TODOS_OS_MONITORES } from "../../dock/monitores";
 
+const MONITOR_PRINCIPAL = "principal";
+
 const P = T.ilha.barra.personalizacao;
 const DESTAQUES_PRONTOS = ["#a78bfa", "#3b82f6", "#10b981", "#f59e0b", "#f4505e", "#ec4899"];
 
-function Escolha<V extends string>({ rotulo, valor, opcoes, aoMudar }: { rotulo: string; valor: V; opcoes: { valor: V; rotulo: string }[]; aoMudar: (v: V) => void }) {
+function Escolha<V extends string>({ rotulo, valor, opcoes, aoMudar, grade = false, desativada = false }: { rotulo: string; valor: V; opcoes: { valor: V; rotulo: string }[]; aoMudar: (v: V) => void; grade?: boolean; desativada?: boolean }) {
   return (
-    <div className="ilha-escolha" role="radiogroup" aria-label={rotulo}>
+    <div className="ilha-escolha" data-grade={grade || undefined} data-desativada={desativada || undefined} role="radiogroup" aria-label={rotulo} aria-disabled={desativada || undefined}>
       {opcoes.map((o) => (
-        <button key={o.valor} type="button" role="radio" aria-checked={valor === o.valor} className="ilha-escolha-opcao" onClick={() => aoMudar(o.valor)}>
+        <button key={o.valor} type="button" role="radio" aria-checked={valor === o.valor} className="ilha-escolha-opcao" disabled={desativada} onClick={() => aoMudar(o.valor)}>
           {o.rotulo}
         </button>
       ))}
@@ -43,10 +45,22 @@ function CorLivre({ rotulo, valor, aoMudar }: { rotulo: string; valor: string; a
   );
 }
 
-function Secao({ titulo, children }: { titulo: string; children: React.ReactNode }) {
+function Grupo({ icone: Icone, titulo, children }: { icone: LucideIcon; titulo: string; children: React.ReactNode }) {
+  return (
+    <section className="ilha-personalizar-grupo" aria-label={titulo}>
+      <span className="ilha-personalizar-titulo">
+        <Icone size={13} />
+        {titulo}
+      </span>
+      {children}
+    </section>
+  );
+}
+
+function Linha({ rotulo, children }: { rotulo: string; children: React.ReactNode }) {
   return (
     <div className="ilha-personalizar-secao">
-      <span className="ilha-personalizar-titulo">{titulo}</span>
+      <span className="ilha-personalizar-rotulo">{rotulo}</span>
       {children}
     </div>
   );
@@ -60,13 +74,19 @@ export function Personalizacao({ topo, aoFechar }: { topo: number; aoFechar: () 
   const fonte = cfg.ilha;
   const percentual = Math.round(fonte.opacidade * 100);
   const monitores = usarMonitores();
-  const doisMonitores = monitores.length === 2;
+  const variosMonitores = monitores.length >= 2;
   const escolhaSalva = cfg.dock.monitores ?? TODOS_OS_MONITORES;
-  const escolhaDoDock = escolhaSalva === TODOS_OS_MONITORES || monitores.some((m) => m.nome === escolhaSalva) ? escolhaSalva : monitores.find((m) => m.principal)?.nome ?? TODOS_OS_MONITORES;
-  const opcoesDeMonitor = [
-    { valor: TODOS_OS_MONITORES, rotulo: doisMonitores ? P.monitores.osDois : P.monitores.todos },
-    ...monitores.map((m) => ({ valor: m.nome, rotulo: doisMonitores ? (m.principal ? P.monitores.principal : P.monitores.secundario) : P.monitores.numero(m.numero, m.principal) })),
-  ];
+  const escolhaDoDock = !variosMonitores ? MONITOR_PRINCIPAL : escolhaSalva === TODOS_OS_MONITORES || monitores.some((m) => m.nome === escolhaSalva) ? escolhaSalva : monitores.find((m) => m.principal)?.nome ?? TODOS_OS_MONITORES;
+  const opcoesDeMonitor = variosMonitores
+    ? [
+        { valor: TODOS_OS_MONITORES, rotulo: monitores.length === 2 ? P.monitores.osDois : P.monitores.todos },
+        ...monitores.map((m) => ({ valor: m.nome, rotulo: monitores.length === 2 ? (m.principal ? P.monitores.principal : P.monitores.secundario) : P.monitores.numero(m.numero, m.principal) })),
+      ]
+    : [
+        { valor: TODOS_OS_MONITORES, rotulo: P.monitores.osDois },
+        { valor: MONITOR_PRINCIPAL, rotulo: P.monitores.principal },
+        { valor: "secundario", rotulo: P.monitores.secundario },
+      ];
 
   const aplicarCor = (mudanca: { fundo?: string; opacidade?: number }) => {
     cfg.definirIlha(mudanca);
@@ -84,20 +104,21 @@ export function Personalizacao({ topo, aoFechar }: { topo: number; aoFechar: () 
       exit={{ opacity: 0, y: -8, scale: 0.98, transition: { duration: 0.12 } }}
       transition={{ type: "spring", visualDuration: 0.28, bounce: 0.15 }}
     >
-      <Secao titulo={P.temaDoNiko}>
-        <Escolha<Tema> rotulo={P.temaDoNiko} valor={cfg.tema} aoMudar={(tema) => cfg.definir({ tema })} opcoes={(["claro", "escuro", "sistema"] as Tema[]).map((t) => ({ valor: t, rotulo: P.temas[t] }))} />
-      </Secao>
+      <Grupo icone={SunMoon} titulo={P.grupos.aparencia}>
+        <Linha rotulo={P.temaDoNiko}>
+          <Escolha<Tema> rotulo={P.temaDoNiko} valor={cfg.tema} aoMudar={(tema) => cfg.definir({ tema })} opcoes={(["claro", "escuro", "sistema"] as Tema[]).map((t) => ({ valor: t, rotulo: P.temas[t] }))} />
+        </Linha>
+        <Linha rotulo={P.destaque}>
+          <div className="ilha-amostras">
+            {DESTAQUES_PRONTOS.map((cor) => (
+              <Amostra key={cor} cor={cor} rotulo={cor} ativa={corDoDestaque.toLowerCase() === cor} aoClicar={() => cfg.definir({ destaque: cor })} />
+            ))}
+            <CorLivre rotulo={T.configuracoes.outraCor} valor={corDoDestaque} aoMudar={(destaque) => cfg.definir({ destaque })} />
+          </div>
+        </Linha>
+      </Grupo>
 
-      <Secao titulo={P.destaque}>
-        <div className="ilha-amostras">
-          {DESTAQUES_PRONTOS.map((cor) => (
-            <Amostra key={cor} cor={cor} rotulo={cor} ativa={corDoDestaque.toLowerCase() === cor} aoClicar={() => cfg.definir({ destaque: cor })} />
-          ))}
-          <CorLivre rotulo={T.configuracoes.outraCor} valor={corDoDestaque} aoMudar={(destaque) => cfg.definir({ destaque })} />
-        </div>
-      </Secao>
-
-      <Secao titulo={P.cores}>
+      <Grupo icone={Paintbrush} titulo={P.cores}>
         <div className="ilha-amostras">
           {FUNDOS_PRONTOS.map((f) => (
             <Amostra key={f.valor} cor={amostraDeFundo(f.valor)} rotulo={f.rotulo} ativa={fonte.fundo === f.valor} aoClicar={() => aplicarCor({ fundo: f.valor })} />
@@ -119,23 +140,29 @@ export function Personalizacao({ topo, aoFechar }: { topo: number; aoFechar: () 
           />
           <span className="ilha-rapido-valor numero">{percentual}%</span>
         </div>
-        <p className="ilha-rapido-vazio">{T.configuracoes.textoAutomatico}</p>
-      </Secao>
+        <p className="ilha-personalizar-dica">{T.configuracoes.textoAutomatico}</p>
+      </Grupo>
 
-      {monitores.length >= 2 && (
-        <Secao titulo={P.monitores.titulo}>
-          <Escolha rotulo={P.monitores.titulo} valor={escolhaDoDock} aoMudar={(escolha) => cfg.definir({ dock: { ...useConfig.getState().dock, monitores: escolha } })} opcoes={opcoesDeMonitor} />
-        </Secao>
-      )}
+      <Grupo icone={PanelTop} titulo={P.grupos.ilha}>
+        <Linha rotulo={P.tamanhoDaIlha}>
+          <Escolha rotulo={P.tamanhoDaIlha} valor={cfg.ilha.tamanho} aoMudar={(tamanho) => cfg.definirIlha({ tamanho })} opcoes={(["pequena", "media", "grande"] as const).map((t) => ({ valor: t, rotulo: T.configuracoes.tamanhos[t] }))} />
+        </Linha>
+        <Linha rotulo={P.repouso}>
+          <Escolha<RepousoIlha> grade rotulo={P.repouso} valor={cfg.ilha.repouso} aoMudar={(repouso) => cfg.definirIlha({ repouso })} opcoes={(Object.keys(T.configuracoes.repousos) as RepousoIlha[]).map((r) => ({ valor: r, rotulo: T.configuracoes.repousos[r] }))} />
+        </Linha>
+      </Grupo>
 
-      <Secao titulo={P.tamanhoDaIlha}>
-        <Escolha rotulo={P.tamanhoDaIlha} valor={cfg.ilha.tamanho} aoMudar={(tamanho) => cfg.definirIlha({ tamanho })} opcoes={(["pequena", "media", "grande"] as const).map((t) => ({ valor: t, rotulo: T.configuracoes.tamanhos[t] }))} />
-      </Secao>
-
-      <Secao titulo={P.repouso}>
-        <Escolha<RepousoIlha> rotulo={P.repouso} valor={cfg.ilha.repouso} aoMudar={(repouso) => cfg.definirIlha({ repouso })} opcoes={(Object.keys(T.configuracoes.repousos) as RepousoIlha[]).map((r) => ({ valor: r, rotulo: T.configuracoes.repousos[r] }))} />
-      </Secao>
-
+      <Grupo icone={PanelBottom} titulo={P.grupos.dock}>
+        <Linha rotulo={P.monitores.titulo}>
+          <Escolha desativada={!variosMonitores} rotulo={P.monitores.titulo} valor={escolhaDoDock} aoMudar={(escolha) => cfg.definir({ dock: { ...useConfig.getState().dock, monitores: escolha } })} opcoes={opcoesDeMonitor} />
+          {!variosMonitores && (
+            <span className="ilha-personalizar-aviso">
+              <MonitorX size={13} />
+              {P.monitores.naoReconhecido}
+            </span>
+          )}
+        </Linha>
+      </Grupo>
       <div className="ilha-personalizar-rodape">
         <button
           type="button"
