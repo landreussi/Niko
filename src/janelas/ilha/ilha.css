@@ -232,6 +232,11 @@
   color: var(--i-tinta);
 }
 
+.ilha-acao[aria-pressed="true"] {
+  background: var(--i-aba-ativa);
+  color: var(--i-tinta);
+}
+
 .ilha-acao[data-dica] {
   position: relative;
 }
@@ -507,6 +512,19 @@
 .ilha-chip[aria-pressed="true"] {
   background: rgba(var(--i-rgb), 0.12);
   color: var(--i-tinta);
+}
+
+.ilha-chip-numero {
+  font-size: 10.5px;
+  color: var(--i-dim-2);
+}
+
+.ilha-hoje-secao {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 .ilha-trilho {

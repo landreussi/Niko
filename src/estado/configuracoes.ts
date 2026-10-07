@@ -10,9 +10,23 @@ const DESTAQUE_ESCURO_PADRAO = "#a78bfa";
 export type Tema = "claro" | "escuro" | "sistema";
 export type Paleta = "padrao" | "areia" | "grafite" | "floresta" | "oceano";
 export type ModoBorda = "fixo" | "esconder" | "inteligente";
-export type AbaIlha = "calendario" | "hoje" | "captura" | "midia" | "foco" | "habitos" | "chat" | "conexoes" | "avisos" | "claude";
+export type AbaIlha = "hoje" | "midia" | "foco" | "chat" | "conexoes" | "avisos" | "claude";
+export type VisaoIlha = AbaIlha | "captura";
+export type SecaoHoje = "agenda" | "tarefas" | "habitos";
 
-export const ABAS_ILHA: AbaIlha[] = ["calendario", "claude", "conexoes", "chat", "hoje", "captura", "midia", "foco", "habitos", "avisos"];
+export const ABAS_ILHA: AbaIlha[] = ["hoje", "claude", "conexoes", "chat", "midia", "foco", "avisos"];
+const ABAS_JUNTADAS_NO_HOJE = ["hoje", "calendario", "habitos"];
+
+export function juntarAbasNoHoje(ordem: string[], blocos: Record<string, boolean>) {
+  const posicoes = ABAS_JUNTADAS_NO_HOJE.map((a) => ordem.indexOf(a)).filter((i) => i >= 0);
+  const restante = ordem.filter((a) => !ABAS_JUNTADAS_NO_HOJE.includes(a) && a !== "captura");
+  const posicao = posicoes.length ? ordem.slice(0, Math.min(...posicoes)).filter((a) => !ABAS_JUNTADAS_NO_HOJE.includes(a) && a !== "captura").length : 0;
+  const conexoes = restante.indexOf("conexoes");
+  restante.splice(conexoes >= 0 ? Math.min(posicao, conexoes) : posicao, 0, "hoje");
+  const { calendario, habitos, captura: _captura, ...outros } = blocos;
+  const hoje = [outros.hoje, calendario, habitos].some((v) => v !== false);
+  return { ordemAbas: restante as AbaIlha[], blocos: { ...outros, hoje } as Record<AbaIlha, boolean> };
+}
 export type RepousoIlha = "nada" | "relogio" | "midia" | "agente";
 export type BlocoInicio =
   | "time" | "hoje" | "foco" | "financas" | "conexoes" | "revisoes" | "consumo" | "mapa" | "conquistas";
@@ -147,7 +161,7 @@ export const CONFIG_PADRAO: Configuracoes = {
   ilha: {
     ativa: true,
     modo: "inteligente",
-    blocos: { calendario: true, hoje: true, captura: true, midia: true, foco: true, habitos: true, chat: true, conexoes: true, avisos: true, claude: true },
+    blocos: { hoje: true, midia: true, foco: true, chat: true, conexoes: true, avisos: true, claude: true },
     ordemAbas: ABAS_ILHA,
     repouso: "agente",
     tamanho: "media",
@@ -206,7 +220,7 @@ export const useConfig = create<Configuracoes & AcoesConfig>()(
     {
       name: chave("configuracoes"),
       storage: armazenamento,
-      version: 9,
+      version: 10,
       migrate: (salvo, versao) => {
         const s = (salvo ?? {}) as Partial<Configuracoes>;
         if (versao < 2) {
@@ -235,7 +249,7 @@ export const useConfig = create<Configuracoes & AcoesConfig>()(
         if (versao < 6 && s.ilha) {
           const ordem = ((s.ilha.ordemAbas as string[] | undefined) ?? []).filter((a) => a !== "time" && a !== "calendario");
           const { time: _time, ...blocos } = (s.ilha.blocos ?? {}) as Record<string, boolean>;
-          s.ilha = { ...s.ilha, ordemAbas: ["calendario", ...ordem] as AbaIlha[], blocos: { ...blocos, calendario: true } as Configuracoes["ilha"]["blocos"] };
+          s.ilha = { ...s.ilha, ordemAbas: ["calendario", ...ordem] as AbaIlha[], blocos: { ...blocos, calendario: true } as unknown as Configuracoes["ilha"]["blocos"] };
         }
         if (versao < 7) {
           const destaque = s.destaque && hexValido(s.destaque) ? s.destaque : DESTAQUE_ESCURO_PADRAO;
@@ -252,6 +266,7 @@ export const useConfig = create<Configuracoes & AcoesConfig>()(
           const { agenda: _agenda, ...blocos } = (s.ilha.blocos ?? {}) as Record<string, boolean>;
           s.ilha = { ...s.ilha, ordemAbas: ((s.ilha.ordemAbas as string[] | undefined) ?? []).filter((a) => a !== "agenda") as AbaIlha[], blocos: blocos as Configuracoes["ilha"]["blocos"] };
         }
+        if (versao < 10 && s.ilha) s.ilha = { ...s.ilha, ...juntarAbasNoHoje((s.ilha.ordemAbas as string[] | undefined) ?? [], (s.ilha.blocos ?? {}) as Record<string, boolean>) };
         if (s.ia) s.ia = { ...s.ia, reservas: s.ia.reservas ?? [], modelos: s.ia.modelos ?? (s.ia.provedorId && s.ia.modelo ? { [s.ia.provedorId]: s.ia.modelo } : {}) };
         return s as Configuracoes & AcoesConfig;
       },
@@ -272,7 +287,7 @@ export const useConfig = create<Configuracoes & AcoesConfig>()(
           ilha: {
             ...CONFIG_PADRAO.ilha,
             ...salvo.ilha,
-            blocos: { ...CONFIG_PADRAO.ilha.blocos, ...salvo.ilha?.blocos },
+            blocos: Object.fromEntries(ABAS_ILHA.map((a) => [a, salvo.ilha?.blocos?.[a] ?? CONFIG_PADRAO.ilha.blocos[a]])) as Record<AbaIlha, boolean>,
             ordemAbas: [
               ...(salvo.ilha?.ordemAbas ?? []).filter((a) => ABAS_ILHA.includes(a)),
               ...ABAS_ILHA.filter((a) => !(salvo.ilha?.ordemAbas ?? []).includes(a)),

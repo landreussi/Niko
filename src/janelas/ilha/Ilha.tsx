@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import {
-  ListTodo, Zap, Music, Timer, Repeat, CalendarDays, MessageCircle, Plug, Bell, Volume2, VolumeX, AppWindow, ChevronUp, Check, CircleAlert, Download, SquareTerminal, ShieldAlert, LoaderCircle,
+  Plus, Music, Timer, CalendarDays, MessageCircle, Plug, Bell, Volume2, VolumeX, AppWindow, ChevronUp, Check, CircleAlert, Download, SquareTerminal, ShieldAlert, LoaderCircle,
   type LucideIcon,
 } from "lucide-react";
-import { useConfig, type AbaIlha } from "../../estado/configuracoes";
+import { useConfig, type AbaIlha, type SecaoHoje, type VisaoIlha } from "../../estado/configuracoes";
 import { useIlha } from "../../estado/ilha";
 import { useInterface } from "../../estado/interface";
 import { useAgentes, AGENTES, estadoDoAgente, alertaFresco } from "../../estado/agentes";
@@ -16,13 +16,14 @@ import { Anel } from "../../componentes/Graficos";
 import { T } from "../../textos/textos";
 import { tocarSom } from "../../ponte/sons";
 import {
-  VisaoHoje, VisaoCaptura, VisaoMidia, VisaoFoco, VisaoHabitos, VisaoConexoes, VisaoCalendario, VisaoAvisos,
+  VisaoHoje, VisaoCaptura, VisaoMidia, VisaoFoco, VisaoConexoes, VisaoAvisos,
 } from "./Visoes";
 import { alguemCobre } from "../geometria";
 import { VisaoChat } from "./VisaoChat";
 import { VisaoClaude } from "./claude/VisaoClaude";
 import { usarClaudeCode, devolverPendentesAoTerminal } from "./claude/usarClaudeCode";
 import { abaLigada } from "../../utilitarios/funcoes";
+import { tiposDeCapturaLigados } from "../../utilitarios/captura";
 import { useClaudeCode, sessaoAtiva, nomeDoModelo } from "../../estado/claudeCode";
 import { useAtualizacao } from "../../estado/atualizacao";
 import { NATIVO, usarAreaInterativa, usarCursorFora, usarEstadoDaFrente } from "../../desktop/desktop";
@@ -35,46 +36,44 @@ import type { AgenteId, EstadoAgente } from "../../tipos";
 import "./ilha.css";
 
 const ICONE_ABA: Record<AbaIlha, LucideIcon> = {
-  hoje: ListTodo,
-  captura: Zap,
+  hoje: CalendarDays,
   midia: Music,
   foco: Timer,
-  habitos: Repeat,
- chat: MessageCircle,
+  chat: MessageCircle,
   conexoes: Plug,
-  calendario: CalendarDays,
   avisos: Bell,
   claude: SquareTerminal,
 };
 
-const VISAO_ABA: Record<AbaIlha, () => React.JSX.Element> = {
+const VISAO_ABA: Record<VisaoIlha, () => React.JSX.Element | null> = {
   hoje: VisaoHoje,
   captura: VisaoCaptura,
   midia: VisaoMidia,
   foco: VisaoFoco,
-  habitos: VisaoHabitos,
- chat: VisaoChat,
+  chat: VisaoChat,
   conexoes: VisaoConexoes,
-  calendario: VisaoCalendario,
   avisos: VisaoAvisos,
   claude: VisaoClaude,
 };
 
-const ALTURA_ABA: Record<AbaIlha, number> = {
-  hoje: 250,
+const ALTURA_ABA: Record<Exclude<VisaoIlha, "hoje">, number> = {
   captura: 168,
   midia: 184,
   foco: 176,
-  habitos: 230,
- chat: 300,
+  chat: 300,
   conexoes: 350,
-  calendario: 286,
   avisos: 178,
   claude: 296,
 };
 
+const ALTURA_DO_HOJE: Record<SecaoHoje, number> = { agenda: 318, tarefas: 258, habitos: 238 };
+
+function alturaDaVisao(visao: VisaoIlha, secaoHoje: SecaoHoje) {
+  return visao === "hoje" ? ALTURA_DO_HOJE[secaoHoje] : ALTURA_ABA[visao];
+}
+
 // Abas mais largas que o padrão: a de IAs é larga e baixa, com o uso de cada ferramenta numa faixa.
-const LARGURA_ABA: Partial<Record<AbaIlha, number>> = { claude: 820 };
+const LARGURA_ABA: Partial<Record<VisaoIlha, number>> = { claude: 820 };
 
 const ESCALA = { pequena: 0.85, media: 1, grande: 1.15 };
 
@@ -83,9 +82,9 @@ function estadoCalmo(e: EstadoAgente): EstadoAgente {
 }
 const LARGURA_EXPANDIDA = 660;
 const ALTURA_COMPACTA = 30;
-const AGENTE_DA_ABA: Partial<Record<AbaIlha, AgenteId>> = { hoje: "organizador", foco: "tutor", conexoes: "java", claude: "java" };
+const AGENTE_DA_ABA: Partial<Record<VisaoIlha, AgenteId>> = { hoje: "organizador", foco: "tutor", conexoes: "java", claude: "java" };
 const RODIZIO_MS = 8 * 60_000;
-const ABAS_SEM_LATERAL: AbaIlha[] = ["chat", "midia"];
+const ABAS_SEM_LATERAL: VisaoIlha[] = ["chat", "midia"];
 
 function agenteDoRodizio(favorito: AgenteId, agora: number): AgenteId {
   const ordem: AgenteId[] = [favorito, ...AGENTES.filter((a) => a !== favorito)];
@@ -116,6 +115,7 @@ export function Ilha() {
   const privacidade = useConfig((s) => s.privacidade);
   const estado = useIlha((s) => s.estado);
   const aba = useIlha((s) => s.aba);
+  const secaoHoje = useIlha((s) => s.secaoHoje);
   const revelacao = useIlha((s) => s.revelacao);
   const definirEstado = useIlha((s) => s.definirEstado);
   const abrir = useIlha((s) => s.abrir);
@@ -167,8 +167,11 @@ export function Ilha() {
 
   const claudeInstalado = useConfig((s) => s.claudeInstalado);
   const desligadas = useConfig((s) => s.funcoesDesligadas);
-  const abas = cfg.ordemAbas.filter((a) => cfg.blocos[a] && (a !== "claude" || claudeInstalado) && abaLigada(a, desligadas));
-  const abaAtual = abas.includes(aba) ? aba : abas[0] ?? "hoje";
+  const comAvisos = agentes.alertas.length > 0 || (estado === "expandida" && aba === "avisos");
+  const abas = cfg.ordemAbas.filter((a) => cfg.blocos[a] && (a !== "claude" || claudeInstalado) && (a !== "avisos" || comAvisos) && abaLigada(a, desligadas));
+  const capturaDisponivel = tiposDeCapturaLigados(desligadas).length > 0;
+  const abaAtual: VisaoIlha = aba === "captura" && capturaDisponivel ? "captura" : abas.includes(aba as AbaIlha) ? aba : abas[0] ?? "hoje";
+  const abaAntesDaCaptura = useRef<AbaIlha>("hoje");
   const frente = usarEstadoDaFrente(cfg.ativa);
   const [lateraisLivresNativo, setLateraisLivresNativo] = useState(true);
   useEffect(() => {
@@ -272,7 +275,7 @@ export function Ilha() {
       ? { w: 120, h: 6, r: 6 }
       : estadoEfetivo === "compacta"
         ? { w: compacta.largura, h: ALTURA_COMPACTA, r: 12 }
-        : { w: LARGURA_ABA[abaAtual] ?? LARGURA_EXPANDIDA, h: ALTURA_ABA[abaAtual], r: 30 };
+        : { w: LARGURA_ABA[abaAtual] ?? LARGURA_EXPANDIDA, h: alturaDaVisao(abaAtual, secaoHoje), r: 30 };
   const crescendo = alvo.w * alvo.h >= anterior.current.w * anterior.current.h;
   anterior.current = { w: alvo.w, h: alvo.h };
   const transicao = crescendo ? MOLA : FECHAR;
@@ -284,7 +287,7 @@ export function Ilha() {
   const restantePomodoro = restanteAtual(pomodoro, agora);
   const barraVisivel = cfg.laterais && estadoEfetivo !== "escondida" && lateraisLivres;
 
-  const abaDaCompacta = (): AbaIlha | undefined =>
+  const abaDaCompacta = (): VisaoIlha | undefined =>
     compacta.tipo === "revelacao" ? revelacao?.aba : compacta.tipo === "pomodoro" ? "foco" : compacta.tipo === "midia" ? "midia" : compacta.tipo === "trabalho" ? "chat" : compacta.tipo === "claude" || compacta.tipo === "claudePedido" ? "claude" : undefined;
 
   const acionarCompacta = () => {
@@ -420,7 +423,7 @@ export function Ilha() {
           escala={escala}
           larguraDaIlha={alvo.w * escala}
           aparencia={aparencia}
-          aoAbrirAba={(a) => alternarAbaDaBarra(abas.includes(a) ? a : abaAtual)}
+          aoAbrirAba={(a, secao) => alternarAbaDaBarra(abas.includes(a) ? a : abas[0] ?? "hoje", secao)}
           aoUsar={setBarraEmUso}
         />
       )}
@@ -551,6 +554,26 @@ export function Ilha() {
                       })}
                     </div>
                     <div className="ilha-acoes">
+                      {capturaDisponivel && (
+                        <button
+                          type="button"
+                          className="ilha-acao"
+                          aria-label={T.ilha.capturar}
+                          aria-pressed={abaAtual === "captura"}
+                          data-dica={T.ilha.capturar}
+                          onClick={() => {
+                            void tocarSom("blip");
+                            if (abaAtual === "captura") {
+                              abrir(abas.includes(abaAntesDaCaptura.current) ? abaAntesDaCaptura.current : abas[0] ?? "hoje");
+                              return;
+                            }
+                            abaAntesDaCaptura.current = abaAtual;
+                            abrir("captura");
+                          }}
+                        >
+                          <Plus size={15} />
+                        </button>
+                      )}
                       <button
                         type="button"
                         className="ilha-acao"
@@ -566,7 +589,7 @@ export function Ilha() {
                         aria-label={T.ilha.abrirSistema}
                         data-dica={T.ilha.abrirSistema}
                         onClick={() => {
-                          const rota = { hoje: "journal", captura: "inicio", midia: "inicio", foco: "estudos", habitos: "journal", chat: "chat", conexoes: "conexoes", calendario: "calendario", avisos: "inicio", claude: "configuracoes" } as const;
+                          const rota = { hoje: secaoHoje === "agenda" ? "calendario" : "journal", captura: "inicio", midia: "inicio", foco: "estudos", chat: "chat", conexoes: "conexoes", avisos: "inicio", claude: "configuracoes" } as const;
                           irPara(rota[abaAtual]);
                           recolher();
                           void tocarSom("open");
@@ -581,7 +604,7 @@ export function Ilha() {
                   </div>
                   <div className="ilha-miolo">
                   {!ABAS_SEM_LATERAL.includes(abaAtual) && <motion.div className="ilha-lateral" initial={{ opacity: 0 }} animate={{ opacity: 1, transition: { delay: 0.2, duration: 0.2 } }}>
-                    <EspacoDoPersonagem agente={agenteLateral} tamanho={ALTURA_ABA[abaAtual] < 200 ? 50 : 70} posicao="expandida" />
+                    <EspacoDoPersonagem agente={agenteLateral} tamanho={alturaDaVisao(abaAtual, secaoHoje) < 200 ? 50 : 70} posicao="expandida" />
                     <span className="ilha-lateral-nome cortar">{nomes[agenteLateral]}</span>
                     {abaAtual === "claude" && sessaoLateral ? (
                       <>

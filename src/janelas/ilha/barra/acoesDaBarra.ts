@@ -1,9 +1,11 @@
-import type { AbaIlha } from "../../../estado/configuracoes";
+import type { AbaIlha, SecaoHoje } from "../../../estado/configuracoes";
 import { useIlha } from "../../../estado/ilha";
 
-export function alternarAbaDaBarra(aba: AbaIlha) {
+export function alternarAbaDaBarra(aba: AbaIlha, secao?: SecaoHoje) {
   const ilha = useIlha.getState();
-  if (ilha.estado === "expandida" && ilha.aba === aba) ilha.recolher();
+  const mesmaSecao = !secao || ilha.secaoHoje === secao;
+  if (secao) ilha.definirSecaoHoje(secao);
+  if (ilha.estado === "expandida" && ilha.aba === aba && mesmaSecao) ilha.recolher();
   else ilha.abrir(aba);
 }
 

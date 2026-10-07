@@ -337,8 +337,31 @@ test("ajuda e conquistas escondem o que pertence a funções desligadas", async 
   assert.ok(!ajuda.includes("/tarefa"));
   assert.ok(!conquistaLigada("meta_economia"));
   assert.ok(conquistaLigada("foco"));
-  for (const aba of ["hoje", "habitos", "calendario"]) assert.ok(!abaLigada(aba), aba);
+  assert.ok(!abaLigada("hoje"));
   assert.ok(abaLigada("midia"));
+});
+
+test("aba Hoje da ilha mostra só as seções das funções ligadas", async () => {
+  const { abaLigada, secoesDoHojeLigadas } = await servidor.ssrLoadModule("/src/utilitarios/funcoes.ts");
+  assert.deepEqual(secoesDoHojeLigadas([]), ["agenda", "tarefas", "habitos"]);
+  assert.deepEqual(secoesDoHojeLigadas(["journal"]), ["agenda"]);
+  assert.deepEqual(secoesDoHojeLigadas(["calendario"]), ["tarefas", "habitos"]);
+  assert.ok(abaLigada("hoje", ["journal"]));
+  assert.ok(!abaLigada("hoje", ["journal", "calendario"]));
+});
+
+test("abas antigas de Calendário, Hábitos e Capturar viram a aba Hoje sem perder a ordem", async () => {
+  const { juntarAbasNoHoje } = await servidor.ssrLoadModule("/src/estado/configuracoes.ts");
+  const ordem = ["calendario", "claude", "conexoes", "chat", "hoje", "captura", "midia", "foco", "habitos", "avisos"];
+  const blocos = { calendario: true, hoje: false, captura: true, midia: true, foco: false, habitos: false, chat: true, conexoes: true, avisos: true, claude: true };
+  const r = juntarAbasNoHoje(ordem, blocos);
+  assert.deepEqual(r.ordemAbas, ["hoje", "claude", "conexoes", "chat", "midia", "foco", "avisos"]);
+  assert.equal(r.blocos.hoje, true);
+  assert.equal(r.blocos.foco, false);
+  assert.ok(!("calendario" in r.blocos) && !("habitos" in r.blocos) && !("captura" in r.blocos));
+  assert.equal(juntarAbasNoHoje(["chat", "habitos", "calendario"], { hoje: false, calendario: false, habitos: false }).blocos.hoje, false);
+  assert.deepEqual(juntarAbasNoHoje(["chat", "habitos", "calendario"], {}).ordemAbas, ["chat", "hoje"]);
+  assert.deepEqual(juntarAbasNoHoje(["conexoes", "chat", "calendario", "midia"], {}).ordemAbas, ["hoje", "conexoes", "chat", "midia"]);
 });
 
 async function financasDeTeste() {
