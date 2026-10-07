@@ -1,5 +1,5 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
+import { closeSync, copyFileSync, existsSync, mkdirSync, openSync, readFileSync, readSync, renameSync, statSync, writeFileSync } from "node:fs";
 import { spawn } from "node:child_process";
 import { homedir } from "node:os";
 import { isAbsolute, join } from "node:path";
@@ -286,6 +286,38 @@ function lerCorpoJson(req: IncomingMessage): Promise<Record<string, unknown>> {
   });
 }
 
+const EVENTOS_COM_MODELO = new Set(["SessionStart", "UserPromptSubmit", "Stop", "SubagentStop"]);
+const BYTES_DO_FIM_DO_TRANSCRIPT = 256 * 1024;
+
+/** Lê só o fim do transcript da sessão e devolve o modelo da última resposta do assistente. */
+export function modeloDoTranscript(caminho: string): string | undefined {
+  if (!isAbsolute(caminho) || !caminho.endsWith(".jsonl") || caminho.length > 1000) return undefined;
+  let descritor: number | undefined;
+  try {
+    const tamanho = statSync(caminho).size;
+    const inicio = Math.max(0, tamanho - BYTES_DO_FIM_DO_TRANSCRIPT);
+    const buffer = Buffer.alloc(tamanho - inicio);
+    descritor = openSync(caminho, "r");
+    readSync(descritor, buffer, 0, buffer.length, inicio);
+    const linhas = buffer.toString("utf8").split("\n");
+    for (let i = linhas.length - 1; i >= 0; i--) {
+      if (!linhas[i].includes('"model"')) continue;
+      try {
+        const linha = JSON.parse(linhas[i]) as { type?: string; message?: { model?: unknown } };
+        const modelo = linha.type === "assistant" ? linha.message?.model : undefined;
+        if (typeof modelo === "string" && modelo && !modelo.startsWith("<")) return modelo.slice(0, 80);
+      } catch {
+        // linha cortada no começo do trecho lido
+      }
+    }
+  } catch {
+    return undefined;
+  } finally {
+    if (descritor !== undefined) closeSync(descritor);
+  }
+  return undefined;
+}
+
 function transmitir(evento: EventoClaude) {
   historico.push(evento);
   if (historico.length > MAXIMO_HISTORICO) historico.splice(0, historico.length - MAXIMO_HISTORICO);
@@ -311,8 +343,10 @@ export async function receberEventoDoGancho(req: IncomingMessage, res: ServerRes
   } catch {
     return responderVazio(res);
   }
-  for (const campo of CAMPOS_DESCARTADOS) delete corpo[campo];
   const nome = typeof corpo.hook_event_name === "string" ? corpo.hook_event_name : "";
+  const modeloAtual = EVENTOS_COM_MODELO.has(nome) && typeof corpo.transcript_path === "string" ? modeloDoTranscript(corpo.transcript_path) : undefined;
+  for (const campo of CAMPOS_DESCARTADOS) delete corpo[campo];
+  if (modeloAtual) corpo.model = modeloAtual;
   const ultima = typeof corpo.last_assistant_message === "string" ? corpo.last_assistant_message.slice(0, LIMITE_RESPOSTA_FINAL) : undefined;
   const dados = cortar(corpo) as Record<string, unknown>;
   if (ultima !== undefined) dados.last_assistant_message = ultima;

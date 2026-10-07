@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Bell, Bot, Check, ChevronRight, CircleCheck, CircleX, Code2, Copy, FilePen, FileText, FolderOpen, FolderSearch, Globe, ListChecks, LoaderCircle, MessageSquare, Search, Settings, ShieldAlert, SquareTerminal, X, type LucideIcon,
 } from "lucide-react";
@@ -273,9 +273,8 @@ export function VisaoClaude() {
     setPainel(sessao?.estado === "terminou" && sessao.resposta ? "resposta" : "atividade");
   }, [sessao?.id, sessao?.estado, sessao?.resposta]);
 
-  const ultimo = useMemo(() => [...(sessao?.passos ?? [])].reverse().find((p) => p.tipo === "ferramenta"), [sessao?.passos]);
-
   return (
+    <div className="ias">
     <div className="vsc">
       <div className="vsc-abas" role="tablist">
         {ordem.map((id) => {
@@ -296,6 +295,8 @@ export function VisaoClaude() {
           );
         })}
         <span className="vsc-acoes-abas">
+          {sessao?.modo && <span className="vsc-dim vsc-acoes-texto">{C.modos[sessao.modo] ?? sessao.modo}</span>}
+          {sessao && <span className="vsc-dim vsc-acoes-texto">{quandoFoi(sessao.atualizadaEm, agora)}</span>}
           {sessao?.cwd && (
             <>
               <button type="button" className="vsc-icone-botao" aria-label={C.abrirVsCode} title={C.abrirVsCode} onClick={() => abrirProjeto(sessao.cwd, "vscode")}>
@@ -335,19 +336,8 @@ export function VisaoClaude() {
         )}
       </div>
 
-      <div className="vsc-status" data-estado={!sessao ? "ociosa" : pedido ? "aprovacao" : sessao.estado}>
-        {sessao && (
-          <span className="vsc-status-item">
-            {sessao.estado === "trabalhando" || sessao.estado === "pensando" ? <LoaderCircle size={12} className="girando" /> : pedido ? <ShieldAlert size={12} /> : sessao.estado === "erro" ? <CircleX size={12} /> : <CircleCheck size={12} />}
-            {pedido ? C.estados.aprovacao : C.estados[sessao.estado]}
-          </span>
-        )}
-        {sessao && ultimo && sessao.estado === "trabalhando" && <span className="vsc-status-item vsc-status-passo">{ultimo.rotulo} {ultimo.detalhe}</span>}
-        <span className="vsc-status-espaco" />
-        <UsoDasIas />
-        {sessao?.modo && <span className="vsc-status-item vsc-status-opcional">{C.modos[sessao.modo] ?? sessao.modo}</span>}
-        {sessao && <span className="vsc-status-item">{quandoFoi(sessao.atualizadaEm, agora)}</span>}
-      </div>
+    </div>
+    <UsoDasIas />
     </div>
   );
 }

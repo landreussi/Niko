@@ -755,6 +755,47 @@
   overflow-wrap: anywhere;
 }
 
+.ilha-lateral-modelo {
+  max-width: 100%;
+  font-family: var(--fonte-mono);
+  font-size: 10px;
+  color: var(--i-dim-3);
+}
+
+.ilha-lateral-estado {
+  margin-top: 4px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 500;
+  white-space: nowrap;
+  color: var(--i-dim);
+  background: rgba(var(--i-rgb), 0.08);
+}
+
+.ilha-lateral-estado[data-estado="pensando"],
+.ilha-lateral-estado[data-estado="trabalhando"] {
+  color: #e8875f;
+  background: rgba(217, 119, 87, 0.16);
+}
+
+.ilha-lateral-estado[data-estado="aprovacao"],
+.ilha-lateral-estado[data-estado="esperando"] {
+  color: var(--i-ambar);
+  background: rgba(245, 165, 36, 0.16);
+}
+
+.ilha-lateral-estado[data-estado="erro"],
+.ilha-lateral-estado[data-estado="limite"] {
+  color: var(--i-vermelho);
+  background: rgba(244, 80, 94, 0.16);
+}
+
+.ilha-lateral-estado[data-estado="terminou"] {
+  color: var(--i-verde);
+  background: rgba(52, 211, 153, 0.14);
+}
+
 .ilha-miolo .ilha-visoes {
   flex: 1 1 auto;
   min-width: 0;

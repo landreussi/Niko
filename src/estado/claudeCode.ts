@@ -49,6 +49,17 @@ export type MotivoDeEncerramento = keyof typeof T.ilha.claude.pedidoEncerrado;
 const MAXIMO_SESSOES = 8;
 const CAMPOS_ALVO = ["command", "file_path", "path", "url", "query", "pattern", "prompt", "description"] as const;
 
+/** "claude-opus-4-7[1m]" vira "Opus 4.7"; "claude-3-5-sonnet-20241022" vira "Sonnet 3.5"; o resto fica como veio. */
+export function nomeDoModelo(id: string): string {
+  const limpo = id.trim().replace(/\[.*\]$/, "").replace(/-\d{8}$/, "");
+  const novo = /^claude-([a-z]+)-(\d+)(?:-(\d{1,2}))?$/i.exec(limpo);
+  const antigo = /^claude-(\d+)(?:-(\d{1,2}))?-([a-z]+)$/i.exec(limpo);
+  const familia = novo?.[1] ?? antigo?.[3];
+  const versao = novo ? [novo[2], novo[3]] : antigo ? [antigo[1], antigo[2]] : null;
+  if (!familia || !versao) return limpo;
+  return `${familia[0].toUpperCase()}${familia.slice(1).toLowerCase()} ${versao.filter(Boolean).join(".")}`;
+}
+
 function texto(valor: unknown): string {
   return typeof valor === "string" ? valor : "";
 }
@@ -175,12 +186,11 @@ export const useClaudeCode = create<EstadoClaude>((set, get) => ({
         iniciadaEm: e.recebidoEm,
         atualizadaEm: e.recebidoEm,
       };
-      const sessao: SessaoClaude = { ...base, cwd: e.cwd || base.cwd, projeto: e.cwd ? nomeDoProjeto(e.cwd) : base.projeto, atualizadaEm: e.recebidoEm, modo: texto(d.permission_mode) || base.modo };
+      const sessao: SessaoClaude = { ...base, cwd: e.cwd || base.cwd, projeto: e.cwd ? nomeDoProjeto(e.cwd) : base.projeto, atualizadaEm: e.recebidoEm, modo: texto(d.permission_mode) || base.modo, modelo: texto(d.model) || base.modelo };
       const passos = [...sessao.passos];
       let pedidos = s.pedidos;
       switch (e.evento) {
         case "SessionStart":
-          sessao.modelo = texto(d.model) || sessao.modelo;
           if (!anterior) sessao.estado = "ociosa";
           break;
         case "UserPromptSubmit": {

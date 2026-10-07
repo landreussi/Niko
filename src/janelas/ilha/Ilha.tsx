@@ -23,7 +23,7 @@ import { VisaoChat } from "./VisaoChat";
 import { VisaoClaude } from "./claude/VisaoClaude";
 import { usarClaudeCode, devolverPendentesAoTerminal } from "./claude/usarClaudeCode";
 import { abaLigada } from "../../utilitarios/funcoes";
-import { useClaudeCode, sessaoAtiva } from "../../estado/claudeCode";
+import { useClaudeCode, sessaoAtiva, nomeDoModelo } from "../../estado/claudeCode";
 import { useAtualizacao } from "../../estado/atualizacao";
 import { NATIVO, usarAreaInterativa, usarCursorFora, usarEstadoDaFrente } from "../../desktop/desktop";
 import { BarraDoTopo, ALTURA_DA_FAIXA } from "./barra/BarraDoTopo";
@@ -70,8 +70,11 @@ const ALTURA_ABA: Record<AbaIlha, number> = {
   conexoes: 350,
   calendario: 286,
   avisos: 178,
-  claude: 336,
+  claude: 296,
 };
+
+// Abas mais largas que o padrão: a de IAs é larga e baixa, com o uso de cada ferramenta numa faixa.
+const LARGURA_ABA: Partial<Record<AbaIlha, number>> = { claude: 820 };
 
 const ESCALA = { pequena: 0.85, media: 1, grande: 1.15 };
 
@@ -132,6 +135,8 @@ export function Ilha() {
   const minuto = useAgora(60_000, true);
   const agenteDaVez = agenteDoRodizio(favorito, minuto);
   const claudeAtivo = useClaudeCode(sessaoAtiva);
+  const sessaoLateral = useClaudeCode((s) => s.sessoes[s.focada ?? ""] ?? s.sessoes[s.ordem[0]]);
+  const estadoLateral = sessaoLateral && pedidosClaude.some((p) => p.sessao === sessaoLateral.id) ? "aprovacao" : sessaoLateral?.estado ?? "terminou";
   const raiz = useRef<HTMLDivElement>(null);
   const corpoIlha = useRef<HTMLDivElement>(null);
   const [sobre, setSobre] = useState(false);
@@ -267,7 +272,7 @@ export function Ilha() {
       ? { w: 120, h: 6, r: 6 }
       : estadoEfetivo === "compacta"
         ? { w: compacta.largura, h: ALTURA_COMPACTA, r: 12 }
-        : { w: LARGURA_EXPANDIDA, h: ALTURA_ABA[abaAtual], r: 30 };
+        : { w: LARGURA_ABA[abaAtual] ?? LARGURA_EXPANDIDA, h: ALTURA_ABA[abaAtual], r: 30 };
   const crescendo = alvo.w * alvo.h >= anterior.current.w * anterior.current.h;
   anterior.current = { w: alvo.w, h: alvo.h };
   const transicao = crescendo ? MOLA : FECHAR;
@@ -578,7 +583,15 @@ export function Ilha() {
                   {!ABAS_SEM_LATERAL.includes(abaAtual) && <motion.div className="ilha-lateral" initial={{ opacity: 0 }} animate={{ opacity: 1, transition: { delay: 0.2, duration: 0.2 } }}>
                     <EspacoDoPersonagem agente={agenteLateral} tamanho={ALTURA_ABA[abaAtual] < 200 ? 50 : 70} posicao="expandida" />
                     <span className="ilha-lateral-nome cortar">{nomes[agenteLateral]}</span>
-                    <span className="ilha-lateral-cargo" title={cargos[agenteLateral]}>{cargos[agenteLateral]}</span>
+                    {abaAtual === "claude" && sessaoLateral ? (
+                      <>
+                        <span className="ilha-lateral-cargo cortar" title={sessaoLateral.cwd}>{sessaoLateral.projeto}</span>
+                        {sessaoLateral.modelo && <span className="ilha-lateral-modelo cortar" title={sessaoLateral.modelo}>{nomeDoModelo(sessaoLateral.modelo)}</span>}
+                        <span className="ilha-lateral-estado" data-estado={estadoLateral}>{T.ilha.claude.estados[estadoLateral]}</span>
+                      </>
+                    ) : (
+                      <span className="ilha-lateral-cargo" title={cargos[agenteLateral]}>{cargos[agenteLateral]}</span>
+                    )}
                   </motion.div>}
                   <div className="ilha-visoes">
                     <AnimatePresence mode="wait" initial={false}>

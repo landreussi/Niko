@@ -514,28 +514,24 @@ function Transacoes({ mes, buscaInicial }: { mes: string; buscaInicial?: string 
   );
 }
 
-function Contas() {
+function FormConta({ aberto, aoFechar, aoCriar, aviso }: { aberto: boolean; aoFechar: () => void; aoCriar?: (conta: Conta) => void; aviso?: string }) {
   const fin = useFinancas();
-  const [nova, setNova] = useState(false);
-  const [ajuste, setAjuste] = useState<Conta | null>(null);
-  const [excluir, setExcluir] = useState<Conta | null>(null);
   const [nome, setNome] = useState("");
   const [tipo, setTipo] = useState<TipoConta>("corrente");
   const [saldo, setSaldo] = useState("0,00");
   const [fechamento, setFechamento] = useState("3");
   const [vencimento, setVencimento] = useState("10");
   const [limite, setLimite] = useState("");
-  const [saldoReal, setSaldoReal] = useState("");
   const [erros, setErros] = useState<Record<string, string>>({});
 
-  const abrirNova = () => {
+  useEffect(() => {
+    if (!aberto) return;
     setNome("");
     setTipo("corrente");
     setSaldo("0,00");
     setLimite("");
     setErros({});
-    setNova(true);
-  };
+  }, [aberto]);
 
   const salvar = (e: React.FormEvent) => {
     e.preventDefault();
@@ -554,9 +550,54 @@ function Contas() {
     if (l == null) novos.limite = T.validacao.valorInvalido;
     setErros(novos);
     if (Object.keys(novos).length) return;
-    fin.criarConta({ nome, tipo, saldoInicial: tipo === "cartao" ? 0 : s ?? 0, cor: CORES[fin.contas.length % CORES.length], fechamentoDia: tipo === "cartao" ? f : undefined, vencimentoDia: tipo === "cartao" ? v : undefined, limite: tipo === "cartao" ? l ?? 0 : undefined });
-    setNova(false);
+    const conta = fin.criarConta({ nome, tipo, saldoInicial: tipo === "cartao" ? 0 : s ?? 0, cor: CORES[fin.contas.length % CORES.length], fechamentoDia: tipo === "cartao" ? f : undefined, vencimentoDia: tipo === "cartao" ? v : undefined, limite: tipo === "cartao" ? l ?? 0 : undefined });
+    void tocarSom("pop");
+    aoFechar();
+    aoCriar?.(conta);
   };
+
+  return (
+    <Modal aberto={aberto} titulo={T.financas.novaConta} aoFechar={aoFechar}>
+      <form className="formulario" onSubmit={salvar} noValidate>
+        {aviso && <AvisoFaixa>{aviso}</AvisoFaixa>}
+        <Campo id="c-nome" rotulo={T.financas.nomeConta} obrigatorio erro={erros.nome} dica={T.financas.nomeContaDica}>
+          <input id="c-nome" className="campo" autoFocus value={nome} maxLength={60} aria-invalid={!!erros.nome} onChange={(e) => setNome(e.target.value)} />
+        </Campo>
+        <Campo id="c-tipo" rotulo={T.financas.tipoConta}>
+          <select id="c-tipo" className="seletor" value={tipo} onChange={(e) => setTipo(e.target.value as TipoConta)}>
+            {(Object.keys(T.financas.tiposConta) as TipoConta[]).map((t) => <option key={t} value={t}>{T.financas.tiposConta[t]}</option>)}
+          </select>
+        </Campo>
+        {tipo === "cartao" ? (
+          <div className="formulario-linha">
+            <Campo id="c-fech" rotulo={T.financas.fechamento} obrigatorio erro={erros.fechamento}>
+              <input id="c-fech" className="campo" inputMode="numeric" value={fechamento} onChange={(e) => setFechamento(e.target.value.replace(/\D/g, ""))} />
+            </Campo>
+            <Campo id="c-venc" rotulo={T.financas.vencimento} obrigatorio erro={erros.vencimento}>
+              <input id="c-venc" className="campo" inputMode="numeric" value={vencimento} onChange={(e) => setVencimento(e.target.value.replace(/\D/g, ""))} />
+            </Campo>
+            <CampoDinheiro id="c-lim" rotulo={T.financas.limite} valor={limite} aoMudar={setLimite} erro={erros.limite} />
+          </div>
+        ) : (
+          <CampoDinheiro id="c-saldo" rotulo={T.financas.saldoInicial} valor={saldo} aoMudar={setSaldo} erro={erros.saldo} dica={T.financas.saldoInicialDica} />
+        )}
+        <div className="formulario-acoes">
+          <Botao onClick={aoFechar}>{T.geral.cancelar}</Botao>
+          <Botao type="submit" variante="primario">{T.geral.criar}</Botao>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
+function Contas() {
+  const fin = useFinancas();
+  const [nova, setNova] = useState(false);
+  const [ajuste, setAjuste] = useState<Conta | null>(null);
+  const [excluir, setExcluir] = useState<Conta | null>(null);
+  const [saldoReal, setSaldoReal] = useState("");
+  const [erros, setErros] = useState<Record<string, string>>({});
+  const abrirNova = () => setNova(true);
 
   return (
     <>
@@ -587,35 +628,7 @@ function Contas() {
           })}
         </div>
       )}
-      <Modal aberto={nova} titulo={T.financas.novaConta} aoFechar={() => setNova(false)}>
-        <form className="formulario" onSubmit={salvar} noValidate>
-          <Campo id="c-nome" rotulo={T.financas.nomeConta} obrigatorio erro={erros.nome}>
-            <input id="c-nome" className="campo" value={nome} maxLength={60} aria-invalid={!!erros.nome} onChange={(e) => setNome(e.target.value)} />
-          </Campo>
-          <Campo id="c-tipo" rotulo={T.financas.tipoConta}>
-            <select id="c-tipo" className="seletor" value={tipo} onChange={(e) => setTipo(e.target.value as TipoConta)}>
-              {(Object.keys(T.financas.tiposConta) as TipoConta[]).map((t) => <option key={t} value={t}>{T.financas.tiposConta[t]}</option>)}
-            </select>
-          </Campo>
-          {tipo === "cartao" ? (
-            <div className="formulario-linha">
-              <Campo id="c-fech" rotulo={T.financas.fechamento} obrigatorio erro={erros.fechamento}>
-                <input id="c-fech" className="campo" inputMode="numeric" value={fechamento} onChange={(e) => setFechamento(e.target.value.replace(/\D/g, ""))} />
-              </Campo>
-              <Campo id="c-venc" rotulo={T.financas.vencimento} obrigatorio erro={erros.vencimento}>
-                <input id="c-venc" className="campo" inputMode="numeric" value={vencimento} onChange={(e) => setVencimento(e.target.value.replace(/\D/g, ""))} />
-              </Campo>
-              <CampoDinheiro id="c-lim" rotulo={T.financas.limite} valor={limite} aoMudar={setLimite} erro={erros.limite} />
-            </div>
-          ) : (
-            <CampoDinheiro id="c-saldo" rotulo={T.financas.saldoInicial} valor={saldo} aoMudar={setSaldo} erro={erros.saldo} />
-          )}
-          <div className="formulario-acoes">
-            <Botao onClick={() => setNova(false)}>{T.geral.cancelar}</Botao>
-            <Botao type="submit" variante="primario">{T.geral.criar}</Botao>
-          </div>
-        </form>
-      </Modal>
+      <FormConta aberto={nova} aoFechar={() => setNova(false)} />
       <Modal aberto={!!ajuste} titulo={T.financas.ajustarSaldo} aoFechar={() => setAjuste(null)}>
         <form
           className="formulario"
@@ -1589,6 +1602,40 @@ function Relatorios({ mes, modo }: { mes: string; modo: Modo }) {
   );
 }
 
+function PrimeirosPassos({ aoCriarConta, aoLancar }: { aoCriarConta: () => void; aoLancar: () => void }) {
+  const temConta = useFinancas((s) => s.contas.some((c) => !c.arquivada));
+  const temLancamento = useFinancas((s) => s.transacoes.some((t) => !t.ajuste));
+  if (temConta && temLancamento) return null;
+  const passos = [
+    { feito: temConta, titulo: T.financas.passos.conta, texto: T.financas.passos.contaTexto, botao: T.financas.criarConta, acao: aoCriarConta, liberado: true },
+    { feito: temLancamento, titulo: T.financas.passos.lancar, texto: T.financas.passos.lancarTexto, botao: T.financas.novaTransacao, acao: aoLancar, liberado: temConta },
+  ];
+  return (
+    <section className="cartao primeiros-passos" aria-label={T.financas.passos.titulo}>
+      <div className="primeiros-passos-topo">
+        <b>{T.financas.passos.titulo}</b>
+        <span className="texto-2">{T.financas.passos.subtitulo}</span>
+      </div>
+      <ol className="primeiros-passos-lista">
+        {passos.map((p, i) => (
+          <li key={p.titulo} className="primeiros-passos-item" data-feito={p.feito || undefined} data-liberado={p.liberado || undefined}>
+            <span className="primeiros-passos-numero" aria-hidden="true">{p.feito ? <Check size={13} /> : i + 1}</span>
+            <div className="primeiros-passos-textos">
+              <span className="primeiros-passos-titulo">{p.titulo}</span>
+              <span className="texto-2">{p.texto}</span>
+            </div>
+            {!p.feito && (
+              <Botao pequeno variante={p.liberado ? "primario" : "secundario"} disabled={!p.liberado} title={!p.liberado ? T.financas.passos.depoisDaConta : undefined} onClick={p.acao}>
+                {p.botao}
+              </Botao>
+            )}
+          </li>
+        ))}
+      </ol>
+    </section>
+  );
+}
+
 export default function Financas() {
   const parametros = useInterface((s) => s.parametros);
   const [aba, setAba] = useState<Aba>((parametros.aba as Aba) || "visao");
@@ -1596,7 +1643,13 @@ export default function Financas() {
   const [modo, setModo] = useState<Modo>("competencia");
   const [nova, setNova] = useState(false);
   const [importar, setImportar] = useState(false);
+  // Sem conta não dá para lançar: abre a criação de conta e, depois dela, segue para o que a pessoa queria fazer.
+  const [contaAntes, setContaAntes] = useState<"transacao" | "importar" | "conta" | null>(null);
   const fin = useFinancas();
+  const temConta = fin.contas.some((c) => !c.arquivada);
+
+  const novaTransacao = () => (useFinancas.getState().contas.some((c) => !c.arquivada) ? setNova(true) : setContaAntes("transacao"));
+  const importarExtrato = () => (useFinancas.getState().contas.some((c) => !c.arquivada) ? setImportar(true) : setContaAntes("importar"));
 
   useEffect(() => {
     if (parametros.aba) setAba(parametros.aba as Aba);
@@ -1604,7 +1657,7 @@ export default function Financas() {
 
   useEffect(() => {
     const aoNovo = (e: Event) => {
-      if ((e as CustomEvent).detail === "financas") setNova(true);
+      if ((e as CustomEvent).detail === "financas") novaTransacao();
     };
     window.addEventListener(EVENTO_NOVO, aoNovo);
     return () => window.removeEventListener(EVENTO_NOVO, aoNovo);
@@ -1621,8 +1674,9 @@ export default function Financas() {
         agente="operador"
         acoes={
           <>
-            <Botao variante="primario" pequeno icone={<Plus size={13} />} onClick={() => setNova(true)}>{T.financas.novaTransacao}</Botao>
-            <Botao pequeno icone={<Upload size={13} />} disabled={fin.contas.length === 0} onClick={() => setImportar(true)}>{T.financas.importarExtrato}</Botao>
+            {!temConta && <Botao pequeno icone={<Landmark size={13} />} onClick={() => setContaAntes("conta")}>{T.financas.criarConta}</Botao>}
+            <Botao variante="primario" pequeno icone={<Plus size={13} />} onClick={novaTransacao}>{T.financas.novaTransacao}</Botao>
+            <Botao pequeno icone={<Upload size={13} />} onClick={importarExtrato}>{T.financas.importarExtrato}</Botao>
           </>
         }
       />
@@ -1652,6 +1706,7 @@ export default function Financas() {
           <span className="empurrar texto-2 privado">{T.financas.gastoNoMes(formatarDinheiro(totalMes))}</span>
         </div>
       )}
+      <PrimeirosPassos aoCriarConta={() => setContaAntes("conta")} aoLancar={novaTransacao} />
       {aba === "visao" && <VisaoGeral modo={modo} mes={mes} />}
       {aba === "transacoes" && <Cartao><Transacoes mes={mes} buscaInicial={parametros.busca} /></Cartao>}
       {aba === "contas" && <Contas />}
@@ -1671,6 +1726,15 @@ export default function Financas() {
       </div>
       <FormTransacao aberto={nova} aoFechar={() => setNova(false)} />
       <Importar aberto={importar} aoFechar={() => setImportar(false)} />
+      <FormConta
+        aberto={contaAntes !== null}
+        aviso={contaAntes === "transacao" ? T.financas.contaAntesTransacao : contaAntes === "importar" ? T.financas.contaAntesImportar : undefined}
+        aoFechar={() => setContaAntes(null)}
+        aoCriar={() => {
+          if (contaAntes === "transacao") setNova(true);
+          if (contaAntes === "importar") setImportar(true);
+        }}
+      />
     </>
   );
 }
