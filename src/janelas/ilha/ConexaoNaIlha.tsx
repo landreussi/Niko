@@ -1,7 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { conexoesPonte, type DadosServico } from "../../ponte/conexoesReais";
 import { formatarDinheiro } from "../../utilitarios/dinheiro";
-import { horarioRelativo } from "../../utilitarios/datas";
+import { formatar, horarioRelativo } from "../../utilitarios/datas";
 import { T } from "../../textos/textos";
 import type { ServicoId } from "../../tipos";
 
@@ -63,7 +63,7 @@ function quantos(lista: unknown[]) {
   return lista.length;
 }
 
-function montarResumo(servico: ServicoId, dados: DadosServico[ServicoId]): Resumo {
+export function montarResumo(servico: ServicoId, dados: DadosServico[ServicoId]): Resumo {
   switch (servico) {
     case "stripe": {
       const d = dados as DadosServico["stripe"];
@@ -196,6 +196,17 @@ function montarResumo(servico: ServicoId, dados: DadosServico[ServicoId]): Resum
         linhas: (d.importantes.length ? d.importantes : d.recentes).slice(0, 6).map((e) => ({ chave: e.id, principal: e.assunto, secundario: e.de, estado: e.naoLido ? "pendente" : "", quando: e.data })),
       };
     }
+    case "agenda": {
+      const d = dados as DadosServico["agenda"];
+      return {
+        numeros: [
+          { rotulo: M.hoje, valor: d.hoje, tom: d.hoje ? "sucesso" : "" },
+          { rotulo: M.proximos, valor: d.proximos.length },
+        ],
+        tituloDaLista: M.proximos,
+        linhas: d.proximos.slice(0, 6).map((e) => ({ chave: e.id, principal: e.titulo, secundario: [formatar(e.data, "EEE, d 'de' MMM"), e.hora].filter(Boolean).join(" . "), estado: "" })),
+      };
+    }
     case "supabase": {
       const d = dados as DadosServico["supabase"];
       const fora = d.projetos.flatMap((p) => p.servicos.filter((s) => !s.saudavel).map((s) => `${p.nome}: ${s.nome}`));
@@ -226,7 +237,7 @@ function montarResumo(servico: ServicoId, dados: DadosServico[ServicoId]): Resum
         ]),
       };
     }
-    default: {
+    case "cloudflare": {
       const d = dados as DadosServico["cloudflare"];
       const dias = d.metricas.flatMap((m) => m.dias);
       const ameacas = dias.reduce((a, x) => a + x.ameacas, 0);
@@ -246,6 +257,8 @@ function montarResumo(servico: ServicoId, dados: DadosServico[ServicoId]): Resum
         ],
       };
     }
+    default:
+      return { numeros: [], tituloDaLista: "", linhas: [] };
   }
 }
 

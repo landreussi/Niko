@@ -8,7 +8,7 @@ import { useInterface } from "../../estado/interface";
 import { useConfig } from "../../estado/configuracoes";
 import { T } from "../../textos/textos";
 import { horarioRelativo } from "../../utilitarios/datas";
-import { conexoesPonte, resumoDe, LINKS_DO_GUIA } from "../../ponte/conexoesReais";
+import { conexoesPonte, resumoDe, LINKS_DO_GUIA, SERVICOS_DO_GOOGLE } from "../../ponte/conexoesReais";
 import { atualizarConexaoAgora } from "../../servicos/servicos";
 import { tocarSom } from "../../ponte/sons";
 import type { ServicoId } from "../../tipos";
@@ -58,10 +58,11 @@ function Configurar({ servico, aoFechar }: { servico: ServicoId | null; aoFechar
   }, [servico]);
   if (!servico || !conexao) return <Modal aberto={false} titulo="" aoFechar={aoFechar}>{null}</Modal>;
   const nome = T.conexoes.servicos[servico].nome;
+  const doGoogle = SERVICOS_DO_GOOGLE.includes(servico);
   const fixadas = conexoes.filter((c) => c.fixadaNaIlha).length;
 
   const salvar = async () => {
-    if (servico === "gmail" ? !/\.apps\.googleusercontent\.com$/.test(clienteId.trim()) : false) {
+    if (doGoogle && !/\.apps\.googleusercontent\.com$/.test(clienteId.trim())) {
       setErro(T.conexoes.clienteIdInvalido);
       return;
     }
@@ -72,7 +73,7 @@ function Configurar({ servico, aoFechar }: { servico: ServicoId | null; aoFechar
     setTestando(true);
     setErro("");
     try {
-      await conexoesPonte.salvarChave(servico, chave.trim(), servico === "n8n" ? { url: url.trim() } : servico === "gmail" ? { clienteId: clienteId.trim(), segredo: chave.trim() } : {});
+      await conexoesPonte.salvarChave(servico, chave.trim(), servico === "n8n" ? { url: url.trim() } : doGoogle ? { clienteId: clienteId.trim(), segredo: chave.trim() } : {});
       setChave("");
       const dados = await conexoesPonte.ler(servico, true);
       atualizar(servico, { chaveSalva: true, ligada: true, status: "conectado", ultimaAtualizacao: new Date().toISOString(), resumo: resumoDe(servico, dados) });
@@ -94,7 +95,7 @@ function Configurar({ servico, aoFechar }: { servico: ServicoId | null; aoFechar
           <span>{T.conexoes.permissoes[servico]}</span>
         </AvisoFaixa>
         <GuiaConexao servico={servico} />
-        {servico === "gmail" && (
+        {doGoogle && (
           <>
             <Campo id="cx-cliente" rotulo={T.conexoes.clienteId} dica={T.conexoes.clienteIdDica}>
               <input id="cx-cliente" className="campo" autoComplete="off" spellCheck={false} value={clienteId} onChange={(e) => setClienteId(e.target.value)} />
@@ -106,7 +107,7 @@ function Configurar({ servico, aoFechar }: { servico: ServicoId | null; aoFechar
             <input id="cx-url" className="campo" type="url" autoComplete="off" spellCheck={false} value={url} onChange={(e) => setUrl(e.target.value)} />
           </Campo>
         )}
-        <Campo id="cx-chave" rotulo={servico === "gmail" ? T.conexoes.segredoCliente : T.conexoes.chave} erro={erro} dica={servico === "gmail" ? T.conexoes.gmailDica : T.conexoes.chaveDica}>
+        <Campo id="cx-chave" rotulo={doGoogle ? T.conexoes.segredoCliente : T.conexoes.chave} erro={erro} dica={doGoogle ? T.conexoes.gmailDica : T.conexoes.chaveDica}>
           <input
             id="cx-chave"
             className="campo"
@@ -124,7 +125,7 @@ function Configurar({ servico, aoFechar }: { servico: ServicoId | null; aoFechar
         </Campo>
         <div className="linha">
           <Botao type="submit" variante="primario" icone={<KeyRound size={14} />} disabled={testando || !chave.trim()}>
-            {testando ? (servico === "gmail" ? T.conexoes.aguardandoGoogle : T.conexoes.testando) : servico === "gmail" ? T.conexoes.conectarGoogle : T.conexoes.salvarChave}
+            {testando ? (doGoogle ? T.conexoes.aguardandoGoogle : T.conexoes.testando) : doGoogle ? T.conexoes.conectarGoogle : T.conexoes.salvarChave}
           </Botao>
           {conexao.chaveSalva && (
             <Botao

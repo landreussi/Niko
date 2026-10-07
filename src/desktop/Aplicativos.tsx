@@ -12,11 +12,13 @@ import { useConfig } from "../estado/configuracoes";
 import { usarTema } from "../janelas/area-de-trabalho/usarTema";
 import { usarAtalhos } from "../janelas/area-de-trabalho/usarAtalhos";
 import { useServicos } from "../servicos/servicos";
+import { usarPreferenciasDaJanela } from "../servicos/usarPreferenciasDaJanela";
 import { janelaAtual, ouvirComandos, ouvirEvento, sincronizarInicioComWindows } from "./desktop";
 import { usarSincronia } from "./sincronia";
 
 export function AppSistema() {
   usarTema();
+  usarPreferenciasDaJanela();
   usarAtalhos();
   usarSincronia();
   const janelas = useInterface((s) => s.janelasConexao);
@@ -82,6 +84,7 @@ export function AppIlha() {
 export function AppDock() {
   usarMostrarAoMontar();
   usarTema();
+  usarPreferenciasDaJanela();
   usarSincronia();
   return (
     <div className="area-sobreposta">

@@ -6,6 +6,8 @@ import { AGENTES } from "../../../estado/agentes";
 import { useConfig } from "../../../estado/configuracoes";
 import { tocarSom } from "../../../ponte/sons";
 import { liberarSistemaInicial } from "../../../desktop/desktop";
+import { useInterface } from "../../../estado/interface";
+import { temNovidadesDe } from "../../../utilitarios/novidades";
 import { saudacao } from "../../../utilitarios/datas";
 import { T } from "../../../textos/textos";
 import type { AgenteId } from "../../../tipos";
@@ -100,10 +102,11 @@ export function Saudacao({ versaoNova, aoTerminar }: { versaoNova?: string; aoTe
     const saida = window.setTimeout(() => {
       setFase("saida");
       void liberarSistemaInicial();
+      if (versaoNova && temNovidadesDe(versaoNova)) useInterface.getState().irPara("atualizacao", { secao: "novidades" });
     }, SAIDA_MS);
     const fim = window.setTimeout(aoTerminar, FIM_MS);
     return () => [som, onda, saida, fim].forEach((t) => window.clearTimeout(t));
-  }, [aoTerminar]);
+  }, [aoTerminar, versaoNova]);
 
   return (
     <motion.div className="saudacao" role="status" aria-label={`${titulo}. ${subtitulo}`} initial={{ opacity: 1 }} exit={{ opacity: 0, transition: { duration: 0.2 } }}>

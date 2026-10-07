@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { KeyRound, Plug, Trash2, CheckCircle2, ShieldCheck, Sparkles, RefreshCw, ExternalLink, LifeBuoy, ArrowLeft, Cpu, Zap, Globe, ChevronDown } from "lucide-react";
+import { KeyRound, Plug, Trash2, CheckCircle2, ShieldCheck, BrainCircuit, RefreshCw, ExternalLink, LifeBuoy, ArrowLeft, Cpu, Zap, Globe, ChevronDown } from "lucide-react";
 import { Botao, Campo, AvisoFaixa, ConfirmarModal, Vazio } from "../../componentes/basicos";
 import { Marca, type MarcaId } from "../../marcas/Marca";
 import { useConfig } from "../../estado/configuracoes";
@@ -32,7 +32,6 @@ const MARCA_DO_CATALOGO: Partial<Record<string, MarcaId>> = {
 const ICONE_SEM_MARCA: Record<string, React.ReactNode> = {
   groq: <Zap size={18} />,
   cerebras: <Cpu size={18} />,
-  openai: <Sparkles size={18} />,
   personalizado: <Globe size={18} />,
 };
 
@@ -151,7 +150,7 @@ export function SecaoIa() {
       </AvisoFaixa>
 
       {ponte.provedores.length === 0 ? (
-        <Vazio icone={<Sparkles size={26} />} titulo={T.configuracoes.semProvedores} texto={T.configuracoes.semProvedoresDica} />
+        <Vazio icone={<BrainCircuit size={26} />} titulo={T.configuracoes.semProvedores} texto={T.configuracoes.semProvedoresDica} />
       ) : (
         <div className="ia-provedores">
           {ponte.provedores.map((p) => {

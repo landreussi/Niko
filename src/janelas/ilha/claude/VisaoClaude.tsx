@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import {
-  Bell, Bot, Check, ChevronRight, CircleCheck, CircleX, Code2, Copy, FilePen, FileText, FolderOpen, FolderSearch, Globe, ListChecks, LoaderCircle, MessageSquare, Search, Settings, ShieldAlert, SquareTerminal, X, type LucideIcon,
+  Bell, Bot, Check, Plug, ChevronRight, CircleCheck, CircleX, Code2, Copy, FilePen, FileText, FolderOpen, FolderSearch, Globe, ListChecks, LoaderCircle, MessageSquare, Search, Settings, ShieldAlert, SquareTerminal, X, type LucideIcon,
 } from "lucide-react";
 import { useClaudeCode, type PassoClaude, type SessaoClaude, type PedidoDePermissao } from "../../../estado/claudeCode";
 import { agentesDeCodigo, claudeCode, FERRAMENTAS_DE_CODIGO, type RegraSugerida } from "../../../ponte/claudeCode";
@@ -258,12 +258,10 @@ function SemSessoes({ conectado, aoConfigurar }: { conectado: boolean; aoConfigu
       </span>
       <b>{conectado ? C.semSessoes : C.naoConectado}</b>
       <span className="vsc-dim">{conectado ? C.semSessoesDica : C.naoConectadoDica}</span>
-      {!conectado && (
-        <button type="button" className="vsc-botao vsc-botao-primario" onClick={aoConfigurar}>
-          <Settings size={13} />
-          {C.abrirConfiguracoes}
-        </button>
-      )}
+      <button type="button" className="vsc-botao vsc-botao-primario" onClick={aoConfigurar}>
+        {conectado ? <Plug size={13} /> : <Settings size={13} />}
+        {C.abrirConfiguracoes}
+      </button>
     </div>
   );
 }

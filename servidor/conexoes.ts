@@ -2,9 +2,10 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync, renameSync } from "
 import { join } from "node:path";
 import { lerSegredo, gravarSegredo, apagarSegredo } from "./segredos";
 import { pastaDados, validarUrlBase } from "./ia";
-import { lerGmail, autorizarGmail } from "./gmail";
+import { lerGmail, autorizarGmail, type CredencialGmail } from "./gmail";
+import { autorizarAgenda, resumoDaAgenda } from "./agendaGoogle";
 
-export const SERVICOS = ["stripe", "github", "vercel", "resend", "notion", "calcom", "n8n", "gmail", "supabase", "cloudflare"] as const;
+export const SERVICOS = ["stripe", "github", "vercel", "resend", "notion", "calcom", "n8n", "gmail", "agenda", "supabase", "cloudflare"] as const;
 export type Servico = (typeof SERVICOS)[number];
 
 const ARQUIVO = () => join(pastaDados(), "conexoes.json");
@@ -212,6 +213,7 @@ const LEITORES: Record<Servico, Leitor> = {
     };
   },
   gmail: async (chave) => lerGmail(chave),
+  agenda: async (chave) => resumoDaAgenda(chave),
   supabase: async (chave) => {
     const h = { authorization: `Bearer ${chave}` };
     const base = "https://api.supabase.com/v1";
@@ -318,16 +320,17 @@ export async function chaveDe(servico: Servico): Promise<string> {
 }
 
 export async function salvarChaveConexao(servico: Servico, dados: { chave?: unknown; url?: unknown; clienteId?: unknown; segredo?: unknown }) {
-  if (servico === "gmail") {
-    const credencial = await autorizarGmail(String(dados.clienteId ?? "").trim(), String(dados.segredo ?? "").trim());
+  if (servico === "gmail" || servico === "agenda") {
+    const autorizar: (id: string, segredo: string) => Promise<CredencialGmail> = servico === "gmail" ? autorizarGmail : autorizarAgenda;
+    const credencial = await autorizar(String(dados.clienteId ?? "").trim(), String(dados.segredo ?? "").trim());
     const texto = JSON.stringify(credencial);
-    await lerGmail(texto);
-    await gravarSegredo("conexao-gmail", texto);
+    await LEITORES[servico](texto);
+    await gravarSegredo(`conexao-${servico}`, texto);
     const c = lerConfig();
-    c.gmail = { temChave: true };
+    c[servico] = { temChave: true };
     salvarConfig(c);
-    cacheDados.delete("gmail");
-    leiturasEmAndamento.delete("gmail");
+    cacheDados.delete(servico);
+    leiturasEmAndamento.delete(servico);
     return { ok: true };
   }
   const chave = typeof dados.chave === "string" ? dados.chave.trim() : "";

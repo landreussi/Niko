@@ -8,7 +8,7 @@ import { Botao, Segmentado, Vazio, AvisoFaixa } from "../../componentes/basicos"
 import { T } from "../../textos/textos";
 import { conexoesPonte, PAINEL_OFICIAL, resumoDe, type DadosServico } from "../../ponte/conexoesReais";
 import { formatarDinheiro } from "../../utilitarios/dinheiro";
-import { horarioRelativo } from "../../utilitarios/datas";
+import { formatar, horarioRelativo } from "../../utilitarios/datas";
 import { contem } from "../../utilitarios/basicos";
 import { tocarSom } from "../../ponte/sons";
 import type { ServicoId } from "../../tipos";
@@ -336,6 +336,24 @@ function ConteudoServico({ servico, aba, filtro, dados }: { servico: ServicoId; 
         <span className="texto-3 privado">{d.email}</span>
         <h3 className="rotulo-secao">{T.janelaConexao.ultimas}</h3>
         {tabela(d.importantes.length ? d.importantes : d.recentes.slice(0, 8))}
+      </div>
+    );
+  }
+
+  if (servico === "agenda") {
+    const d = dados as DadosServico["agenda"];
+    const M = T.janelaConexao.metricas;
+    return (
+      <div className="coluna">
+        <div className="grade-metricas">
+          <Metrica rotulo={M.hoje} valor={d.hoje} />
+          <Metrica rotulo={M.proximos} valor={d.proximos.length} />
+        </div>
+        <Tabela filtro={filtro} linhas={d.proximos} colunas={[
+          { titulo: C.data, render: (l) => formatar(l.data, "EEE, d 'de' MMM"), texto: (l) => l.data },
+          { titulo: C.inicio, render: (l) => l.hora ?? "" },
+          { titulo: C.titulo, render: (l) => <span className="privado">{l.titulo}</span>, texto: (l) => l.titulo },
+        ]} />
       </div>
     );
   }

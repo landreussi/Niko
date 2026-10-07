@@ -129,6 +129,9 @@ export function receberArquivo(req: IncomingMessage, banco: string, materia: str
       }
     });
     req.on("error", falhar);
+    req.on("close", () => {
+      if (!req.complete) falhar(new Error("envio_interrompido"));
+    });
     saida.on("error", falhar);
     saida.on("finish", () => {
       if (falhou) return;
@@ -154,7 +157,10 @@ export function enviarConteudo(res: ServerResponse, banco: string, materia: stri
   res.setHeader("content-disposition", `inline; filename*=UTF-8''${encodeURIComponent(nome)}`);
   res.setHeader("x-content-type-options", "nosniff");
   res.setHeader("cache-control", "no-store");
-  createReadStream(caminho).pipe(res);
+  if (tipo === "image/svg+xml") res.setHeader("content-security-policy", "default-src 'none'; style-src 'unsafe-inline'; img-src data:; sandbox");
+  const leitura = createReadStream(caminho);
+  leitura.on("error", () => res.destroy());
+  leitura.pipe(res);
 }
 
 export function excluirArquivo(banco: string, materia: string, id: string) {

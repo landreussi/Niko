@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { Check, Sparkles } from "lucide-react";
+import { BrainCircuit, Check } from "lucide-react";
 import { useInterface } from "../../estado/interface";
 import { useConfig, type ModoBorda, type Tema } from "../../estado/configuracoes";
 import { Personagem } from "../../personagens/Personagem";
@@ -137,7 +137,7 @@ export function PrimeiraExecucao() {
                 <p className="texto-2">{T.primeira.iaTexto}</p>
                 <div>
                   <Botao
-                    icone={<Sparkles size={14} />}
+                    icone={<BrainCircuit size={14} />}
                     onClick={() => {
                       concluir();
                       useInterface.getState().irPara("ia");

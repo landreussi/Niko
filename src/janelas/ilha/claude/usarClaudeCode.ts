@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import { claudeCode, ouvirClaudeCode, type EventoClaude } from "../../../ponte/claudeCode";
 import { frenteCobreAIlha, frenteEmTelaCheia, notificarWindows } from "../../../desktop/desktop";
 import { useClaudeCode } from "../../../estado/claudeCode";
-import { useIlha } from "../../../estado/ilha";
+import { avisoLigado, useIlha } from "../../../estado/ilha";
 import { useConfig } from "../../../estado/configuracoes";
 import { tocarSom } from "../../../ponte/sons";
 import { T } from "../../../textos/textos";
@@ -17,7 +17,7 @@ function abaLigada() {
 
 async function notificarSeEscondida(corpo: string) {
   const cfg = useConfig.getState();
-  if (!cfg.notificarClaude || cfg.naoPerturbe) return;
+  if (!cfg.notificarClaude || cfg.naoPerturbe || !avisoLigado("codigo")) return;
   const ilha = useIlha.getState();
   if (ilha.estado === "expandida" && ilha.aba === "claude") return;
   if (ilha.estado !== "escondida" && !(await frenteCobreAIlha())) return;
@@ -45,7 +45,7 @@ function reagir(e: EventoClaude) {
   const ferramenta = sessao?.ferramenta ?? e.ferramenta ?? "claude";
   const nome = nomeDaFerramenta(ferramenta);
   const marca = MARCA_DA_FERRAMENTA[ferramenta];
-  const silencio = useConfig.getState().naoPerturbe;
+  const silencio = useConfig.getState().naoPerturbe || !avisoLigado("codigo");
   const ilha = useIlha.getState();
   switch (e.evento) {
     case "PermissionRequest": {
@@ -74,10 +74,10 @@ function reagir(e: EventoClaude) {
       estado.focar(e.sessao);
       void tocarSom("finish", "avisos");
       void notificarSeEscondida(T.ilha.claude.notificacao.terminou(nome, projeto));
-      if (ilha.estado !== "expandida") ilha.revelar({ texto: T.ilha.claude.terminouAviso(nome, projeto), tipo: "sucesso", marca, aba: "claude" }, 7000, "normal");
+      if (ilha.estado !== "expandida") ilha.revelar({ texto: T.ilha.claude.terminouAviso(nome, projeto), tipo: "sucesso", marca, aba: "claude" }, 7000);
       return;
     case "StopFailure":
-      if (!abaLigada()) return;
+      if (silencio || !abaLigada()) return;
       void tocarSom("error", "avisos");
       void notificarSeEscondida(T.ilha.claude.notificacao.erro(nome, projeto));
       ilha.revelar({ texto: T.ilha.claude.erroAviso(nome, projeto), tipo: "alerta", marca, aba: "claude" }, 6000);
@@ -89,7 +89,7 @@ function reagir(e: EventoClaude) {
       return;
     }
     case "Notification":
-      if (!abaLigada()) return;
+      if (silencio || !abaLigada()) return;
       if (sessao?.estado === "esperando") {
         void tocarSom("question", "avisos");
         ilha.revelar({ texto: T.ilha.claude.esperandoAviso(nome, projeto), tipo: "info", marca, aba: "claude" }, 6000);

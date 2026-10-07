@@ -1,6 +1,6 @@
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { Plus, Search, Send, Download, Trash2, Copy, Check, Sparkles, Terminal, Square, Settings2, Info, RotateCcw, Play, Zap, AlertTriangle, Paperclip, Lightbulb, ListChecks, ScanText, type LucideIcon } from "lucide-react";
+import { Plus, Search, Send, Download, Trash2, Copy, Check, BrainCircuit, FileText, SquareSlash, Terminal, Square, Settings2, Info, RotateCcw, Play, Zap, AlertTriangle, Paperclip, Lightbulb, ListChecks, ScanText, type LucideIcon } from "lucide-react";
 import { TextoRico } from "../../componentes/TextoRico";
 import { CartoesDaMensagem } from "../../componentes/CartaoAcao";
 import { EscolhaDoAgente } from "../../componentes/EscolhaDoAgente";
@@ -21,7 +21,7 @@ import { EVENTO_NOVO } from "../../janelas/area-de-trabalho/usarAtalhos";
 import type { AgenteId, Conversa, Mensagem } from "../../tipos";
 import type { AcaoAnexo } from "../../utilitarios/recursosChat";
 
-const ICONES_ACAO_ANEXO: Record<AcaoAnexo, LucideIcon> = { resumir: Sparkles, explicar: Lightbulb, perguntas: ListChecks, extrair: ScanText };
+const ICONES_ACAO_ANEXO: Record<AcaoAnexo, LucideIcon> = { resumir: FileText, explicar: Lightbulb, perguntas: ListChecks, extrair: ScanText };
 
 function grupoDaData(iso: string): string {
   const d = new Date(iso);
@@ -300,7 +300,7 @@ export default function Chat() {
             <span className="texto-3 cortar" style={{ fontSize: 11 }}>{AGENTES.map((a) => `${nomes[a]} (${cargos[a]})`).join(", ")}</span>
           </div>
           <button type="button" className={`etiqueta chat-topo-ia ${provedor ? "etiqueta-sucesso" : ""}`} onClick={() => irPara("ia")} title={provedor ? fila.map((p) => `${p.provedor.nome} . ${p.modelo}`).join("\n") : T.chat.configurarIa}>
-            {provedor ? <Sparkles size={11} /> : <Terminal size={11} />}
+            {provedor ? <BrainCircuit size={11} /> : <Terminal size={11} />}
             <span className="cortar">{provedor ? `${provedor.provedor.nome} . ${provedor.modelo}` : T.chat.modoComandos}</span>
             {fila.length > 1 && <span className="chat-topo-reservas">+{fila.length - 1}</span>}
           </button>
@@ -375,7 +375,7 @@ export default function Chat() {
               <div className="chat-sugestoes" role="listbox" aria-label={T.chat.comandos}>
                 {sugestoes.map((s) => (
                   <button key={s} type="button" role="option" aria-selected="false" className="paleta-item" onClick={() => { setTexto(`${s.split(" ")[0]} `); campo.current?.focus(); }}>
-                    <Sparkles size={13} />
+                    <SquareSlash size={13} />
                     <code>{s.split(" ")[0]}</code>
                     <span className="texto-3 cortar">{s.split(" ").slice(1).join(" ")}</span>
                   </button>

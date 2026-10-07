@@ -18,7 +18,9 @@ import { Marca, MARCAS, marcaDoApp } from "../../marcas/Marca";
 import { Anel } from "../../componentes/Graficos";
 import { T } from "../../textos/textos";
 import { deISO, formatarData, hojeISO, paraISO, horarioRelativo } from "../../utilitarios/datas";
-import { itensDoCalendario } from "../../utilitarios/itensDoCalendario";
+import { itemFeito, itensDoCalendario, podeMarcarFeito, repeteTodoDia, type ItemDoCalendario } from "../../utilitarios/itensDoCalendario";
+import { marcarItemFeito } from "../../utilitarios/marcarFeito";
+import { usarAgendaGoogle } from "../../modulos/calendario/usarAgendaGoogle";
 import { ConexaoNaIlha } from "./ConexaoNaIlha";
 import { EspacoDoPersonagem } from "./animacoes/PersonagemContinuo";
 import { funcaoLigada, secoesDoHojeLigadas } from "../../utilitarios/funcoes";
@@ -551,8 +553,8 @@ export function VisaoConexoes() {
                     >
                       <span className="ilha-conexao-logo"><Marca marca={c.id} tamanho={17} /></span>
                       <span className="ilha-conexao-textos">
-                        <span className="ilha-conexao-nome">
-                          {T.conexoes.servicos[c.id].nome}
+                        <span className="ilha-conexao-nome" title={T.conexoes.servicos[c.id].nome}>
+                          <span className="ilha-conexao-nome-texto">{T.conexoes.servicos[c.id].nome}</span>
                           <span className="ilha-conexao-estado" data-status={c.ligada ? c.status : "desligada"} />
                         </span>
                         <span className="ilha-conexao-resumo cortar privado">{c.ligada ? c.resumo || T.conexoes.status[c.status] : T.ilha.conexaoDesligada}</span>
@@ -597,6 +599,7 @@ function SecaoAgenda() {
   const eventos = useOrganizacao((s) => s.eventos);
   const metas = useOrganizacao((s) => s.metas);
   const tarefas = useRotina((s) => s.tarefas);
+  const habitos = useRotina((s) => s.habitos);
   const datas = useEstudos((s) => s.datas);
   const revisoes = useEstudos((s) => s.revisoesConteudo);
   const recorrentes = useFinancas((s) => s.recorrentes);
@@ -609,10 +612,19 @@ function SecaoAgenda() {
   const inicio = paraISO(dias[0]);
   const fim = paraISO(dias[dias.length - 1]);
   const desligadas = useConfig((s) => s.funcoesDesligadas);
-  const dados = useMemo(() => ({ eventos, metas, tarefas, datas, revisoes, recorrentes }), [eventos, metas, tarefas, datas, revisoes, recorrentes, desligadas]);
-  const comCompromisso = useMemo(() => new Set(itensDoCalendario(dados, inicio, fim).map((i) => i.data)), [dados, inicio, fim]);
-  const deHoje = useMemo(() => itensDoCalendario(dados, hoje, hoje), [dados, hoje]);
+  const dados = useMemo(() => ({ eventos, metas, tarefas, habitos, datas, revisoes, recorrentes }), [eventos, metas, tarefas, habitos, datas, revisoes, recorrentes, desligadas]);
+  const google = usarAgendaGoogle(funcaoLigada("calendario", desligadas) ? [[inicio, fim], [hoje, hoje]] : []);
+  const comCompromisso = useMemo(
+    () => new Set([...itensDoCalendario(dados, inicio, fim).filter((i) => !repeteTodoDia(i)).map((i) => i.data), ...google.eventos.map((e) => e.data)]),
+    [dados, inicio, fim, google.eventos],
+  );
+  const deHoje = useMemo(() => {
+    const doGoogle: ItemDoCalendario[] = google.eventos.filter((e) => e.data === hoje).map((e) => ({ id: `google-${e.id}`, titulo: e.titulo, data: e.data, hora: e.hora, fonte: "google", link: e.link }));
+    return [...itensDoCalendario(dados, hoje, hoje), ...doGoogle].sort((a, b) => (a.hora ?? "99").localeCompare(b.hora ?? "99"));
+  }, [dados, hoje, google.eventos]);
   const C = T.ilha.calendario;
+  const registros = useRotina((s) => s.registros);
+  const deHojeOrdenado = [...deHoje].sort((a, b) => Number(itemFeito(a, registros)) - Number(itemFeito(b, registros)));
 
   useEffect(() => {
     const t = window.setInterval(() => setAgora(new Date()), 15000);
@@ -635,12 +647,32 @@ function SecaoAgenda() {
             <span className="ilha-sub">{C.semNadaHoje}</span>
           ) : (
             <>
-              {deHoje.slice(0, 3).map((item) => (
-                <button key={item.id} type="button" className="ilha-calendario-item" onClick={() => abrirDia(hoje)}>
-                  <span className="ilha-calendario-item-hora numero">{item.hora ?? C.diaTodo}</span>
-                  <span className="cortar privado">{item.titulo}</span>
-                </button>
-              ))}
+              {deHojeOrdenado.slice(0, 3).map((item) => {
+                const feito = itemFeito(item, registros);
+                return (
+                  <div key={item.id} className="ilha-calendario-item" data-feito={feito || undefined}>
+                    {podeMarcarFeito(item) && (
+                      <button
+                        type="button"
+                        className="ilha-calendario-check"
+                        aria-pressed={feito}
+                        aria-label={feito ? T.calendario.desmarcarFeito(item.titulo) : T.calendario.marcarFeito(item.titulo)}
+                        title={feito ? T.calendario.desmarcarFeito(item.titulo) : T.calendario.marcarFeito(item.titulo)}
+                        onClick={() => {
+                          void tocarSom(feito ? "blip" : "approve");
+                          marcarItemFeito(item, !feito);
+                        }}
+                      >
+                        {feito && <Check size={10} strokeWidth={3} />}
+                      </button>
+                    )}
+                    <button type="button" className="ilha-calendario-item-abrir" onClick={() => abrirDia(hoje)}>
+                      <span className="ilha-calendario-item-hora numero">{item.hora ?? C.diaTodo}</span>
+                      <span className="cortar privado">{item.titulo}</span>
+                    </button>
+                  </div>
+                );
+              })}
               {deHoje.length > 3 && <span className="ilha-mini">{C.maisHoje(deHoje.length - 3)}</span>}
             </>
           )}

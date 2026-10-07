@@ -15,7 +15,7 @@ import type {
   TipoArea,
 } from "../tipos";
 import { gerarId } from "../utilitarios/basicos";
-import { hojeISO, paraISO } from "../utilitarios/datas";
+import { deISO, hojeISO, paraISO } from "../utilitarios/datas";
 import { addDays } from "date-fns";
 
 const agendador = fsrs();
@@ -122,10 +122,13 @@ export const useEstudos = create<EstadoEstudos>()(
       excluirArea: (id) =>
         set((s) => {
           const materias = s.materias.filter((m) => m.areaId === id).map((m) => m.id);
+          const paginas = s.paginas.filter((p) => !materias.includes(p.materiaId));
+          const restantes = new Set(paginas.map((p) => p.id));
           return {
             areas: s.areas.filter((a) => a.id !== id),
             materias: s.materias.filter((m) => m.areaId !== id),
-            paginas: s.paginas.filter((p) => !materias.includes(p.materiaId)),
+            paginas,
+            revisoesConteudo: s.revisoesConteudo.filter((r) => restantes.has(r.paginaId)),
             datas: s.datas.filter((d) => !materias.includes(d.materiaId)),
             cartoes: s.cartoes.filter((c) => !materias.includes(c.materiaId)),
           };
@@ -144,12 +147,17 @@ export const useEstudos = create<EstadoEstudos>()(
       },
       atualizarMateria: (id, parcial) => set((s) => ({ materias: s.materias.map((m) => (m.id === id ? { ...m, ...parcial } : m)) })),
       excluirMateria: (id) =>
-        set((s) => ({
-          materias: s.materias.filter((m) => m.id !== id),
-          paginas: s.paginas.filter((p) => p.materiaId !== id),
-          datas: s.datas.filter((d) => d.materiaId !== id),
-          cartoes: s.cartoes.filter((c) => c.materiaId !== id),
-        })),
+        set((s) => {
+          const paginas = s.paginas.filter((p) => p.materiaId !== id);
+          const restantes = new Set(paginas.map((p) => p.id));
+          return {
+            materias: s.materias.filter((m) => m.id !== id),
+            paginas,
+            revisoesConteudo: s.revisoesConteudo.filter((r) => restantes.has(r.paginaId)),
+            datas: s.datas.filter((d) => d.materiaId !== id),
+            cartoes: s.cartoes.filter((c) => c.materiaId !== id),
+          };
+        }),
       criarPagina: (materiaId, paiId) => {
         const pagina: Pagina = { id: gerarId(), materiaId, paiId, titulo: "", conteudo: "", atualizadaEm: new Date().toISOString() };
         set((s) => ({ paginas: [...s.paginas, pagina] }));
@@ -176,7 +184,7 @@ export const useEstudos = create<EstadoEstudos>()(
           paginas: s.paginas.map((p) => (p.id === paginaId ? { ...p, estudadaEm: hoje } : p)),
           revisoesConteudo: [
             ...s.revisoesConteudo.filter((r) => r.paginaId !== paginaId || r.feita),
-            ...intervalos.map((d) => ({ id: gerarId(), paginaId, data: paraISO(addDays(new Date(), d)), feita: false })),
+            ...intervalos.map((d) => ({ id: gerarId(), paginaId, data: paraISO(addDays(deISO(hoje), d)), feita: false })),
           ],
         }));
       },

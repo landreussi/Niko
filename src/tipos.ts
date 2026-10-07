@@ -63,6 +63,7 @@ export interface Habito {
   meta: number;
   unidade: string;
   arquivado: boolean;
+  hora?: string;
 }
 
 export type Humor = "otimo" | "bom" | "neutro" | "dificil";
@@ -335,10 +336,12 @@ export interface Evento {
   tipo: "evento" | "lembrete";
   repeticao: Repeticao;
   ultimoDisparo?: string;
+  excecoes?: string[];
+  feitos?: string[];
 }
 
 export interface CartaoConfirmacao {
-  tipo: "gasto" | "receita" | "dividir" | "tarefa" | "lembrete" | "evento" | "concluir" | "habito" | "compra" | "memoria" | "rascunho" | "email";
+  tipo: "gasto" | "receita" | "dividir" | "tarefa" | "lembrete" | "evento" | "concluir" | "eventoFeito" | "habito" | "novoHabito" | "compra" | "memoria" | "rascunho" | "email";
   dados: Record<string, string | number | string[]>;
   situacao: "pendente" | "confirmado" | "cancelado";
 }
@@ -386,7 +389,7 @@ export interface Memoria {
   data: string;
 }
 
-export type ServicoId = "stripe" | "github" | "vercel" | "resend" | "notion" | "calcom" | "n8n" | "gmail" | "supabase" | "cloudflare";
+export type ServicoId = "stripe" | "github" | "vercel" | "resend" | "notion" | "calcom" | "n8n" | "gmail" | "agenda" | "supabase" | "cloudflare";
 
 export type StatusConexao = "conectado" | "sem_chave" | "erro" | "pausado" | "sem_internet";
 

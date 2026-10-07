@@ -1,6 +1,6 @@
 import { motion } from "motion/react";
 import { Check, ExternalLink, Image, MonitorX, Paintbrush, PanelBottom, PanelTop, Settings2, SunMoon, type LucideIcon } from "lucide-react";
-import { useConfig, type RepousoIlha, type Tema } from "../../../estado/configuracoes";
+import { ICONES_DA_BARRA, useConfig, type RepousoIlha, type Tema } from "../../../estado/configuracoes";
 import { useInterface } from "../../../estado/interface";
 import { useIlha } from "../../../estado/ilha";
 import { controle } from "../../../ponte/ponteLocal";
@@ -149,6 +149,22 @@ export function Personalizacao({ topo, aoFechar }: { topo: number; aoFechar: () 
         </Linha>
         <Linha rotulo={P.repouso}>
           <Escolha<RepousoIlha> grade rotulo={P.repouso} valor={cfg.ilha.repouso} aoMudar={(repouso) => cfg.definirIlha({ repouso })} opcoes={(Object.keys(T.configuracoes.repousos) as RepousoIlha[]).map((r) => ({ valor: r, rotulo: T.configuracoes.repousos[r] }))} />
+        </Linha>
+        <Linha rotulo={P.iconesDaBarra}>
+          <div className="ilha-escolha" role="group" aria-label={P.iconesDaBarra}>
+            {ICONES_DA_BARRA.map((icone) => (
+              <button
+                key={icone}
+                type="button"
+                role="checkbox"
+                aria-checked={cfg.ilha.iconesDaBarra[icone]}
+                className="ilha-escolha-opcao"
+                onClick={() => cfg.definirIlha({ iconesDaBarra: { ...cfg.ilha.iconesDaBarra, [icone]: !cfg.ilha.iconesDaBarra[icone] } })}
+              >
+                {P.icones[icone]}
+              </button>
+            ))}
+          </div>
         </Linha>
       </Grupo>
 

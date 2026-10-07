@@ -203,7 +203,18 @@ export const useFinancas = create<EstadoFinancas>()(
         });
       },
       criarRecorrente: (dados) => set((s) => ({ recorrentes: [...s.recorrentes, { ...dados, id: gerarId() }] })),
-      atualizarRecorrente: (id, parcial) => set((s) => ({ recorrentes: s.recorrentes.map((r) => (r.id === id ? { ...r, ...parcial } : r)) })),
+      atualizarRecorrente: (id, parcial) =>
+        set((s) => ({
+          recorrentes: s.recorrentes.map((r) => {
+            if (r.id !== id) return r;
+            const novo = { ...r, ...parcial };
+            if (parcial.ativa === true && !r.ativa) {
+              const ultimo = ultimoVencimentoAte(novo, deISO(hojeISO()));
+              if (!r.geradoAte || ultimo > r.geradoAte) novo.geradoAte = ultimo;
+            }
+            return novo;
+          }),
+        })),
       excluirRecorrente: (id) => set((s) => ({ recorrentes: s.recorrentes.filter((r) => r.id !== id) })),
       gerarRecorrentes: () => {
         const hoje = hojeISO();
@@ -362,6 +373,16 @@ function vencimentoAnual(ano: number, mesAnual: number, dia: number): Date {
 export function geradoAteInicial(r: Pick<Recorrente, "dia" | "frequencia" | "mesAnual">, hoje: Date): string | undefined {
   const vencimento = r.frequencia === "anual" && r.mesAnual ? vencimentoAnual(hoje.getFullYear(), r.mesAnual, r.dia) : setDate(hoje, Math.min(r.dia, getDaysInMonth(hoje)));
   return paraISO(vencimento) <= paraISO(hoje) ? paraISO(vencimento) : undefined;
+}
+
+export function ultimoVencimentoAte(r: Pick<Recorrente, "dia" | "frequencia" | "mesAnual">, hoje: Date): string {
+  const desteCiclo = geradoAteInicial(r, hoje);
+  if (desteCiclo) return desteCiclo;
+  const anterior = r.frequencia === "anual" && r.mesAnual ? vencimentoAnual(hoje.getFullYear() - 1, r.mesAnual, r.dia) : (() => {
+    const mes = addMonths(hoje, -1);
+    return setDate(mes, Math.min(r.dia, getDaysInMonth(mes)));
+  })();
+  return paraISO(anterior);
 }
 
 function proximoVencimento(r: Recorrente, geradoAte: string): Date {

@@ -4,12 +4,12 @@ import { SortableContext, useSortable, verticalListSortingStrategy, arrayMove } 
 import { CSS } from "@dnd-kit/utilities";
 import {
   Settings, Palette, PanelTop, PanelBottom, Timer, Users, Volume2, Gauge, Maximize, Keyboard, ShieldCheck, Database, Info, Wrench,
-  GripVertical, Download, Upload, RotateCcw, Trash2, DatabaseBackup, SquareTerminal, Sparkles,
+  GripVertical, Download, Upload, RotateCcw, Trash2, DatabaseBackup, SquareTerminal, Hand,
 } from "lucide-react";
 import { CabecalhoAba } from "../../componentes/CabecalhoAba";
 import { Cartao, Botao, Campo, Modal, Segmentado, AvisoFaixa, LinhaAlternador, Alternador, Tecla, ConfirmarModal } from "../../componentes/basicos";
 import { Personagem } from "../../personagens/Personagem";
-import { useConfig, BARRA_PADRAO, type ModoBorda, type Paleta, type Tema, type RepousoIlha, type AbaIlha, CONFIG_PADRAO } from "../../estado/configuracoes";
+import { useConfig, BARRA_PADRAO, CATEGORIAS_DE_AVISO, type ModoBorda, type Paleta, type Tema, type RepousoIlha, type AbaIlha, CONFIG_PADRAO } from "../../estado/configuracoes";
 import { useAgentes, AGENTES } from "../../estado/agentes";
 import { useComunicacao } from "../../estado/comunicacao";
 import { useInterface } from "../../estado/interface";
@@ -318,6 +318,7 @@ export default function Configuracoes() {
         <LinhaAlternador rotulo={T.configuracoes.iniciarComWindows} dica={T.configuracoes.iniciarComWindowsDica} ligado={cfg.iniciarComWindows} aoMudar={(v) => cfg.definir({ iniciarComWindows: v })} />
         <LinhaAlternador rotulo={T.configuracoes.manterSegundoPlano} dica={`${T.configuracoes.manterDica} ${T.configuracoes.somenteDesktop}.`} ligado={false} desativado aoMudar={() => undefined} />
         <LinhaAlternador rotulo={T.configuracoes.conquistasAtivas} ligado={cfg.conquistasAtivas} aoMudar={(v) => cfg.definir({ conquistasAtivas: v })} />
+        <LinhaAlternador rotulo={T.calendario.integracaoMostrar} ligado={cfg.sugestaoAgendaGoogle} aoMudar={(v) => cfg.definir({ sugestaoAgendaGoogle: v })} />
       </>
     ),
     aparencia: (
@@ -428,7 +429,7 @@ export default function Configuracoes() {
         <LinhaAlternador rotulo={T.configuracoes.ilhaAtiva} ligado={cfg.ilha.ativa} aoMudar={(v) => cfg.definirIlha({ ativa: v })} />
         <div className="linha-entre" style={{ gap: 12 }}>
           <span className="campo-dica">{T.configuracoes.verSaudacaoDica}</span>
-          <Botao pequeno icone={<Sparkles size={13} />} disabled={!cfg.ilha.ativa} onClick={() => void pedirSaudacao()}>{T.configuracoes.verSaudacao}</Botao>
+          <Botao pequeno icone={<Hand size={13} />} disabled={!cfg.ilha.ativa} onClick={() => void pedirSaudacao()}>{T.configuracoes.verSaudacao}</Botao>
         </div>
         <div className="campo-grupo">
           <span className="campo-rotulo">{T.configuracoes.modo}</span>
@@ -478,6 +479,18 @@ export default function Configuracoes() {
           <span className="campo-rotulo">{T.configuracoes.notificacoesIlha}</span>
           <Segmentado rotulo={T.configuracoes.notificacoesIlha} valor={cfg.ilha.notificacoes} aoMudar={(v) => cfg.definirIlha({ notificacoes: v })} opcoes={(["importantes", "todas", "nenhuma"] as const).map((v) => ({ valor: v, rotulo: T.configuracoes.notificacoesOpcoes[v] }))} />
           <span className="campo-dica">{T.configuracoes.notificacoesDica[cfg.ilha.notificacoes]}</span>
+        </div>
+        <div className="campo-grupo">
+          <span className="campo-rotulo">{T.configuracoes.avisosPorTipo}</span>
+          <span className="campo-dica">{T.configuracoes.avisosPorTipoDica}</span>
+          {CATEGORIAS_DE_AVISO.map((c) => (
+            <LinhaAlternador
+              key={c}
+              rotulo={T.configuracoes.categoriasDeAviso[c]}
+              ligado={!cfg.avisosDesligados.includes(c)}
+              aoMudar={(v) => cfg.definir({ avisosDesligados: v ? cfg.avisosDesligados.filter((x) => x !== c) : [...cfg.avisosDesligados, c] })}
+            />
+          ))}
         </div>
         <Campo id="il-fav" rotulo={T.configuracoes.agenteFavorito}>
           <select id="il-fav" className="seletor" value={cfg.agentes.favorito} onChange={(e) => cfg.definir({ agentes: { ...cfg.agentes, favorito: e.target.value as typeof cfg.agentes.favorito } })}>

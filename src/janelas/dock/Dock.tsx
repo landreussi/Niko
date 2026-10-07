@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { X } from "lucide-react";
 import { NATIVO, ROTULO, usarAreaInterativa, usarCursorFora, usarAppsAbertos, agirNaJanela, alternarSistemaNativo, mostrarMiniaturas, ocultarBarraDoWindows, reservarEspacoDoDock, usarEstadoDaFrente, definirDocks, usarMonitores, type AppAberto } from "../../desktop/desktop";
 import { cadaDockMostraSeusApps, dockAtivoNoMonitor, meuMonitor, TODOS_OS_MONITORES } from "./monitores";
+import { agruparApps, nomeDoGrupo } from "./grupos";
 import { AnimatePresence, motion, useMotionValue, useSpring, useTransform, type MotionValue } from "motion/react";
 import { useConfig } from "../../estado/configuracoes";
 import { useInterface } from "../../estado/interface";
@@ -125,11 +126,7 @@ function AppsDoWindows({ mouseX, ampliar, ativo, monitor }: { mouseX: MotionValu
   const [previa, setPrevia] = useState<{ chave: string; centro: number; esquerdaDock: number } | null>(null);
   const relogioAbrir = useRef<number | undefined>(undefined);
   const relogioFechar = useRef<number | undefined>(undefined);
-  const grupos = new Map<string, AppAberto[]>();
-  for (const a of apps) {
-    const chave = a.app === "ApplicationFrameHost" ? `uwp-${a.titulo}` : (a.caminho ?? a.app);
-    grupos.set(chave, [...(grupos.get(chave) ?? []), a]);
-  }
+  const grupos = agruparApps(apps);
   const listaDaPrevia = previa && ativo ? grupos.get(previa.chave) : undefined;
   usarMiniaturasDaPrevia(Boolean(listaDaPrevia?.length), previa?.chave ?? null);
 
@@ -195,7 +192,7 @@ function AppsDoWindows({ mouseX, ampliar, ativo, monitor }: { mouseX: MotionValu
         {[...grupos.entries()].map(([chave, lista]) => {
           const ativa = lista.find((j) => j.ativa);
           const principal = lista[0];
-          const nome = principal.app === "ApplicationFrameHost" ? principal.titulo : principal.nome || principal.app;
+          const nome = nomeDoGrupo(principal);
           return (
             <ItemDock
               key={chave}

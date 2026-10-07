@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import type { AgenteId } from "../tipos";
 import type { MarcaId } from "../marcas/Marca";
-import { useConfig, type SecaoHoje, type VisaoIlha } from "./configuracoes";
+import { useConfig, type CategoriaDeAviso, type SecaoHoje, type VisaoIlha } from "./configuracoes";
 
 export type EstadoIlha = "escondida" | "compacta" | "expandida";
 
@@ -11,6 +11,13 @@ export interface Revelacao {
   marca?: MarcaId;
   agente?: AgenteId;
   aba?: VisaoIlha;
+  categoria?: CategoriaDeAviso;
+}
+
+const CATEGORIA_DA_ABA: Partial<Record<VisaoIlha, CategoriaDeAviso>> = { claude: "codigo", conexoes: "conexoes" };
+
+export function avisoLigado(categoria: CategoriaDeAviso | null | undefined): boolean {
+  return !categoria || !(useConfig.getState().avisosDesligados ?? []).includes(categoria);
 }
 
 interface Pendente {
@@ -71,6 +78,7 @@ export const useIlha = create<EstadoDaIlha>()((set, get) => {
       const preferencia = ilha.notificacoes;
       if (preferencia === "nenhuma") return;
       if (naoPerturbe && r.aba !== "foco") return;
+      if (!avisoLigado(r.categoria ?? (r.aba ? CATEGORIA_DA_ABA[r.aba] : undefined))) return;
       if (importancia === "normal") {
         if (preferencia !== "todas") return;
         if (Date.now() - ultimaNormal < INTERVALO_NORMAL) return;

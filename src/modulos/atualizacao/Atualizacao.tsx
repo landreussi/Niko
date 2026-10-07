@@ -1,5 +1,8 @@
 import { useEffect } from "react";
-import { CheckCircle2, Download, ExternalLink, Globe, History, RefreshCw } from "lucide-react";
+import { CheckCircle2, Download, ExternalLink, Globe, History, RefreshCw, Megaphone } from "lucide-react";
+import { useInterface } from "../../estado/interface";
+import { novidadesAte } from "../../utilitarios/novidades";
+import { formatar } from "../../utilitarios/datas";
 import { CabecalhoAba } from "../../componentes/CabecalhoAba";
 import { AvisoFaixa, Botao, Cartao, Progresso } from "../../componentes/basicos";
 import { LogoNiko } from "../../componentes/LogoNiko";
@@ -23,9 +26,17 @@ export default function Atualizacao() {
     : disponivel ? T.atualizacao.disponivel(atualizacao.versao)
     : T.atualizacao.pronto;
 
+  const versoes = novidadesAte(atualizacao.versaoAtual);
+  const parametros = useInterface((s) => s.parametros);
+
   useEffect(() => {
     void useAtualizacao.getState().carregarVersao();
   }, []);
+
+  useEffect(() => {
+    if (parametros.secao !== "novidades" || versoes.length === 0) return;
+    document.getElementById("novidades")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [parametros.secao, versoes.length]);
 
   return (
     <>
@@ -78,6 +89,32 @@ export default function Atualizacao() {
           </div>
         </Cartao>
         {disponivel && atualizacao.notas && <div className="atualizacao-notas"><Cartao titulo={T.atualizacao.novidades}><p>{atualizacao.notas}</p></Cartao></div>}
+        {versoes.length > 0 && (
+          <div className="atualizacao-notas" id="novidades">
+            <Cartao titulo={T.atualizacao.oQueMudou} icone={<Megaphone size={16} />}>
+              <p className="texto-3">{T.atualizacao.oQueMudouDica}</p>
+              <div className="novidades-lista">
+                {versoes.map((v, i) => (
+                  <section key={v.versao} className="novidades-versao" aria-label={`v${v.versao}`}>
+                    <div className="novidades-cabecalho">
+                      <strong className="numero">v{v.versao}</strong>
+                      {i === 0 && <span className="etiqueta etiqueta-destaque">{T.atualizacao.estaVersao}</span>}
+                      {"data" in v && v.data && <span className="texto-3">{formatar(v.data, "d 'de' MMMM")}</span>}
+                    </div>
+                    <ul>
+                      {v.mudancas.map(([tipo, texto]) => (
+                        <li key={texto} data-tipo={tipo}>
+                          <span className="novidades-tipo">{T.atualizacao.tiposDeMudanca[tipo]}</span>
+                          <span>{texto}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </section>
+                ))}
+              </div>
+            </Cartao>
+          </div>
+        )}
       </div>
     </>
   );

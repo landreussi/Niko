@@ -28,6 +28,7 @@ interface EstadoOrganizacao extends DadosOrganizacao {
   excluirVisao: (id: string) => void;
   criarEvento: (dados: Omit<Evento, "id">) => Evento;
   atualizarEvento: (id: string, parcial: Partial<Evento>) => void;
+  marcarEventoFeito: (id: string, data: string, feito: boolean) => void;
   excluirEvento: (id: string) => Evento | undefined;
   restaurarEvento: (e: Evento) => void;
   substituir: (dados: Partial<DadosOrganizacao>) => void;
@@ -68,6 +69,14 @@ export const useOrganizacao = create<EstadoOrganizacao>()(
         return evento;
       },
       atualizarEvento: (id, parcial) => set((s) => ({ eventos: s.eventos.map((e) => (e.id === id ? { ...e, ...parcial } : e)) })),
+      marcarEventoFeito: (id, data, feito) =>
+        set((s) => ({
+          eventos: s.eventos.map((e) => {
+            if (e.id !== id) return e;
+            const outros = (e.feitos ?? []).filter((d) => d !== data);
+            return { ...e, feitos: (feito ? [...outros, data] : outros).sort().slice(-400) };
+          }),
+        })),
       excluirEvento: (id) => {
         const evento = get().eventos.find((e) => e.id === id);
         set((s) => ({ eventos: s.eventos.filter((e) => e.id !== id) }));

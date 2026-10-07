@@ -391,6 +391,26 @@ function AbrirDaBandeja($caminho) {
   Start-Process -FilePath $real -WorkingDirectory ([IO.Path]::GetDirectoryName($real))
 }
 
+function CaminhoDaBandeja($caminho) {
+  $chave = ([string]$caminho).ToLowerInvariant()
+  if (-not $bandejaConhecida.ContainsKey($chave)) { Bandeja | Out-Null }
+  if (-not $bandejaConhecida.ContainsKey($chave)) { throw 'app_desconhecido' }
+  return $bandejaConhecida[$chave]
+}
+
+function MostrarNaPasta($caminho) {
+  $real = CaminhoDaBandeja $caminho
+  Start-Process -FilePath (Join-Path $env:WINDIR 'explorer.exe') -ArgumentList ('/select,"' + $real + '"')
+}
+
+function EncerrarDaBandeja($caminho) {
+  $real = CaminhoDaBandeja $caminho
+  if ($real.StartsWith($env:WINDIR, [StringComparison]::OrdinalIgnoreCase)) { throw 'app_do_windows' }
+  $alvos = @((ProcessosPorCaminho)[$real.ToLowerInvariant()] | Where-Object { $_ })
+  foreach ($p in $alvos) { try { Stop-Process -Id $p.Id -Force -ErrorAction Stop } catch { } }
+  return $alvos.Count
+}
+
 while ($true) {
   $linha = [Console]::In.ReadLine()
   if ($null -eq $linha) { break }
@@ -438,6 +458,8 @@ while ($true) {
       }
       'bandeja' { $r = Bandeja }
       'abrirDaBandeja' { AbrirDaBandeja $pedido.caminho; $r = @{ ok = $true } }
+      'pastaDaBandeja' { MostrarNaPasta $pedido.caminho; $r = @{ ok = $true } }
+      'encerrarDaBandeja' { $r = @{ ok = $true; encerrados = (EncerrarDaBandeja $pedido.caminho) } }
       default { throw 'acao_desconhecida' }
     }
     $r.id = $pedido.id
@@ -496,6 +518,11 @@ export const agirNaEnergia = (d: Record<string, unknown>) => {
 };
 export const lerBandeja = () => pedir({ acao: "bandeja" }, 20000);
 export const abrirDaBandeja = (d: Record<string, unknown>) => pedir({ acao: "abrirDaBandeja", caminho: caminhoDeApp(d.caminho) });
+export const pastaDaBandeja = (d: Record<string, unknown>) => pedir({ acao: "pastaDaBandeja", caminho: caminhoDeApp(d.caminho) });
+export const encerrarDaBandeja = (d: Record<string, unknown>) => {
+  if (d.confirmacao !== "CONFIRMADO") throw new Error("confirmacao_invalida");
+  return pedir({ acao: "encerrarDaBandeja", caminho: caminhoDeApp(d.caminho) });
+};
 
 export function encerrarControle() {
   controle.encerrar();

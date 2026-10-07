@@ -282,8 +282,22 @@ fn parar_ponte(app: &AppHandle) {
     if let Ok(mut ponte) = app.state::<Estado>().ponte.lock() {
         if let Some(mut filho) = ponte.take() {
             let _ = filho.kill();
+            let _ = filho.wait();
         }
     }
+}
+
+#[tauri::command]
+async fn preparar_atualizacao(app: AppHandle) {
+    let _ = app.emit("niko://saindo", ());
+    std::thread::sleep(ESPERA_PARA_SALVAR);
+    for (rotulo, janela) in app.webview_windows() {
+        if docks::eh_dock(&rotulo) {
+            barra_windows::reservar_espaco_do_dock(&janela, false);
+        }
+    }
+    barra_windows::restaurar(&app);
+    parar_ponte(&app);
 }
 
 static ENCERRANDO: AtomicBool = AtomicBool::new(false);
@@ -360,6 +374,7 @@ pub fn run() {
             docks::monitores,
             docks::definir_docks,
             liberar_sistema_inicial,
+            preparar_atualizacao,
             tempo_ocioso_ms,
             abrir_link,
             sair,

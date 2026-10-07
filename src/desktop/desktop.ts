@@ -100,6 +100,10 @@ export function mostrarSistema() {
   return invocar("mostrar_sistema");
 }
 
+export function prepararAtualizacao() {
+  return invocar<void>("preparar_atualizacao");
+}
+
 export function liberarSistemaInicial() {
   return invocar("liberar_sistema_inicial");
 }
@@ -242,6 +246,8 @@ export interface AppAberto {
   caminho: string | null;
   icone: string | null;
   monitor?: string;
+  grupo?: string | null;
+  nomeDoGrupo?: string | null;
 }
 
 export interface MonitorDoNiko {

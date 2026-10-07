@@ -233,6 +233,8 @@ async function* linhasSse(corpo: ReadableStream<Uint8Array>) {
     resto = partes.pop() ?? "";
     for (const linha of partes) if (linha.startsWith("data:")) yield linha.slice(5).trim();
   }
+  resto += decodificador.decode();
+  if (resto.startsWith("data:")) yield resto.slice(5).trim();
 }
 
 export async function* conversar(provedorId: string, sistema: string, mensagens: MensagemIa[], modelo: string | undefined, sinal: AbortSignal, ferramentas: Ferramenta[] = []): AsyncGenerator<Evento> {
@@ -275,7 +277,7 @@ export async function* conversar(provedorId: string, sistema: string, mensagens:
             model: modeloFinal,
             max_tokens: 4096,
             system: sistema,
-            messages: historicoAnthropic(usar ? validas : validas.filter((m) => m.papel !== "ferramenta")),
+            messages: historicoAnthropic(usar ? validas : validas.filter((m) => m.papel !== "ferramenta").map((m) => ({ ...m, chamadas: undefined }))),
             stream: true,
             ...(usar ? { tools: ferramentas.map((f) => ({ name: f.nome, description: f.descricao, input_schema: f.parametros })) } : {}),
           }),

@@ -9,7 +9,8 @@ import { pedirMidia } from "./midia";
 import { pedirJanelas } from "./janelasWindows";
 import { estadoConexoes, lerConexao, salvarChaveConexao, removerChaveConexao, servicoValido, chaveDe, SERVICOS as SERVICOS_CONEXAO } from "./conexoes";
 import { buscarGmail, criarRascunhoGmail, enviarGmail } from "./gmail";
-import { lerAudio, definirVolume, definirMudo, ajustarSessao, lerTema, lerIniciar, definirTema, abrirFerramenta, agirNaEnergia, lerBandeja, abrirDaBandeja } from "./controleRapido";
+import { lerAgendaGoogle } from "./agendaGoogle";
+import { lerAudio, definirVolume, definirMudo, ajustarSessao, lerTema, lerIniciar, definirTema, abrirFerramenta, agirNaEnergia, lerBandeja, abrirDaBandeja, pastaDaBandeja, encerrarDaBandeja } from "./controleRapido";
 import { ocrDaRequisicao } from "./ocr";
 import { receberEventoDoGancho, ehRotaDoGancho, ouvirEventos, decidirPedido, estadoDaInstalacao, previaDaInstalacao, instalarGanchos, removerGanchos, abrirProjeto } from "./claude";
 import { ehRotaDeAgente, receberEventoDeAgente, estadoDosAgentes, instalarAgente, removerAgente } from "./agentesDeCodigo";
@@ -143,6 +144,7 @@ export const rotas: Connect.NextHandleFunction = async (req, res, proximo) => {
       return responder(res, 200, estadoConexoes());
     }
     if (caminho === "/gmail/buscar" && req.method === "GET") return responder(res, 200, await buscarGmail(await chaveDe("gmail"), url.searchParams.get("q") ?? ""));
+    if (caminho === "/agenda/eventos" && req.method === "GET") return responder(res, 200, await lerAgendaGoogle(await chaveDe("agenda"), url.searchParams.get("de") ?? "", url.searchParams.get("ate") ?? ""));
     if (caminho === "/gmail/rascunho" && req.method === "POST") return responder(res, 200, await criarRascunhoGmail(await chaveDe("gmail"), await lerCorpo(req)));
     if (caminho === "/gmail/enviar" && req.method === "POST") return responder(res, 200, await enviarGmail(await chaveDe("gmail"), await lerCorpo(req)));
     const conexao = /^\/conexoes\/([a-z]+)(\/chave)?$/.exec(caminho);
@@ -219,6 +221,8 @@ export const rotas: Connect.NextHandleFunction = async (req, res, proximo) => {
         ferramenta: abrirFerramenta,
         energia: agirNaEnergia,
         bandeja: abrirDaBandeja,
+        bandejaPasta: pastaDaBandeja,
+        bandejaEncerrar: encerrarDaBandeja,
       };
       if (req.method === "GET" && leitura[acao]) return responder(res, 200, await leitura[acao]());
       if (req.method === "POST" && escrita[acao]) return responder(res, 200, await escrita[acao](await lerCorpo(req)));

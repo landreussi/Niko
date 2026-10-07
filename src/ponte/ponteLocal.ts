@@ -120,6 +120,7 @@ export interface EstadoSistema {
   brilho: number | null;
   wifi: { ssid: string | null; sinal: number | null; conectado: boolean; existe: boolean };
   radios: Partial<Record<"WiFi" | "Bluetooth", boolean>>;
+  conexao?: { cabo: boolean; internet: boolean | null };
 }
 
 export interface RedeWifi {
@@ -149,7 +150,7 @@ export const sistema = {
   desconectar: () => pedir("/sistema/desconectar", { method: "POST", body: "{}" }),
   brilho: (nivel: number) => pedir("/sistema/brilho", { method: "POST", body: JSON.stringify({ nivel }) }),
   radio: (tipo: "WiFi" | "Bluetooth", ligado: boolean) => pedir("/sistema/radio", { method: "POST", body: JSON.stringify({ tipo, ligado }) }),
-  configuracoes: (pagina: "bluetooth" | "wifi" | "bateria") => pedir("/sistema/configuracoes", { method: "POST", body: JSON.stringify({ pagina }) }),
+  configuracoes: (pagina: "bluetooth" | "wifi" | "rede" | "bateria") => pedir("/sistema/configuracoes", { method: "POST", body: JSON.stringify({ pagina }) }),
 };
 
 export interface NivelDeAudio {
@@ -206,6 +207,8 @@ export const controle = {
   energia: (tipo: AcaoDeEnergia) => enviar("/controle/energia", { tipo, confirmacao: "CONFIRMADO" }),
   bandeja: () => pedir<{ itens: ItemDaBandeja[] | ItemDaBandeja | null }>("/controle/bandeja").then((r) => comoLista(r.itens)),
   abrirDaBandeja: (caminho: string) => enviar("/controle/bandeja", { caminho }),
+  pastaDaBandeja: (caminho: string) => enviar("/controle/bandejaPasta", { caminho }),
+  encerrarDaBandeja: (caminho: string) => enviar("/controle/bandejaEncerrar", { caminho, confirmacao: "CONFIRMADO" }),
 };
 
 export function lerConsumo(forcar = false) {

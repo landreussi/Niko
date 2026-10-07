@@ -104,7 +104,14 @@ export interface ConfigIlha {
   esconderSeg: number;
   notificacoes: "todas" | "importantes" | "nenhuma";
   laterais: boolean;
+  iconesDaBarra: Record<IconeDaBarra, boolean>;
 }
+
+export type CategoriaDeAviso = "lembretes" | "habitos" | "estudos" | "financas" | "conexoes" | "codigo" | "conquistas" | "consumo";
+export const CATEGORIAS_DE_AVISO: CategoriaDeAviso[] = ["lembretes", "habitos", "estudos", "financas", "conexoes", "codigo", "conquistas", "consumo"];
+
+export type IconeDaBarra = "rede" | "volume" | "bateria";
+export const ICONES_DA_BARRA: IconeDaBarra[] = ["rede", "volume", "bateria"];
 
 export interface Configuracoes {
   nome: string;
@@ -131,6 +138,8 @@ export interface Configuracoes {
   ia: { provedorId: string | null; modelo: string; reservas: string[]; modelos: Record<string, string>; autoAprovar: CartaoConfirmacao["tipo"][] };
   privacidade: boolean;
   naoPerturbe: boolean;
+  avisosDesligados: CategoriaDeAviso[];
+  sugestaoAgendaGoogle: boolean;
   nuncaFinanceiro: boolean;
   pausarConexoes: boolean;
   conquistasAtivas: boolean;
@@ -173,6 +182,7 @@ export const CONFIG_PADRAO: Configuracoes = {
     esconderSeg: 4,
     notificacoes: "importantes",
     laterais: true,
+    iconesDaBarra: { rede: true, volume: true, bateria: true },
   },
   dock: { ativo: true, modo: "inteligente", favoritos: ["chat", "journal", "estudos", "financas", "calendario"], atalhos: [], ampliar: true, fundo: FUNDO_PADRAO_DAS_BORDAS, opacidade: 1, monitores: "todos" },
   pomodoro: { foco: 25, curta: 5, longa: 15, ciclos: 4, autoProxima: false, tique: false },
@@ -192,6 +202,8 @@ export const CONFIG_PADRAO: Configuracoes = {
   ia: { provedorId: null, modelo: "", reservas: [], modelos: {}, autoAprovar: [] },
   privacidade: false,
   naoPerturbe: false,
+  avisosDesligados: [],
+  sugestaoAgendaGoogle: true,
   nuncaFinanceiro: true,
   pausarConexoes: false,
   conquistasAtivas: true,
@@ -289,6 +301,7 @@ export const useConfig = create<Configuracoes & AcoesConfig>()(
           ilha: {
             ...CONFIG_PADRAO.ilha,
             ...salvo.ilha,
+            iconesDaBarra: { ...CONFIG_PADRAO.ilha.iconesDaBarra, ...salvo.ilha?.iconesDaBarra },
             blocos: Object.fromEntries(ABAS_ILHA.map((a) => [a, salvo.ilha?.blocos?.[a] ?? CONFIG_PADRAO.ilha.blocos[a]])) as Record<AbaIlha, boolean>,
             ordemAbas: [
               ...(salvo.ilha?.ordemAbas ?? []).filter((a) => ABAS_ILHA.includes(a)),

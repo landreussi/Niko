@@ -1215,6 +1215,7 @@
 
 .ilha-conexao-textos {
   display: flex;
+  flex: 1 1 auto;
   flex-direction: column;
   gap: 2px;
   min-width: 0;
@@ -1224,8 +1225,20 @@
   display: flex;
   align-items: center;
   gap: 6px;
+  min-width: 0;
   font-size: 12.5px;
   font-weight: 600;
+}
+
+.ilha-conexao-nome-texto {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.ilha-conexao-estado {
+  flex: 0 0 auto;
 }
 
 .ilha-conexao-resumo {
@@ -1409,6 +1422,49 @@
 
 .ilha-calendario-item:hover {
   background: var(--i-aba-ativa);
+}
+
+.ilha-calendario-item-abrir {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 0;
+  color: inherit;
+  font-size: inherit;
+  text-align: left;
+}
+
+.ilha-calendario-check {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 15px;
+  height: 15px;
+  padding: 0;
+  border-radius: 5px;
+  border: 1.5px solid rgba(var(--i-rgb), 0.35);
+  color: var(--i-tinta-ligado, #0b0c0e);
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.ilha-calendario-check:hover {
+  border-color: rgba(var(--i-rgb), 0.6);
+}
+
+.ilha-calendario-check[aria-pressed="true"] {
+  border-color: var(--destaque, #a78bfa);
+  background: var(--destaque, #a78bfa);
+  color: var(--destaque-texto, #0b0c0e);
+}
+
+.ilha-calendario-item[data-feito] .ilha-calendario-item-abrir {
+  opacity: 0.5;
+}
+
+.ilha-calendario-item[data-feito] .cortar {
+  text-decoration: line-through;
 }
 
 .ilha-calendario-item-hora {

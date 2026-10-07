@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { addMonths, format, setDate, getDaysInMonth } from "date-fns";
 import {
   Plus, Trash2, Pencil, Upload, Download, ArrowDownLeft, ArrowUpRight, ArrowLeftRight, Wallet, CreditCard, PiggyBank, Banknote, Landmark, Repeat,
-  Target, Users, ShoppingCart, BarChart3, LayoutDashboard, Sparkles, X, Check, Scale, ListFilter, Tags,
+  Target, Users, ShoppingCart, BarChart3, LayoutDashboard, ScanSearch, X, Check, Scale, ListFilter, Tags,
 } from "lucide-react";
 import { CabecalhoAba } from "../../componentes/CabecalhoAba";
 import { Cartao, Botao, Campo, Modal, Segmentado, Vazio, ConfirmarModal, Progresso, AvisoFaixa, CaixaMarcar, LinhaAlternador } from "../../componentes/basicos";
@@ -904,7 +904,7 @@ function Recorrentes() {
 
   return (
     <div className="coluna" style={{ gap: 20 }}>
-      <Cartao titulo={T.financas.detector} icone={<Sparkles size={16} />}>
+      <Cartao titulo={T.financas.detector} icone={<ScanSearch size={16} />}>
         <p className="campo-dica" style={{ marginBottom: 8 }}>{T.financas.detectorDica}</p>
         {mudaram.map((r) => <AvisoFaixa key={r.id} tipo="alerta">{T.financas.mudouValor(r.descricao)}</AvisoFaixa>)}
         {candidatas.length === 0 ? <p className="texto-3">{T.financas.semCandidatas}</p> : (
@@ -1563,7 +1563,7 @@ function Relatorios({ mes, modo }: { mes: string; modo: Modo }) {
           </table>
         </div>
       </Cartao>
-      <Cartao titulo={T.financas.regras} icone={<Sparkles size={16} />}>
+      <Cartao titulo={T.financas.regras} icone={<ListFilter size={16} />}>
         <form
           className="formulario-linha"
           style={{ alignItems: "end", marginBottom: 12 }}

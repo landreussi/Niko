@@ -1,6 +1,6 @@
 import {
   siStripe, siGithub, siVercel, siResend, siNotion, siCaldotcom, siN8n, siAnthropic, siOllama,
-  siNvidia, siOpencode, siQwen, siGooglegemini, siOpenrouter, siMistralai, siHuggingface, siDeepseek, siLmstudio, siGmail, siSupabase, siCloudflare, siClaudecode, siGithubcopilot, siKimi,
+  siNvidia, siOpencode, siQwen, siGooglegemini, siOpenrouter, siMistralai, siHuggingface, siDeepseek, siLmstudio, siGmail, siGooglecalendar, siSupabase, siCloudflare, siClaudecode, siGithubcopilot, siKimi,
   siSpotify, siGooglechrome, siFirefoxbrowser, siZenbrowser, siYoutube, siYoutubemusic, siDeezer, siApplemusic, siTidal, siSoundcloud,
 } from "simple-icons";
 import type { ServicoId } from "../tipos";
@@ -50,6 +50,7 @@ export const MARCAS: Record<Exclude<MarcaId, MarcaColorida>, IconeMarca> = {
   calcom: siCaldotcom,
   n8n: siN8n,
   gmail: siGmail,
+  agenda: siGooglecalendar,
   supabase: siSupabase,
   cloudflare: siCloudflare,
   anthropic: siAnthropic,

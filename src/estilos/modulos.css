@@ -1770,6 +1770,57 @@
   box-shadow: inset 2px 0 0 var(--cor);
 }
 
+.cal-chip[data-feito="sim"],
+.cal-proximo[data-feito="sim"] {
+  opacity: 0.55;
+}
+
+.cal-chip[data-feito="sim"] .cortar,
+.cal-proximo[data-feito="sim"] .cortar {
+  text-decoration: line-through;
+}
+
+.cal-chip[data-editavel="sim"] {
+  cursor: pointer;
+  touch-action: none;
+  transition: background 0.15s;
+}
+
+.cal-chip[data-editavel="sim"]:hover {
+  background: color-mix(in srgb, var(--cor) 26%, transparent);
+}
+
+.cal-chip-fantasma {
+  position: fixed;
+  z-index: 1000;
+  max-width: 200px;
+  pointer-events: none;
+  background: color-mix(in srgb, var(--cor) 30%, var(--superficie));
+  box-shadow: inset 2px 0 0 var(--cor), var(--sombra-2, 0 6px 18px rgba(0, 0, 0, 0.25));
+}
+
+.cal-layout[data-arrastando="sim"] {
+  user-select: none;
+  cursor: grabbing;
+}
+
+.cal-dia[data-alvo="sim"],
+.cal-semana-dia[data-alvo="sim"] {
+  outline: 2px dashed var(--destaque);
+  outline-offset: -3px;
+}
+
+.cal-dia-diarios {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 10px;
+  color: var(--texto-3);
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--superficie-2);
+}
+
 .cal-chip-hora {
   flex: 0 0 auto;
   font-size: 11px;
@@ -1995,6 +2046,67 @@
 
 .cal-linha-texto .texto-3 {
   font-size: 11px;
+}
+
+.cal-linha-abrir {
+  padding: 0;
+  text-align: left;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.cal-linha-abrir:focus-visible {
+  outline: 2px solid var(--destaque);
+  outline-offset: 2px;
+}
+
+.cal-linha[data-feito="sim"] .cal-linha-texto > .cortar {
+  text-decoration: line-through;
+  color: var(--texto-3);
+}
+
+.cal-linha-check {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  border: 1.5px solid color-mix(in srgb, var(--cor) 70%, var(--borda));
+  color: var(--texto);
+  background: transparent;
+}
+
+.cal-linha-check[aria-pressed="true"] {
+  background: color-mix(in srgb, var(--cor) 35%, transparent);
+}
+
+.cal-linha-check:disabled {
+  opacity: 0.4;
+}
+
+.cal-integracao {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--borda);
+  border-radius: 14px;
+  background: var(--superficie);
+  font-size: 13px;
+}
+
+.cal-integracao .texto-3 {
+  font-size: 12px;
+}
+
+.cal-proximos-diarios {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px;
+  font-size: 12px;
+  color: var(--texto-2);
 }
 
 .cal-proximos {
@@ -4126,6 +4238,63 @@
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   color: var(--texto-2);
+}
+
+.novidades-lista {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  margin-top: 12px;
+}
+
+.novidades-versao + .novidades-versao {
+  padding-top: 16px;
+  border-top: 1px solid var(--borda);
+}
+
+.novidades-cabecalho {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.novidades-versao ul {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.novidades-versao li {
+  display: grid;
+  grid-template-columns: 82px minmax(0, 1fr);
+  gap: 10px;
+  align-items: baseline;
+  font-size: 13px;
+  color: var(--texto-2);
+}
+
+.novidades-tipo {
+  justify-self: start;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--texto-2);
+  background: var(--superficie-2);
+}
+
+.novidades-versao li[data-tipo="novo"] .novidades-tipo {
+  color: var(--destaque);
+  background: var(--destaque-suave);
+}
+
+.novidades-versao li[data-tipo="correcao"] .novidades-tipo {
+  color: #d97706;
+  background: color-mix(in srgb, #f59e0b 14%, transparent);
 }
 
 .atualizacao-girando {

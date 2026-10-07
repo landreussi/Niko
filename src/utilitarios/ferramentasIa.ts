@@ -3,6 +3,7 @@ import { conexoesPonte } from "../ponte/conexoesReais";
 import type { FerramentaIa } from "../ponte/ponteLocal";
 import { useRotina, tarefasDoDia, habitoCumprido } from "../estado/rotina";
 import { useOrganizacao } from "../estado/organizacao";
+import { ocorrencias } from "./itensDoCalendario";
 import { useEstudos, revisoesParaHoje } from "../estado/estudos";
 import { useFinancas, gastosDoMes, receitasDoMes, gastoPorCategoria, parteDoUsuario, saldoDaConta } from "../estado/financas";
 import { useComunicacao } from "../estado/comunicacao";
@@ -37,6 +38,11 @@ interface FerramentaNiko {
 
 const DATA = { type: "string", description: "Data no formato AAAA-MM-DD" };
 const HORA = { type: "string", description: "Hora no formato HH:MM, 24 horas" };
+const REPETICAO = { type: "string", enum: ["nenhuma", "diaria", "semanal", "mensal"], description: "diaria para todo dia, semanal para toda semana, mensal para todo mês. Padrão: nenhuma" };
+
+function repeticaoValida(valor: unknown): { repeticao?: string } {
+  return valor === "diaria" || valor === "semanal" || valor === "mensal" ? { repeticao: valor } : {};
+}
 const TELAS: Rota[] = ["inicio", "chat", "escritorio", "conexoes", "journal", "estudos", "financas", "metas", "calendario", "atualizacao", "ia", "consumo", "conquistas", "configuracoes"];
 
 function texto(valor: unknown, limite = 200): string {
@@ -94,7 +100,7 @@ const AREAS_BANCO: Record<string, AreaBanco> = {
     data: "data",
     ler: () => Object.entries(useRotina.getState().dias).map(([data, d]) => ({ data, humor: d.humor ?? null, sono_horas: d.sono ?? null, agua_ml: d.agua ?? null, diario: semHtml(d.diario ?? ""), manha: semHtml(d.manha ?? "", 400), tarde: semHtml(d.tarde ?? "", 400), noite: semHtml(d.noite ?? "", 400) })),
   },
-  eventos: { data: "data", ler: () => useOrganizacao.getState().eventos.map((e) => ({ titulo: e.titulo, data: e.data, hora: e.hora ?? null, tipo: e.tipo, repete: e.repeticao })) },
+  eventos: { data: "data", ler: () => useOrganizacao.getState().eventos.map((e) => ({ titulo: e.titulo, data: e.data, hora: e.hora ?? null, tipo: e.tipo, repete: e.repeticao, feito_em: e.feitos ?? [] })) },
   metas: { data: "prazo", ler: () => { const o = useOrganizacao.getState(); return o.metas.map((m) => ({ nome: m.nome, pilar: nomeDe(o.pilares, m.pilarId), tipo: m.tipo, atual: m.atual, alvo: m.alvo, prazo: m.prazo ?? null, periodo: m.periodo })); } },
   pilares: { ler: () => useOrganizacao.getState().pilares.map((p) => ({ nome: p.nome, nota: p.nota })) },
   visao: { data: "prazo", ler: () => useOrganizacao.getState().visao.map((v) => ({ titulo: v.titulo, descricao: v.descricao, estado: v.estado, prazo: v.prazo ?? null })) },
@@ -161,7 +167,7 @@ async function lerArquivoDaMateria(a: Argumentos): Promise<ResultadoFerramenta> 
   return { tipo: "erro", mensagem: T.chat.recursos.arquivoNaoEncontrado };
 }
 
-const SERVICOS_IA: ServicoId[] = ["stripe", "github", "vercel", "gmail", "supabase", "cloudflare", "resend", "notion", "calcom", "n8n"];
+const SERVICOS_IA: ServicoId[] = ["stripe", "github", "vercel", "gmail", "agenda", "supabase", "cloudflare", "resend", "notion", "calcom", "n8n"];
 
 function cartaoEmail(tipo: "rascunho" | "email", a: Argumentos): ResultadoFerramenta {
   if (!useComunicacao.getState().conexoes.find((x) => x.id === "gmail")?.chaveSalva) return { tipo: "erro", mensagem: ERROS.gmailDesconectado };
@@ -275,7 +281,7 @@ const FERRAMENTAS: FerramentaNiko[] = [
       return {
         tipo: "dados",
         conteudo: {
-          eventos: eventos.slice(0, 40).map((e) => ({ titulo: e.titulo, data: e.data, hora: e.hora ?? null, tipo: e.tipo, repete: e.repeticao })),
+          eventos: eventos.slice(0, 40).map((e) => ({ titulo: e.titulo, data: e.data, hora: e.hora ?? null, tipo: e.tipo, repete: e.repeticao, feito_em: e.feitos ?? [] })),
           tarefas: tarefas.slice(0, 40).map((t) => ({ id: t.id, titulo: t.titulo, data: t.data, hora: t.hora ?? null, status: t.status })),
         },
       };
@@ -395,7 +401,7 @@ const FERRAMENTAS: FerramentaNiko[] = [
   {
     definicao: {
       nome: "ler_conexao",
-      descricao: "Dados reais e detalhados de uma conexão ligada: Stripe (cobranças, saldo), GitHub (PRs, issues, Actions), Vercel (deploys), Gmail (não lidos, importantes), Supabase (projetos, usuários, storage, logs), Cloudflare (domínios, DNS, Pages, Workers, métricas), Resend, Notion, Cal.com e n8n.",
+      descricao: "Dados reais e detalhados de uma conexão ligada: Stripe (cobranças, saldo), GitHub (PRs, issues, Actions), Vercel (deploys), Gmail (não lidos, importantes), Google Agenda (eventos de hoje e dos próximos 7 dias), Supabase (projetos, usuários, storage, logs), Cloudflare (domínios, DNS, Pages, Workers, métricas), Resend, Notion, Cal.com e n8n.",
       parametros: { type: "object", properties: { servico: { type: "string", enum: SERVICOS_IA } }, required: ["servico"] },
     },
     assincrona: async (a) => {
@@ -503,27 +509,54 @@ const FERRAMENTAS: FerramentaNiko[] = [
   {
     definicao: {
       nome: "criar_lembrete",
-      descricao: "Prepara um lembrete com data e hora. O usuário confirma.",
-      parametros: { type: "object", properties: { titulo: { type: "string" }, data: DATA, hora: HORA }, required: ["titulo", "data"] },
+      descricao: "Prepara um lembrete com data e hora, que pode se repetir. O usuário confirma.",
+      parametros: { type: "object", properties: { titulo: { type: "string" }, data: DATA, hora: HORA, repeticao: REPETICAO }, required: ["titulo", "data"] },
     },
     executar: (a) => {
       const titulo = texto(a.titulo);
       const data = dataValida(a.data);
       if (!titulo || !data) return { tipo: "erro", mensagem: ERROS.semTituloOuData };
-      return { tipo: "confirmar", agente: "organizador", cartao: { tipo: "lembrete", situacao: "pendente", dados: { titulo, data, hora: horaValida(a.hora) ?? "" } } };
+      return { tipo: "confirmar", agente: "organizador", cartao: { tipo: "lembrete", situacao: "pendente", dados: { titulo, data, hora: horaValida(a.hora) ?? "", ...repeticaoValida(a.repeticao) } } };
     },
   },
   {
     definicao: {
       nome: "criar_evento",
-      descricao: "Prepara um evento no calendário. O usuário confirma.",
-      parametros: { type: "object", properties: { titulo: { type: "string" }, data: DATA, hora: HORA }, required: ["titulo", "data"] },
+      descricao: "Prepara um evento no calendário, que pode se repetir (ex.: bater o ponto todo dia às 12:00 vira repeticao diaria, data de hoje, hora 12:00). O usuário confirma.",
+      parametros: { type: "object", properties: { titulo: { type: "string" }, data: DATA, hora: HORA, repeticao: REPETICAO }, required: ["titulo", "data"] },
     },
     executar: (a) => {
       const titulo = texto(a.titulo);
       const data = dataValida(a.data);
       if (!titulo || !data) return { tipo: "erro", mensagem: ERROS.semTituloOuData };
-      return { tipo: "confirmar", agente: "organizador", cartao: { tipo: "evento", situacao: "pendente", dados: { titulo, data, hora: horaValida(a.hora) ?? "" } } };
+      return { tipo: "confirmar", agente: "organizador", cartao: { tipo: "evento", situacao: "pendente", dados: { titulo, data, hora: horaValida(a.hora) ?? "", ...repeticaoValida(a.repeticao) } } };
+    },
+  },
+  {
+    definicao: {
+      nome: "concluir_evento",
+      descricao: "Prepara marcar um evento do calendário como feito num dia (ex.: a reunião de hoje já aconteceu). Use o título do evento, como aparece em ler_agenda. Data padrão: hoje. O usuário confirma.",
+      parametros: { type: "object", properties: { titulo: { type: "string" }, data: DATA }, required: ["titulo"] },
+    },
+    executar: (a) => {
+      const data = dataValida(a.data) ?? hojeISO();
+      const doDia = useOrganizacao.getState().eventos.filter((e) => ocorrencias(e, data, data).length > 0);
+      const evento = acharPorNome(doDia.map((e) => ({ ...e, nome: e.titulo })), texto(a.titulo, 120));
+      if (!evento) return { tipo: "erro", mensagem: ERROS.eventoNaoEncontrado };
+      return { tipo: "confirmar", agente: "organizador", cartao: { tipo: "eventoFeito", situacao: "pendente", dados: { id: evento.id, titulo: evento.titulo, data } } };
+    },
+  },
+  {
+    definicao: {
+      nome: "criar_habito",
+      descricao: "Prepara um hábito novo para marcar como feito todo dia no Journal. Use quando a pessoa quer acompanhar algo diário com check (ex.: beber água, bater o ponto). Hora opcional: avisa nesse horário se ainda não foi feito. Meta acima de 1 vira hábito de quantidade. O usuário confirma.",
+      parametros: { type: "object", properties: { nome: { type: "string" }, hora: HORA, meta: { type: "integer", minimum: 1, maximum: 1000 }, unidade: { type: "string" } }, required: ["nome"] },
+    },
+    executar: (a) => {
+      const nome = texto(a.nome, 60);
+      if (!nome) return { tipo: "erro", mensagem: ERROS.semTitulo };
+      const meta = Math.min(1000, Math.max(1, Math.round(Number(a.meta) || 1)));
+      return { tipo: "confirmar", agente: "organizador", cartao: { tipo: "novoHabito", situacao: "pendente", dados: { nome, hora: horaValida(a.hora) ?? "", meta, unidade: texto(a.unidade, 20) } } };
     },
   },
   {

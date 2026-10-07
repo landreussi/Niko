@@ -95,7 +95,7 @@ async function enviarPendentes(manterViva = false) {
     const r = await fetch("/ponte/dados", { method: "POST", headers: CABECALHOS, body: JSON.stringify({ itens }), keepalive: manterViva && JSON.stringify(itens).length < 60000 });
     if (!r.ok) throw new Error(`http_${r.status}`);
   } catch {
-    for (const [k, v] of Object.entries(itens)) if (!pendentes.has(k)) pendentes.set(k, v);
+    for (const [k, v] of Object.entries(itens)) if (!pendentes.has(k) && (cache.get(k) ?? null) === v) pendentes.set(k, v);
     window.dispatchEvent(new CustomEvent("niko:armazenamento-falhou"));
     agendar(4000);
   }

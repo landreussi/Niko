@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { addDays, addMonths, eachDayOfInterval, endOfMonth, endOfWeek, format, getDaysInMonth, isSameMonth, startOfMonth, startOfWeek } from "date-fns";
-import { ChevronLeft, ChevronRight, Plus, Undo2, Redo2, Printer, Laugh, Smile, Meh, Frown, Moon, Repeat, ListTodo, PenLine, CalendarRange, Archive, Check, Minus } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, Undo2, Redo2, Printer, Laugh, Smile, Meh, Frown, Moon, Repeat, ListTodo, PenLine, CalendarRange, Archive, Check, Minus, Pencil } from "lucide-react";
 import { CabecalhoAba } from "../../componentes/CabecalhoAba";
 import { Cartao, Botao, Campo, Modal, Segmentado, Vazio } from "../../componentes/basicos";
 import { ItemTarefa } from "../../componentes/ItemTarefa";
@@ -11,11 +11,11 @@ import { usePomodoro } from "../../estado/pomodoro";
 import { useInterface } from "../../estado/interface";
 import { useConfig } from "../../estado/configuracoes";
 import { T } from "../../textos/textos";
-import { deISO, formatar, formatarData, hojeISO, paraISO, dataValida, diaDoMomento } from "../../utilitarios/datas";
+import { deISO, formatar, formatarData, hojeISO, paraISO, dataValida, diaDoMomento, horaValida } from "../../utilitarios/datas";
 import { interpretarQuando } from "../../utilitarios/linguagem";
 import { sequenciaHabito } from "../../utilitarios/estatisticas";
 import { EVENTO_NOVO } from "../../janelas/area-de-trabalho/usarAtalhos";
-import type { Humor, TipoHabito } from "../../tipos";
+import type { Habito, Humor, TipoHabito } from "../../tipos";
 import { somar } from "../../utilitarios/basicos";
 import { CopoAgua } from "./CopoAgua";
 import { imprimirMes } from "./impressao";
@@ -76,6 +76,7 @@ function GradeHabitos({ data }: { data: string }) {
   const registrar = useRotina((s) => s.registrarHabito);
   const atualizar = useRotina((s) => s.atualizarHabito);
   const [criando, setCriando] = useState(false);
+  const [editando, setEditando] = useState<Habito | null>(null);
   const mes = startOfMonth(deISO(data));
   const dias = Array.from({ length: getDaysInMonth(mes) }, (_, i) => paraISO(addDays(mes, i)));
   const hoje = hojeISO();
@@ -109,7 +110,7 @@ function GradeHabitos({ data }: { data: string }) {
                   <tr key={h.id}>
                     <th className="grade-habitos-nome">
                       <div className="coluna" style={{ gap: 0 }}>
-                        <span className="cortar">{h.nome}</span>
+                        <span className="cortar">{h.hora ? `${h.hora} ${h.nome}` : h.nome}</span>
                         <span className="texto-3" style={{ fontSize: 10, fontWeight: 400 }}>
                           {T.journal.sequencia(sequenciaHabito(h, registros))} . {T.journal.doMes(passados ? Math.round((cumpridos / passados) * 100) : 0)}
                         </span>
@@ -140,7 +141,10 @@ function GradeHabitos({ data }: { data: string }) {
                       );
                     })}
                     <td>
-                      <Botao pequeno soIcone variante="fantasma" icone={<Archive size={13} />} aria-label={T.journal.arquivar} title={T.journal.arquivar} onClick={() => atualizar(h.id, { arquivado: true })} />
+                      <div className="linha" style={{ gap: 0, flexWrap: "nowrap" }}>
+                        <Botao pequeno soIcone variante="fantasma" icone={<Pencil size={13} />} aria-label={T.journal.editarHabito} title={T.journal.editarHabito} onClick={() => setEditando(h)} />
+                        <Botao pequeno soIcone variante="fantasma" icone={<Archive size={13} />} aria-label={T.journal.arquivar} title={T.journal.arquivar} onClick={() => atualizar(h.id, { arquivado: true })} />
+                      </div>
                     </td>
                   </tr>
                 );
@@ -149,49 +153,58 @@ function GradeHabitos({ data }: { data: string }) {
           </table>
         </div>
       )}
-      <NovoHabito aberto={criando} aoFechar={() => setCriando(false)} />
+      <NovoHabito aberto={criando || Boolean(editando)} habito={editando} aoFechar={() => { setCriando(false); setEditando(null); }} />
     </Cartao>
   );
 }
 
-function NovoHabito({ aberto, aoFechar }: { aberto: boolean; aoFechar: () => void }) {
+function NovoHabito({ aberto, habito, aoFechar }: { aberto: boolean; habito?: Habito | null; aoFechar: () => void }) {
   const criar = useRotina((s) => s.criarHabito);
+  const atualizar = useRotina((s) => s.atualizarHabito);
   const habitos = useRotina((s) => s.habitos);
   const [nome, setNome] = useState("");
   const [tipo, setTipo] = useState<TipoHabito>("sim_nao");
   const [meta, setMeta] = useState("8");
   const [unidade, setUnidade] = useState("");
+  const [hora, setHora] = useState("");
   const [erros, setErros] = useState<Record<string, string>>({});
 
   useEffect(() => {
     if (aberto) {
-      setNome("");
-      setTipo("sim_nao");
-      setMeta("8");
-      setUnidade("");
+      setNome(habito?.nome ?? "");
+      setTipo(habito?.tipo ?? "sim_nao");
+      setMeta(habito && habito.tipo === "quantidade" ? String(habito.meta) : "8");
+      setUnidade(habito?.unidade ?? "");
+      setHora(habito?.hora ?? "");
       setErros({});
     }
-  }, [aberto]);
+  }, [aberto, habito]);
 
   const salvar = (e: React.FormEvent) => {
     e.preventDefault();
     const novos: Record<string, string> = {};
     const limpo = nome.trim();
     if (!limpo) novos.nome = T.validacao.obrigatorio;
-    else if (habitos.some((h) => !h.arquivado && h.nome.toLowerCase() === limpo.toLowerCase())) novos.nome = T.validacao.duplicado;
+    else if (habitos.some((h) => !h.arquivado && h.id !== habito?.id && h.nome.toLowerCase() === limpo.toLowerCase())) novos.nome = T.validacao.duplicado;
     const n = Number(meta);
     if (tipo === "quantidade" && (!Number.isInteger(n) || n < 1 || n > 1000)) novos.meta = T.validacao.entre(1, 1000);
+    if (hora && !horaValida(hora)) novos.hora = T.validacao.horaInvalida;
     setErros(novos);
     if (Object.keys(novos).length) return;
-    criar({ nome: limpo, tipo, meta: tipo === "quantidade" ? n : 1, unidade: unidade.trim().slice(0, 20) });
+    const dados = { nome: limpo.slice(0, 60), tipo, meta: tipo === "quantidade" ? n : 1, unidade: unidade.trim().slice(0, 20), hora: hora || undefined };
+    if (habito) atualizar(habito.id, dados);
+    else criar(dados);
     aoFechar();
   };
 
   return (
-    <Modal aberto={aberto} titulo={T.journal.novoHabito} aoFechar={aoFechar}>
+    <Modal aberto={aberto} titulo={habito ? T.journal.editarHabito : T.journal.novoHabito} aoFechar={aoFechar}>
       <form className="formulario" onSubmit={salvar} noValidate>
         <Campo id="h-nome" rotulo={T.journal.nomeHabito} obrigatorio erro={erros.nome}>
           <input id="h-nome" className="campo" value={nome} maxLength={60} aria-invalid={!!erros.nome} onChange={(e) => setNome(e.target.value)} />
+        </Campo>
+        <Campo id="h-hora" rotulo={T.journal.horaHabito} dica={T.journal.horaHabitoDica} erro={erros.hora}>
+          <input id="h-hora" type="time" className="campo" value={hora} aria-invalid={!!erros.hora} onChange={(e) => setHora(e.target.value)} />
         </Campo>
         <div className="campo-grupo">
           <span className="campo-rotulo">{T.journal.tipoHabito}</span>
@@ -209,7 +222,7 @@ function NovoHabito({ aberto, aoFechar }: { aberto: boolean; aoFechar: () => voi
         )}
         <div className="formulario-acoes">
           <Botao onClick={aoFechar}>{T.geral.cancelar}</Botao>
-          <Botao type="submit" variante="primario">{T.geral.criar}</Botao>
+          <Botao type="submit" variante="primario">{habito ? T.geral.salvar : T.geral.criar}</Botao>
         </div>
       </form>
     </Modal>

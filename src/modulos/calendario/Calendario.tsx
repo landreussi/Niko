@@ -1,8 +1,12 @@
-import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as EventoDePonteiro } from "react";
 import { addDays, addMonths, addWeeks, eachDayOfInterval, endOfMonth, endOfWeek, isSameMonth, startOfMonth, startOfWeek } from "date-fns";
-import { ChevronLeft, ChevronRight, Plus, Download, Upload, BellRing, CalendarDays, Trash2, Repeat, CornerDownLeft } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, Download, Upload, BellRing, CalendarDays, Trash2, Repeat, CornerDownLeft, Check, X, RefreshCw } from "lucide-react";
 import { CabecalhoAba } from "../../componentes/CabecalhoAba";
-import { Cartao, Botao, Campo, Modal, Segmentado, Vazio } from "../../componentes/basicos";
+import { AvisoFaixa, Cartao, Botao, Campo, Modal, Segmentado, Vazio } from "../../componentes/basicos";
+import { abrirLink } from "../../desktop/desktop";
+import { usarAgendaGoogle } from "./usarAgendaGoogle";
+import { useComunicacao } from "../../estado/comunicacao";
+import { Marca } from "../../marcas/Marca";
 import { useOrganizacao } from "../../estado/organizacao";
 import { useRotina } from "../../estado/rotina";
 import { useEstudos } from "../../estado/estudos";
@@ -12,50 +16,46 @@ import { T } from "../../textos/textos";
 import { dataValida, deISO, formatar, formatarData, hojeISO, horaValida, paraISO } from "../../utilitarios/datas";
 import { baixarArquivo, lerArquivoTexto } from "../../utilitarios/basicos";
 import { EVENTO_NOVO } from "../../janelas/area-de-trabalho/usarAtalhos";
-import type { Repeticao } from "../../tipos";
-import { itensDoCalendario, type FonteDoCalendario, type ItemDoCalendario } from "../../utilitarios/itensDoCalendario";
+import type { Evento, Repeticao, Rota } from "../../tipos";
+import { marcarItemFeito } from "../../utilitarios/marcarFeito";
+import { editarEvento, excluirOcorrencia, itemFeito, itensDoCalendario, lerEventoRapido, podeMarcarFeito, repeteTodoDia, type DadosDoEvento, type EscopoDaEdicao, type FonteDoCalendario, type ItemDoCalendario } from "../../utilitarios/itensDoCalendario";
 import { useConfig } from "../../estado/configuracoes";
 import { funcaoLigada, type Funcao } from "../../utilitarios/funcoes";
 
 type Fonte = FonteDoCalendario;
 type Vista = "mes" | "semana" | "agenda";
 type Item = ItemDoCalendario;
+type Edicao = { evento: Evento; ocorrencia: string };
+type PedidoDeEscopo = { texto: string; aoEscolher: (escopo: EscopoDaEdicao) => void };
 
 const COR_FONTE: Record<Fonte, string> = {
   eventos: "#3b6fe0",
   tarefas: "#2f9e6b",
+  habitos: "#14a3a3",
   estudos: "#a855f7",
   financas: "#d9922b",
   metas: "#e05a8a",
+  google: "#4285f4",
 };
 
 const FONTES = Object.keys(T.calendario.fontes) as Fonte[];
-const FUNCAO_DA_FONTE: Record<Fonte, Funcao> = { eventos: "calendario", tarefas: "journal", estudos: "estudos", financas: "financas", metas: "metas" };
+const FUNCAO_DA_FONTE: Record<Fonte, Funcao> = { eventos: "calendario", tarefas: "journal", habitos: "journal", estudos: "estudos", financas: "financas", metas: "metas", google: "calendario" };
+const ROTA_DA_FONTE: Record<Exclude<Fonte, "eventos" | "google">, Rota> = { tarefas: "journal", habitos: "journal", estudos: "estudos", financas: "financas", metas: "metas" };
+const DISTANCIA_PARA_ARRASTAR = 6;
 
 function escaparIcs(t: string) {
   return t.replace(/\\/g, "\\\\").replace(/;/g, "\\;").replace(/,/g, "\\,").replace(/\n/g, "\\n");
-}
-
-function repeteTodoDia(i: Item) {
-  return i.evento?.repeticao === "diaria";
 }
 
 function corDa(fonte: Fonte): CSSProperties {
   return { "--cor": COR_FONTE[fonte] } as CSSProperties;
 }
 
-function lerRapido(texto: string): { titulo: string; hora?: string } {
-  const t = texto.trim();
-  const m = /^(\d{1,2})(?:[:h](\d{2}))?\s+(.+)$/i.exec(t);
-  if (m) {
-    const hora = `${m[1].padStart(2, "0")}:${m[2] ?? "00"}`;
-    if (horaValida(hora)) return { titulo: m[3].trim(), hora };
-  }
-  return { titulo: t };
+function mudouAlgo(e: Evento, ocorrencia: string, novos: DadosDoEvento) {
+  return e.titulo !== novos.titulo || ocorrencia !== novos.data || (e.hora ?? "") !== (novos.hora ?? "") || e.tipo !== novos.tipo || e.repeticao !== novos.repeticao;
 }
 
-function FormEvento({ aberto, dataInicial, aoFechar }: { aberto: boolean; dataInicial: string; aoFechar: () => void }) {
-  const criar = useOrganizacao((s) => s.criarEvento);
+function FormEvento({ aberto, dataInicial, edicao, aoSalvar, aoFechar }: { aberto: boolean; dataInicial: string; edicao: Edicao | null; aoSalvar: (dados: DadosDoEvento) => void; aoFechar: () => void }) {
   const [titulo, setTitulo] = useState("");
   const [data, setData] = useState(dataInicial);
   const [hora, setHora] = useState("");
@@ -65,16 +65,16 @@ function FormEvento({ aberto, dataInicial, aoFechar }: { aberto: boolean; dataIn
 
   useEffect(() => {
     if (!aberto) return;
-    setTitulo("");
-    setData(dataInicial);
-    setHora("");
-    setTipo("evento");
-    setRepeticao("nenhuma");
+    setTitulo(edicao?.evento.titulo ?? "");
+    setData(edicao?.ocorrencia ?? dataInicial);
+    setHora(edicao?.evento.hora ?? "");
+    setTipo(edicao?.evento.tipo ?? "evento");
+    setRepeticao(edicao?.evento.repeticao ?? "nenhuma");
     setErros({});
-  }, [aberto, dataInicial]);
+  }, [aberto, dataInicial, edicao]);
 
   return (
-    <Modal aberto={aberto} titulo={T.calendario.novoEvento} aoFechar={aoFechar}>
+    <Modal aberto={aberto} titulo={edicao ? T.calendario.editarEvento : T.calendario.novoEvento} aoFechar={aoFechar}>
       <form
         className="formulario"
         noValidate
@@ -87,9 +87,8 @@ function FormEvento({ aberto, dataInicial, aoFechar }: { aberto: boolean; dataIn
           if (tipo === "lembrete" && !hora) novos.hora = T.calendario.lembreteHora;
           setErros(novos);
           if (Object.keys(novos).length) return;
-          criar({ titulo, data, hora: hora || undefined, tipo, repeticao });
+          aoSalvar({ titulo: titulo.trim().slice(0, 120), data, hora: hora || undefined, tipo, repeticao });
           if (tipo === "lembrete" && typeof Notification !== "undefined" && Notification.permission === "default") void Notification.requestPermission();
-          aoFechar();
         }}
       >
         <Segmentado rotulo={T.calendario.tipo} valor={tipo} aoMudar={setTipo} opcoes={[{ valor: "evento", rotulo: T.calendario.evento, icone: <CalendarDays size={13} /> }, { valor: "lembrete", rotulo: T.calendario.lembrete, icone: <BellRing size={13} /> }]} />
@@ -112,36 +111,74 @@ function FormEvento({ aberto, dataInicial, aoFechar }: { aberto: boolean; dataIn
         {tipo === "lembrete" && <p className="campo-dica">{T.calendario.lembreteDica}</p>}
         <div className="formulario-acoes">
           <Botao onClick={aoFechar}>{T.geral.cancelar}</Botao>
-          <Botao type="submit" variante="primario">{T.geral.criar}</Botao>
+          <Botao type="submit" variante="primario">{edicao ? T.geral.salvar : T.geral.criar}</Botao>
         </div>
       </form>
     </Modal>
   );
 }
 
-function Chip({ i }: { i: Item }) {
+function EscolhaDeEscopo({ pedido, aoFechar }: { pedido: PedidoDeEscopo | null; aoFechar: () => void }) {
+  const escolher = (escopo: EscopoDaEdicao) => {
+    pedido?.aoEscolher(escopo);
+    aoFechar();
+  };
   return (
-    <span className="cal-chip" style={corDa(i.fonte)} title={i.hora ? `${i.hora} ${i.titulo}` : i.titulo}>
+    <Modal aberto={Boolean(pedido)} titulo={T.calendario.escopoTitulo} aoFechar={aoFechar}>
+      <p className="texto-2">{pedido?.texto}</p>
+      <div className="formulario-acoes">
+        <Botao onClick={aoFechar}>{T.geral.cancelar}</Botao>
+        <Botao onClick={() => escolher("todos")}>{T.calendario.emTodos}</Botao>
+        <Botao variante="primario" onClick={() => escolher("este")}>{T.calendario.soNesteDia}</Botao>
+      </div>
+    </Modal>
+  );
+}
+
+function Chip({ i, feito, aoAbrir, aoIniciarArraste }: { i: Item; feito?: boolean; aoAbrir?: () => void; aoIniciarArraste?: (e: EventoDePonteiro<HTMLSpanElement>) => void }) {
+  return (
+    <span
+      className="cal-chip"
+      data-feito={feito ? "sim" : undefined}
+      style={corDa(i.fonte)}
+      title={i.hora ? `${i.hora} ${i.titulo}` : i.titulo}
+      data-editavel={aoAbrir ? "sim" : undefined}
+      onPointerDown={aoIniciarArraste}
+      onClick={aoAbrir ? (e) => { e.stopPropagation(); aoAbrir(); } : undefined}
+    >
       {i.hora && <span className="cal-chip-hora numero">{i.hora}</span>}
       <span className="cortar privado">{i.titulo}</span>
     </span>
   );
 }
 
-function LinhaDoDia({ i, aoExcluir, aoAbrirJournal }: { i: Item; aoExcluir?: () => void; aoAbrirJournal?: () => void }) {
+function LinhaDoDia({ i, aoAbrir, rotuloAbrir, aoExcluir, feito, aoMarcar }: { i: Item; aoAbrir?: () => void; rotuloAbrir?: string; aoExcluir?: () => void; feito?: boolean; aoMarcar?: () => void }) {
+  const texto = (
+    <>
+      <span className="cortar privado">{i.titulo}</span>
+      <span className="texto-3">{[T.calendario.fontes[i.fonte], i.evento && i.evento.repeticao !== "nenhuma" ? T.calendario.repeticoes[i.evento.repeticao] : ""].filter(Boolean).join(" . ")}</span>
+    </>
+  );
   return (
-    <div className="cal-linha" style={corDa(i.fonte)}>
+    <div className="cal-linha" style={corDa(i.fonte)} data-feito={feito ? "sim" : undefined}>
       <span className="cal-linha-hora numero">{i.hora ?? ""}</span>
       <span className="cal-linha-barra" />
-      <div className="cal-linha-texto">
-        <span className="cortar privado">{i.titulo}</span>
-        <span className="texto-3">{[T.calendario.fontes[i.fonte], i.evento && i.evento.repeticao !== "nenhuma" ? T.calendario.repeticoes[i.evento.repeticao] : ""].filter(Boolean).join(" . ")}</span>
-      </div>
-      {aoAbrirJournal && <Botao pequeno variante="fantasma" onClick={aoAbrirJournal}>{T.rotas.journal}</Botao>}
+      {aoAbrir ? (
+        <button type="button" className="cal-linha-texto cal-linha-abrir" title={rotuloAbrir} aria-label={rotuloAbrir ? `${rotuloAbrir}: ${i.titulo}` : undefined} onClick={aoAbrir}>{texto}</button>
+      ) : (
+        <div className="cal-linha-texto">{texto}</div>
+      )}
+      {aoMarcar && (
+        <button type="button" className="cal-linha-check" aria-pressed={Boolean(feito)} aria-label={feito ? T.calendario.desmarcarFeito(i.titulo) : T.calendario.marcarFeito(i.titulo)} title={feito ? T.calendario.desmarcarFeito(i.titulo) : T.calendario.marcarFeito(i.titulo)} onClick={aoMarcar}>
+          {feito && <Check size={13} />}
+        </button>
+      )}
       {aoExcluir && <Botao pequeno soIcone variante="fantasma" icone={<Trash2 size={13} />} aria-label={T.geral.excluir} onClick={aoExcluir} />}
     </div>
   );
 }
+
+type Arraste = { item: Item; inicioX: number; inicioY: number; x: number; y: number; ativo: boolean; alvo: string | null };
 
 export default function Calendario() {
   const parametros = useInterface((s) => s.parametros);
@@ -150,18 +187,26 @@ export default function Calendario() {
   const eventos = useOrganizacao((s) => s.eventos);
   const metas = useOrganizacao((s) => s.metas);
   const criarEvento = useOrganizacao((s) => s.criarEvento);
+  const atualizarEvento = useOrganizacao((s) => s.atualizarEvento);
   const excluirEvento = useOrganizacao((s) => s.excluirEvento);
   const restaurarEvento = useOrganizacao((s) => s.restaurarEvento);
   const tarefas = useRotina((s) => s.tarefas);
+  const habitos = useRotina((s) => s.habitos);
+  const registros = useRotina((s) => s.registros);
   const datas = useEstudos((s) => s.datas);
   const revisoes = useEstudos((s) => s.revisoesConteudo);
   const recorrentes = useFinancas((s) => s.recorrentes);
   const [vista, setVista] = useState<Vista>("mes");
   const [foco, setFoco] = useState(parametros.data && dataValida(parametros.data) ? parametros.data : hojeISO());
-  const [fontes, setFontes] = useState<Record<Fonte, boolean>>({ eventos: true, tarefas: true, estudos: true, financas: true, metas: true });
+  const [fontes, setFontes] = useState<Record<Fonte, boolean>>({ eventos: true, tarefas: true, habitos: true, estudos: true, financas: true, metas: true, google: true });
   const [novo, setNovo] = useState(false);
+  const [edicao, setEdicao] = useState<Edicao | null>(null);
+  const [escopo, setEscopo] = useState<PedidoDeEscopo | null>(null);
   const [diaSelecionado, setDiaSelecionado] = useState(foco);
   const [rapido, setRapido] = useState("");
+  const [arraste, setArraste] = useState<Arraste | null>(null);
+  const acabouDeArrastar = useRef(false);
+  const arrasteAtual = useRef<Arraste | null>(null);
 
   useEffect(() => {
     if (parametros.data && dataValida(parametros.data)) {
@@ -189,17 +234,30 @@ export default function Calendario() {
   const fimISO = paraISO(intervalo.fim);
 
   const desligadas = useConfig((s) => s.funcoesDesligadas);
-  const gerar = useMemo(() => (de: string, ate: string) => itensDoCalendario({ eventos, tarefas, datas, revisoes, metas, recorrentes }, de, ate).filter((i) => fontes[i.fonte]), [eventos, tarefas, datas, revisoes, metas, recorrentes, fontes, desligadas]);
+  const fimProximos = paraISO(addDays(deISO(hoje), 6));
+  const sugestaoGoogle = useConfig((s) => s.sugestaoAgendaGoogle);
+  const definirConfig = useConfig((s) => s.definir);
+  const agendaConectada = useComunicacao((s) => Boolean(s.conexoes.find((c) => c.id === "agenda")?.chaveSalva));
+  const sugerirGoogle = sugestaoGoogle && !agendaConectada && funcaoLigada("calendario", desligadas);
+  const agendaGoogle = usarAgendaGoogle(funcaoLigada("calendario", desligadas) ? [[inicioISO, fimISO], [hoje, fimProximos]] : []);
+  const gerar = useMemo(() => (de: string, ate: string) => {
+    const locais = itensDoCalendario({ eventos, tarefas, habitos, datas, revisoes, metas, recorrentes }, de, ate);
+    const google: Item[] = agendaGoogle.eventos.filter((e) => e.data >= de && e.data <= ate).map((e) => ({ id: `google-${e.id}`, titulo: e.titulo, data: e.data, hora: e.hora, fonte: "google", link: e.link }));
+    return [...locais, ...google].filter((i) => fontes[i.fonte]).sort((a, b) => `${a.data}${a.hora ?? "99"}`.localeCompare(`${b.data}${b.hora ?? "99"}`));
+  }, [eventos, tarefas, habitos, datas, revisoes, metas, recorrentes, fontes, desligadas, agendaGoogle.eventos]);
   const itens = useMemo(() => gerar(inicioISO, fimISO), [gerar, inicioISO, fimISO]);
-  const proximos = useMemo(() => gerar(hoje, paraISO(addDays(deISO(hoje), 6))).filter((i) => !repeteTodoDia(i)), [gerar, hoje]);
+  const proximosTodos = useMemo(() => gerar(hoje, fimProximos), [gerar, hoje, fimProximos]);
+  const proximos = proximosTodos.filter((i) => !repeteTodoDia(i));
+  const diariosProximos = [...new Map(proximosTodos.filter(repeteTodoDia).map((i) => [i.evento?.id ?? i.habito?.id, i])).values()];
   const doDiaSelecionado = useMemo(() => gerar(diaSelecionado, diaSelecionado), [gerar, diaSelecionado]);
 
   const esconderDiarios = vista !== "semana";
-  const porDia = itens.reduce<Record<string, Item[]>>((acc, i) => {
-    if (esconderDiarios && repeteTodoDia(i)) return acc;
-    (acc[i.data] ??= []).push(i);
-    return acc;
-  }, {});
+  const porDia: Record<string, Item[]> = {};
+  const diariosPorDia: Record<string, number> = {};
+  for (const i of itens) {
+    if (esconderDiarios && repeteTodoDia(i)) diariosPorDia[i.data] = (diariosPorDia[i.data] ?? 0) + 1;
+    else (porDia[i.data] ??= []).push(i);
+  }
   const diariosDoDia = doDiaSelecionado.filter(repeteTodoDia);
   const doDia = doDiaSelecionado.filter((i) => !repeteTodoDia(i));
   const diaTodo = doDia.filter((i) => !i.hora);
@@ -221,7 +279,8 @@ export default function Calendario() {
     const corpo = eventos.map((e) => {
       const data = e.data.replace(/-/g, "");
       const inicio = e.hora ? `DTSTART:${data}T${e.hora.replace(":", "")}00` : `DTSTART;VALUE=DATE:${data}`;
-      return ["BEGIN:VEVENT", `UID:${e.id}@niko`, `DTSTAMP:${agora}`, inicio, `SUMMARY:${escaparIcs(e.titulo)}`, regra[e.repeticao], "END:VEVENT"].filter(Boolean).join("\r\n");
+      const excecoes = e.repeticao !== "nenhuma" ? (e.excecoes ?? []).map((x) => (e.hora ? `EXDATE:${x.replace(/-/g, "")}T${e.hora.replace(":", "")}00` : `EXDATE;VALUE=DATE:${x.replace(/-/g, "")}`)) : [];
+      return ["BEGIN:VEVENT", `UID:${e.id}@niko`, `DTSTAMP:${agora}`, inicio, `SUMMARY:${escaparIcs(e.titulo)}`, regra[e.repeticao], ...excecoes, "END:VEVENT"].filter(Boolean).join("\r\n");
     });
     baixarArquivo("niko-calendario.ics", ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Niko//PT-BR", ...corpo, "END:VCALENDAR"].join("\r\n"), "text/calendar");
   };
@@ -238,7 +297,9 @@ export default function Calendario() {
         const data = `${inicio[1].slice(0, 4)}-${inicio[1].slice(4, 6)}-${inicio[1].slice(6, 8)}`;
         if (!dataValida(data)) continue;
         const rr = /RRULE:FREQ=(DAILY|WEEKLY|MONTHLY)/.exec(b)?.[1];
-        criarEvento({ titulo: resumo.slice(0, 120), data, hora: inicio[3] ? `${inicio[3].slice(0, 2)}:${inicio[3].slice(2)}` : undefined, tipo: "evento", repeticao: rr === "DAILY" ? "diaria" : rr === "WEEKLY" ? "semanal" : rr === "MONTHLY" ? "mensal" : "nenhuma" });
+        const excecoes = [...b.matchAll(/EXDATE[^:]*:([\d,TZ]+)/g)].flatMap((m) => m[1].split(",")).map((x) => `${x.slice(0, 4)}-${x.slice(4, 6)}-${x.slice(6, 8)}`).filter(dataValida);
+        const criado = criarEvento({ titulo: resumo.slice(0, 120), data, hora: inicio[3] ? `${inicio[3].slice(0, 2)}:${inicio[3].slice(2)}` : undefined, tipo: "evento", repeticao: rr === "DAILY" ? "diaria" : rr === "WEEKLY" ? "semanal" : rr === "MONTHLY" ? "mensal" : "nenhuma" });
+        if (rr && excecoes.length) atualizarEvento(criado.id, { excecoes: excecoes.slice(0, 400) });
         n++;
       }
       avisar(n ? T.calendario.importadosIcs(n) : T.validacao.arquivoInvalido);
@@ -248,24 +309,141 @@ export default function Calendario() {
   };
 
   const criarRapido = () => {
-    const { titulo, hora } = lerRapido(rapido);
+    const { titulo, hora, repeticao } = lerEventoRapido(rapido);
     if (!titulo) return;
-    criarEvento({ titulo: titulo.slice(0, 120), data: diaSelecionado, hora, tipo: "evento", repeticao: "nenhuma" });
+    criarEvento({ titulo: titulo.slice(0, 120), data: diaSelecionado, hora, tipo: "evento", repeticao });
     setRapido("");
     avisar(T.calendario.criado(titulo));
   };
 
+  const aplicarEdicao = (alvo: Edicao, novos: DadosDoEvento, escolha: EscopoDaEdicao, aviso: string) => {
+    const atual = useOrganizacao.getState().eventos.find((e) => e.id === alvo.evento.id);
+    if (!atual) return;
+    const r = editarEvento(atual, alvo.ocorrencia, novos, escolha);
+    atualizarEvento(atual.id, r.atualizar);
+    if (r.criar) criarEvento(r.criar);
+    avisar(aviso);
+  };
+
+  const pedirOuAplicar = (alvo: Edicao, novos: DadosDoEvento, texto: string, aviso: string) => {
+    if (alvo.evento.repeticao === "nenhuma") aplicarEdicao(alvo, novos, "todos", aviso);
+    else setEscopo({ texto, aoEscolher: (escolha) => aplicarEdicao(alvo, novos, escolha, aviso) });
+  };
+
+  const salvarForm = (novos: DadosDoEvento) => {
+    const alvo = edicao;
+    fecharForm();
+    if (!alvo) {
+      criarEvento(novos);
+      return;
+    }
+    if (!mudouAlgo(alvo.evento, alvo.ocorrencia, novos)) return;
+    pedirOuAplicar(alvo, novos, T.calendario.escopoEditar(alvo.evento.titulo), T.calendario.atualizado(novos.titulo));
+  };
+
+  const fecharForm = () => {
+    setNovo(false);
+    setEdicao(null);
+  };
+
+  const abrirEdicao = (i: Item) => {
+    if (!i.evento) return;
+    setDiaSelecionado(i.data);
+    setEdicao({ evento: i.evento, ocorrencia: i.data });
+  };
+
+  const moverPara = (i: Item, destino: string) => {
+    if (!i.evento || destino === i.data) return;
+    const e = i.evento;
+    pedirOuAplicar({ evento: e, ocorrencia: i.data }, { titulo: e.titulo, data: destino, hora: e.hora, tipo: e.tipo, repeticao: e.repeticao }, T.calendario.escopoMover(e.titulo), T.calendario.movido(e.titulo));
+    setDiaSelecionado(destino);
+  };
+
   const excluir = (i: Item) => {
     if (!i.evento) return undefined;
+    const e = i.evento;
+    const executar = (escolha: EscopoDaEdicao) => {
+      const atual = useOrganizacao.getState().eventos.find((x) => x.id === e.id);
+      if (!atual) return;
+      const r = excluirOcorrencia(atual, i.data, escolha);
+      if (r === "excluir") {
+        const removido = excluirEvento(atual.id);
+        if (removido) avisar(T.geral.excluido, () => restaurarEvento(removido));
+        return;
+      }
+      const anteriores = atual.excecoes;
+      atualizarEvento(atual.id, r);
+      avisar(T.geral.excluido, () => atualizarEvento(atual.id, { excecoes: anteriores }));
+    };
     return () => {
-      const r = excluirEvento(i.evento!.id);
-      if (r) avisar(T.geral.excluido, () => restaurarEvento(r));
+      if (e.repeticao === "nenhuma") executar("todos");
+      else setEscopo({ texto: T.calendario.escopoExcluir(e.titulo), aoEscolher: executar });
     };
   };
 
-  const abrirJournal = (i: Item) => (i.fonte === "tarefas" ? () => irPara("journal", { data: i.data }) : undefined);
+  const abrirNoModulo = (i: Item) => {
+    if (i.fonte === "google") return i.link ? { rotulo: T.calendario.abrirNoGoogle, abrir: () => abrirLink(i.link!) } : undefined;
+    if (i.fonte === "eventos") return undefined;
+    const rota = ROTA_DA_FONTE[i.fonte];
+    return { rotulo: T.calendario.abrirEm(T.rotas[rota]), abrir: () => irPara(rota, rota === "journal" ? { data: i.data } : undefined) };
+  };
+
+  const propsDaLinha = (i: Item) => {
+    const modulo = i.evento ? { abrir: () => abrirEdicao(i), rotulo: T.geral.editar } : abrirNoModulo(i);
+    const props: Parameters<typeof LinhaDoDia>[0] = { i, aoAbrir: modulo?.abrir, rotuloAbrir: modulo?.rotulo, aoExcluir: i.evento ? excluir(i) : undefined };
+    if (podeMarcarFeito(i)) {
+      const feito = itemFeito(i, registros);
+      props.feito = feito;
+      props.aoMarcar = i.habito && i.data > hoje ? undefined : () => marcarItemFeito(i, !feito);
+    }
+    return props;
+  };
+
+  const iniciarArraste = (i: Item) => (e: EventoDePonteiro<HTMLSpanElement>) => {
+    if (!i.evento || e.button !== 0) return;
+    setArraste({ item: i, inicioX: e.clientX, inicioY: e.clientY, x: e.clientX, y: e.clientY, ativo: false, alvo: null });
+  };
+
+  arrasteAtual.current = arraste;
+  const moverParaAtual = useRef(moverPara);
+  moverParaAtual.current = moverPara;
+
+  useEffect(() => {
+    if (!arraste) return;
+    const aoMover = (e: PointerEvent) => {
+      const a = arrasteAtual.current;
+      if (!a) return;
+      const ativo = a.ativo || Math.hypot(e.clientX - a.inicioX, e.clientY - a.inicioY) > DISTANCIA_PARA_ARRASTAR;
+      if (!ativo) return;
+      const sob = document.elementFromPoint(e.clientX, e.clientY)?.closest("[data-dia]") as HTMLElement | null;
+      setArraste({ ...a, x: e.clientX, y: e.clientY, ativo, alvo: sob?.dataset.dia ?? null });
+    };
+    const aoSoltar = () => {
+      const a = arrasteAtual.current;
+      if (a?.ativo) {
+        acabouDeArrastar.current = true;
+        window.setTimeout(() => (acabouDeArrastar.current = false), 0);
+        if (a.alvo) moverParaAtual.current(a.item, a.alvo);
+      }
+      setArraste(null);
+    };
+    const aoCancelar = () => setArraste(null);
+    window.addEventListener("pointermove", aoMover);
+    window.addEventListener("pointerup", aoSoltar);
+    window.addEventListener("pointercancel", aoCancelar);
+    window.addEventListener("blur", aoCancelar);
+    return () => {
+      window.removeEventListener("pointermove", aoMover);
+      window.removeEventListener("pointerup", aoSoltar);
+      window.removeEventListener("pointercancel", aoCancelar);
+      window.removeEventListener("blur", aoCancelar);
+    };
+  }, [Boolean(arraste)]);
+
+  const abrirChip = (i: Item) => (i.evento ? () => { if (!acabouDeArrastar.current) abrirEdicao(i); } : undefined);
 
   const escolherDia = (iso: string) => {
+    if (acabouDeArrastar.current) return;
     setDiaSelecionado(iso);
     if (vista === "mes" && !isSameMonth(deISO(iso), base)) setFoco(iso);
   };
@@ -278,7 +456,8 @@ export default function Calendario() {
   const semanasNoMes = Math.ceil(dias.length / 7);
 
   const agrupadoAgenda = Object.entries(porDia);
-  const diariosNoPeriodo = [...new Map(itens.filter(repeteTodoDia).map((i) => [i.evento!.id, i])).values()];
+  const diariosNoPeriodo = [...new Map(itens.filter(repeteTodoDia).map((i) => [i.evento?.id ?? i.habito?.id, i])).values()];
+  const alvoDoArraste = arraste?.ativo ? arraste.alvo : null;
 
   return (
     <>
@@ -310,16 +489,32 @@ export default function Calendario() {
         </div>
         <Segmentado<Vista> rotulo={T.calendario.titulo} valor={vista} aoMudar={setVista} opcoes={(Object.keys(T.calendario.vistas) as Vista[]).map((v) => ({ valor: v, rotulo: T.calendario.vistas[v] }))} />
         <div className="cal-filtros" role="group" aria-label={T.calendario.mostrar}>
-          {FONTES.filter((f) => funcaoLigada(FUNCAO_DA_FONTE[f], desligadas)).map((f) => (
+          {FONTES.filter((f) => funcaoLigada(FUNCAO_DA_FONTE[f], desligadas)).filter((f) => f !== "habitos" || habitos.some((h) => !h.arquivado && h.hora)).filter((f) => f !== "google" || agendaGoogle.situacao !== "desligada").map((f) => (
             <button key={f} type="button" className="cal-filtro" style={corDa(f)} aria-pressed={fontes[f]} onClick={() => setFontes({ ...fontes, [f]: !fontes[f] })}>
               <span className="cal-filtro-ponto" />
               {T.calendario.fontes[f]}
             </button>
           ))}
+          {agendaGoogle.situacao !== "desligada" && (
+            <Botao
+              pequeno
+              soIcone
+              variante="fantasma"
+              icone={<RefreshCw size={14} className={agendaGoogle.situacao === "carregando" ? "atualizacao-girando" : undefined} />}
+              aria-label={T.calendario.atualizarGoogle}
+              title={T.calendario.atualizarGoogle}
+              disabled={agendaGoogle.situacao === "carregando"}
+              onClick={agendaGoogle.atualizar}
+            />
+          )}
         </div>
       </div>
 
-      <div className="cal-layout">
+      {(agendaGoogle.situacao === "semPermissao" || agendaGoogle.situacao === "apiDesativada" || agendaGoogle.situacao === "erro") && (
+        <AvisoFaixa>{agendaGoogle.situacao === "semPermissao" ? T.calendario.googleSemPermissao : agendaGoogle.situacao === "apiDesativada" ? T.calendario.googleApiDesativada : T.calendario.googleErro}</AvisoFaixa>
+      )}
+
+      <div className="cal-layout" data-arrastando={arraste?.ativo ? "sim" : undefined}>
         <div className="cal-principal">
           {vista === "mes" && (
             <div className="cal-mes" style={{ gridTemplateRows: `auto repeat(${semanasNoMes}, minmax(118px, 1fr))` }}>
@@ -327,26 +522,32 @@ export default function Calendario() {
               {dias.map((d, n) => {
                 const iso = paraISO(d);
                 const lista = porDia[iso] ?? [];
+                const diarios = diariosPorDia[iso] ?? 0;
                 const limite = 3;
                 return (
                   <button
                     key={iso}
                     type="button"
                     className="cal-dia"
+                    data-dia={iso}
+                    data-alvo={alvoDoArraste === iso ? "sim" : undefined}
                     data-fora={!isSameMonth(d, base) ? "sim" : "nao"}
                     data-hoje={iso === hoje ? "sim" : "nao"}
                     data-fds={n % 7 >= 5 ? "sim" : "nao"}
                     data-passado={iso < hoje ? "sim" : "nao"}
                     aria-pressed={iso === diaSelecionado}
-                    aria-label={`${formatar(iso, "d 'de' MMMM")}, ${T.calendario.itensNoDia(lista.length)}`}
+                    aria-label={`${formatar(iso, "d 'de' MMMM")}, ${T.calendario.itensNoDia(lista.length + diarios)}`}
                     onClick={() => escolherDia(iso)}
                     onDoubleClick={() => { setDiaSelecionado(iso); setNovo(true); }}
                   >
                     <span className="cal-dia-topo">
                       <span className="cal-dia-numero numero">{d.getDate()}</span>
-                      {lista.length > limite && <span className="cal-dia-mais">{T.calendario.mais(lista.length - limite)}</span>}
+                      <span className="linha" style={{ gap: 4 }}>
+                        {diarios > 0 && <span className="cal-dia-diarios" title={T.calendario.diariosNoDia(diarios)}><Repeat size={10} />{diarios}</span>}
+                        {lista.length > limite && <span className="cal-dia-mais">{T.calendario.mais(lista.length - limite)}</span>}
+                      </span>
                     </span>
-                    {lista.slice(0, limite).map((i) => <Chip key={i.id} i={i} />)}
+                    {lista.slice(0, limite).map((i) => <Chip key={i.id} i={i} feito={itemFeito(i, registros)} aoAbrir={abrirChip(i)} aoIniciarArraste={i.evento ? iniciarArraste(i) : undefined} />)}
                   </button>
                 );
               })}
@@ -363,11 +564,13 @@ export default function Calendario() {
                     key={iso}
                     type="button"
                     className="cal-semana-dia"
+                    data-dia={iso}
+                    data-alvo={alvoDoArraste === iso ? "sim" : undefined}
                     data-hoje={iso === hoje ? "sim" : "nao"}
                     data-fds={n >= 5 ? "sim" : "nao"}
                     aria-pressed={iso === diaSelecionado}
                     aria-label={`${formatar(iso, "d 'de' MMMM")}, ${T.calendario.itensNoDia(lista.length)}`}
-                    onClick={() => setDiaSelecionado(iso)}
+                    onClick={() => escolherDia(iso)}
                     onDoubleClick={() => { setDiaSelecionado(iso); setNovo(true); }}
                   >
                     <span className="cal-semana-cabecalho">
@@ -375,7 +578,7 @@ export default function Calendario() {
                       <span className="cal-dia-numero numero">{d.getDate()}</span>
                     </span>
                     <span className="cal-semana-lista">
-                      {lista.map((i) => <Chip key={i.id} i={i} />)}
+                      {lista.map((i) => <Chip key={i.id} i={i} feito={itemFeito(i, registros)} aoAbrir={abrirChip(i)} aoIniciarArraste={i.evento ? iniciarArraste(i) : undefined} />)}
                     </span>
                   </button>
                 );
@@ -388,7 +591,7 @@ export default function Calendario() {
               {diariosNoPeriodo.length > 0 && (
                 <div className="cal-agenda-diarios">
                   <span className="linha texto-2" style={{ gap: 6, fontSize: 12 }}><Repeat size={13} />{T.calendario.todoDia}</span>
-                  <div className="cal-agenda-chips">{diariosNoPeriodo.map((i) => <Chip key={i.id} i={i} />)}</div>
+                  <div className="cal-agenda-chips">{diariosNoPeriodo.map((i) => <Chip key={i.id} i={i} feito={itemFeito(i, registros)} aoAbrir={abrirChip(i)} />)}</div>
                 </div>
               )}
               {agrupadoAgenda.length === 0 ? (
@@ -401,7 +604,7 @@ export default function Calendario() {
                     <span className="texto-3" style={{ fontSize: 11, textTransform: "capitalize" }}>{formatar(dia, "MMM")}</span>
                   </button>
                   <div className="cal-agenda-itens">
-                    {lista.map((i) => <LinhaDoDia key={i.id} i={i} aoExcluir={excluir(i)} aoAbrirJournal={abrirJournal(i)} />)}
+                    {lista.map((i) => <LinhaDoDia key={i.id} {...propsDaLinha(i)} i={i} />)}
                   </div>
                 </div>
               ))}
@@ -410,6 +613,17 @@ export default function Calendario() {
         </div>
 
         <aside className="cal-lateral">
+          {sugerirGoogle && (
+            <div className="cal-integracao">
+              <Marca marca="agenda" tamanho={22} />
+              <div className="coluna" style={{ gap: 2, minWidth: 0 }}>
+                <b>{T.conexoes.servicos.agenda.nome}</b>
+                <span className="texto-3">{T.calendario.integracaoTexto}</span>
+              </div>
+              <Botao pequeno variante="primario" onClick={() => irPara("conexoes", { servico: "agenda" })}>{T.calendario.integracaoConectar}</Botao>
+              <Botao pequeno soIcone variante="fantasma" icone={<X size={14} />} aria-label={T.calendario.integracaoEsconder} title={T.calendario.integracaoEsconder} onClick={() => definirConfig({ sugestaoAgendaGoogle: false })} />
+            </div>
+          )}
           <Cartao className="cal-painel">
             <div className="cal-painel-topo">
               <div className="cal-painel-data">
@@ -437,20 +651,19 @@ export default function Calendario() {
                 {diaTodo.length > 0 && (
                   <div className="coluna" style={{ gap: 6 }}>
                     <span className="rotulo-secao">{T.calendario.diaTodo}</span>
-                    {diaTodo.map((i) => <LinhaDoDia key={i.id} i={i} aoExcluir={excluir(i)} aoAbrirJournal={abrirJournal(i)} />)}
+                    {diaTodo.map((i) => <LinhaDoDia key={i.id} {...propsDaLinha(i)} i={i} />)}
                   </div>
                 )}
                 {comHora.length > 0 && (
                   <div className="coluna" style={{ gap: 6 }}>
                     <span className="rotulo-secao">{T.calendario.comHorario}</span>
-                    {comHora.map((i) => <LinhaDoDia key={i.id} i={i} aoExcluir={excluir(i)} aoAbrirJournal={abrirJournal(i)} />)}
+                    {comHora.map((i) => <LinhaDoDia key={i.id} {...propsDaLinha(i)} i={i} />)}
                   </div>
                 )}
                 {diariosDoDia.length > 0 && (
                   <div className="coluna" style={{ gap: 6 }}>
                     <span className="rotulo-secao linha" style={{ gap: 6 }}><Repeat size={12} />{T.calendario.todoDia}</span>
-                    {diariosDoDia.map((i) => <LinhaDoDia key={i.id} i={i} aoExcluir={excluir(i)} />)}
-                    {esconderDiarios && <span className="campo-dica">{T.calendario.todoDiaDica}</span>}
+                    {diariosDoDia.map((i) => <LinhaDoDia key={i.id} {...propsDaLinha(i)} i={i} />)}
                   </div>
                 )}
               </div>
@@ -459,10 +672,16 @@ export default function Calendario() {
           </Cartao>
 
           <Cartao titulo={T.calendario.proximos} icone={<CalendarDays size={16} />}>
-            {proximos.length === 0 ? <p className="texto-3">{T.calendario.semProximos}</p> : (
+            {proximos.length === 0 && diariosProximos.length === 0 ? <p className="texto-3">{T.calendario.semProximos}</p> : (
               <div className="cal-proximos">
+                {diariosProximos.length > 0 && (
+                  <div className="cal-proximos-diarios">
+                    <Repeat size={12} />
+                    <span className="cortar privado">{diariosProximos.map((i) => (i.hora ? `${i.hora} ${i.titulo}` : i.titulo)).join(", ")}</span>
+                  </div>
+                )}
                 {proximos.slice(0, 8).map((i) => (
-                  <button key={i.id} type="button" className="cal-proximo" style={corDa(i.fonte)} onClick={() => { setFoco(i.data); setDiaSelecionado(i.data); }}>
+                  <button key={i.id} type="button" className="cal-proximo" data-feito={itemFeito(i, registros) ? "sim" : undefined} style={corDa(i.fonte)} onClick={() => { setFoco(i.data); setDiaSelecionado(i.data); }}>
                     <span className="cal-proximo-dia">
                       <span className="numero">{formatar(i.data, "d")}</span>
                       <span>{formatar(i.data, "EEE")}</span>
@@ -479,7 +698,14 @@ export default function Calendario() {
           </Cartao>
         </aside>
       </div>
-      <FormEvento aberto={novo} dataInicial={diaSelecionado} aoFechar={() => setNovo(false)} />
+      {arraste?.ativo && (
+        <div className="cal-chip cal-chip-fantasma" style={{ ...corDa(arraste.item.fonte), left: arraste.x + 10, top: arraste.y + 10 }} aria-hidden="true">
+          {arraste.item.hora && <span className="cal-chip-hora numero">{arraste.item.hora}</span>}
+          <span className="cortar privado">{arraste.item.titulo}</span>
+        </div>
+      )}
+      <FormEvento aberto={novo || Boolean(edicao)} dataInicial={diaSelecionado} edicao={edicao} aoSalvar={salvarForm} aoFechar={fecharForm} />
+      <EscolhaDeEscopo pedido={escopo} aoFechar={() => setEscopo(null)} />
     </>
   );
 }

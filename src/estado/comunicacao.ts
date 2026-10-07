@@ -4,7 +4,7 @@ import { armazenamento, chave } from "../ponte/armazenamento";
 import type { AgenteId, Conexao, Conversa, EventoConexao, Memoria, Mensagem, ServicoId, UsoIa } from "../tipos";
 import { gerarId } from "../utilitarios/basicos";
 
-export const SERVICOS: ServicoId[] = ["stripe", "github", "vercel", "gmail", "supabase", "cloudflare", "resend", "notion", "calcom", "n8n"];
+export const SERVICOS: ServicoId[] = ["stripe", "github", "vercel", "gmail", "agenda", "supabase", "cloudflare", "resend", "notion", "calcom", "n8n"];
 
 export const CATEGORIA_SERVICO: Record<ServicoId, "pagamentos" | "codigo" | "deploy" | "produtividade"> = {
   stripe: "pagamentos",
@@ -15,6 +15,7 @@ export const CATEGORIA_SERVICO: Record<ServicoId, "pagamentos" | "codigo" | "dep
   calcom: "produtividade",
   n8n: "deploy",
   gmail: "produtividade",
+  agenda: "produtividade",
   supabase: "codigo",
   cloudflare: "deploy",
 };
@@ -28,6 +29,7 @@ export const INTERVALO_PADRAO: Record<ServicoId, number> = {
   calcom: 300,
   n8n: 60,
   gmail: 120,
+  agenda: 60,
   supabase: 300,
   cloudflare: 300,
 };
