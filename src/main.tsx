@@ -18,7 +18,14 @@ import { T } from "./textos/textos";
 document.documentElement.dataset.tema = "claro";
 
 async function iniciar() {
-  if (JANELA === "ilha" || JANELA === "dock") document.documentElement.classList.add("janela-sobreposta");
+  if (JANELA === "ilha" || JANELA === "dock") {
+    document.documentElement.classList.add("janela-sobreposta");
+    document.addEventListener("contextmenu", (e) => {
+      const alvo = e.target as HTMLElement | null;
+      if (alvo?.closest("input, textarea, [contenteditable='true']")) return;
+      e.preventDefault();
+    });
+  }
   await prepararPonte();
   desviarLinksExternos();
   let modo = "local";
