@@ -654,7 +654,7 @@ export const T = {
       semRegistros: "Nenhum registro neste mês.",
       geradoEm: (d: string) => `Gerado em ${d}`,
       rodape: "Feito com o Niko. Seus dados ficam só no seu computador.",
-      bloqueada: "O navegador bloqueou a janela de impressão. Libere pop-ups para o Niko.",
+      falhou: "Não deu para abrir a impressão. Tente de novo.",
     },
     aguaRotulo: (feito: string, meta: string) => `${feito} de ${meta} litros de água`,
     aguaDe: (meta: string) => `de ${meta} L`,

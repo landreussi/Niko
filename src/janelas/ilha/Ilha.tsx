@@ -82,6 +82,8 @@ function estadoCalmo(e: EstadoAgente): EstadoAgente {
 }
 const LARGURA_EXPANDIDA = 660;
 const ALTURA_COMPACTA = 30;
+const ALTURA_COMPACTA_MIDIA = 34;
+const TAMANHO_DA_CAPA_COMPACTA = 28;
 const AGENTE_DA_ABA: Partial<Record<VisaoIlha, AgenteId>> = { hoje: "organizador", foco: "tutor", conexoes: "java", claude: "java" };
 const RODIZIO_MS = 8 * 60_000;
 const ABAS_SEM_LATERAL: VisaoIlha[] = ["chat", "midia"];
@@ -277,7 +279,7 @@ export function Ilha() {
     estadoEfetivo === "escondida"
       ? { w: 120, h: 6, r: 6 }
       : estadoEfetivo === "compacta"
-        ? { w: compacta.largura, h: ALTURA_COMPACTA, r: 12 }
+        ? { w: compacta.largura, h: compacta.tipo === "midia" ? ALTURA_COMPACTA_MIDIA : ALTURA_COMPACTA, r: compacta.tipo === "midia" ? 14 : 12 }
         : { w: LARGURA_ABA[abaAtual] ?? LARGURA_EXPANDIDA, h: alturaDaVisao(abaAtual, secaoHoje), r: 30 };
   const crescendo = alvo.w * alvo.h >= anterior.current.w * anterior.current.h;
   anterior.current = { w: alvo.w, h: alvo.h };
@@ -351,7 +353,7 @@ export function Ilha() {
         return (
           <>
             <div className="ilha-compacta-lado">
-              <span className="ilha-capa" style={{ width: 24, height: 24, background: fundoDaCapa(midia.faixa) }} />
+              <span className="ilha-capa ilha-capa-compacta" style={{ width: TAMANHO_DA_CAPA_COMPACTA, height: TAMANHO_DA_CAPA_COMPACTA, background: fundoDaCapa(midia.faixa) }} />
             </div>
             <span className="ilha-compacta-texto privado">{midia.faixa?.titulo ?? ""}</span>
             <div className="ilha-compacta-lado">
@@ -490,6 +492,7 @@ export function Ilha() {
                 <motion.div
                   key={`c-${compacta.tipo}`}
                   className="ilha-compacta"
+                  data-tipo={compacta.tipo}
                   role="button"
                   tabIndex={0}
                   aria-label={T.ilha.expandir}

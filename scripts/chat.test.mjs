@@ -362,6 +362,10 @@ test("abas antigas de Calendário, Hábitos e Capturar viram a aba Hoje sem perd
   assert.equal(juntarAbasNoHoje(["chat", "habitos", "calendario"], { hoje: false, calendario: false, habitos: false }).blocos.hoje, false);
   assert.deepEqual(juntarAbasNoHoje(["chat", "habitos", "calendario"], {}).ordemAbas, ["chat", "hoje"]);
   assert.deepEqual(juntarAbasNoHoje(["conexoes", "chat", "calendario", "midia"], {}).ordemAbas, ["hoje", "conexoes", "chat", "midia"]);
+  assert.deepEqual(
+    juntarAbasNoHoje(["conexoes", "chat", "hoje", "midia", "foco", "avisos", "claude", "calendario", "captura", "habitos"], {}).ordemAbas,
+    ["hoje", "conexoes", "chat", "midia", "foco", "avisos", "claude"],
+  );
 });
 
 async function financasDeTeste() {

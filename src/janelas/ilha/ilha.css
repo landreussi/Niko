@@ -108,6 +108,16 @@
   flex: 0 0 auto;
 }
 
+.ilha-compacta[data-tipo="midia"] {
+  padding-left: 4px;
+}
+
+.ilha-capa-compacta {
+  border-radius: 8px;
+  background-size: cover !important;
+  background-position: center !important;
+}
+
 .ilha-onda {
   display: flex;
   align-items: center;
