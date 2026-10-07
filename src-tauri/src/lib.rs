@@ -11,6 +11,7 @@ use tauri::{AppHandle, Emitter, Manager, RunEvent, WebviewUrl, WebviewWindow, We
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 
 mod barra_windows;
+mod docks;
 mod janela_frente;
 mod miniaturas;
 
@@ -93,7 +94,7 @@ fn registrar_frente(app: &AppHandle) {
     if frente == 0 {
         return;
     }
-    let sobreposta = ["ilha", "dock"].iter().any(|r| app.get_webview_window(r).and_then(|j| j.hwnd().ok()).map(|h| h.0 as isize == frente).unwrap_or(false));
+    let sobreposta = app.webview_windows().iter().any(|(r, j)| (r == "ilha" || docks::eh_dock(r)) && j.hwnd().map(|h| h.0 as isize == frente).unwrap_or(false));
     if !sobreposta {
         ULTIMA_FRENTE.store(frente, Ordering::Relaxed);
     }
@@ -190,8 +191,10 @@ fn vigiar_cursor(app: AppHandle) {
                 Ok(a) => a.clone(),
                 Err(_) => continue,
             };
-            for rotulo in ["ilha", "dock"] {
-                let Some(janela) = app.get_webview_window(rotulo) else { continue };
+            let sobrepostas: Vec<(String, WebviewWindow)> = app.webview_windows().into_iter().filter(|(r, _)| r == "ilha" || docks::eh_dock(r)).collect();
+            fora.retain(|r, _| sobrepostas.iter().any(|(s, _)| s == r));
+            for (rotulo, janela) in &sobrepostas {
+                let rotulo = rotulo.as_str();
                 let (Ok(cursor), Ok(origem), Ok(escala)) = (janela.cursor_position(), janela.outer_position(), janela.scale_factor()) else { continue };
                 let x = (cursor.x - origem.x as f64) / escala;
                 let y = (cursor.y - origem.y as f64) / escala;
@@ -354,6 +357,8 @@ pub fn run() {
             porta_ponte,
             mostrar_sistema,
             alternar_sistema,
+            docks::monitores,
+            docks::definir_docks,
             liberar_sistema_inicial,
             tempo_ocioso_ms,
             abrir_link,
@@ -419,6 +424,8 @@ pub fn run() {
                     let _ = j.set_ignore_cursor_events(true);
                 }
             }
+            docks::sincronizar(&handle);
+            docks::vigiar_monitores(handle.clone());
             vigiar_cursor(handle.clone());
 
             let abrir = MenuItem::with_id(app, "abrir", "Abrir o Niko", true, None::<&str>)?;
@@ -449,7 +456,11 @@ pub fn run() {
 
     app.run(|handle, evento| {
         if let RunEvent::Exit = evento {
-            barra_windows::reservar_espaco_do_dock(handle, false);
+            for (rotulo, janela) in handle.webview_windows() {
+                if docks::eh_dock(&rotulo) {
+                    barra_windows::reservar_espaco_do_dock(&janela, false);
+                }
+            }
             barra_windows::restaurar(handle);
             parar_ponte(handle);
         }

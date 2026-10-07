@@ -9,6 +9,8 @@ import { DESTAQUE_PADRAO } from "../../area-de-trabalho/usarTema";
 import { FUNDOS_PRONTOS } from "../../../modulos/configuracoes/SeletorDeFundo";
 import { FUNDO_DESTAQUE, hexValido, misturar, textoSobre } from "../../../utilitarios/cores";
 import { T } from "../../../textos/textos";
+import { usarMonitores } from "../../../desktop/desktop";
+import { TODOS_OS_MONITORES } from "../../dock/monitores";
 
 const P = T.ilha.barra.personalizacao;
 const DESTAQUES_PRONTOS = ["#a78bfa", "#3b82f6", "#10b981", "#f59e0b", "#f4505e", "#ec4899"];
@@ -57,6 +59,14 @@ export function Personalizacao({ topo, aoFechar }: { topo: number; aoFechar: () 
   const amostraDeFundo = (valor: string) => (valor === FUNDO_DESTAQUE ? misturar(corDoDestaque, "#000000", 0.82) : valor);
   const fonte = cfg.ilha;
   const percentual = Math.round(fonte.opacidade * 100);
+  const monitores = usarMonitores();
+  const doisMonitores = monitores.length === 2;
+  const escolhaSalva = cfg.dock.monitores ?? TODOS_OS_MONITORES;
+  const escolhaDoDock = escolhaSalva === TODOS_OS_MONITORES || monitores.some((m) => m.nome === escolhaSalva) ? escolhaSalva : monitores.find((m) => m.principal)?.nome ?? TODOS_OS_MONITORES;
+  const opcoesDeMonitor = [
+    { valor: TODOS_OS_MONITORES, rotulo: doisMonitores ? P.monitores.osDois : P.monitores.todos },
+    ...monitores.map((m) => ({ valor: m.nome, rotulo: doisMonitores ? (m.principal ? P.monitores.principal : P.monitores.secundario) : P.monitores.numero(m.numero, m.principal) })),
+  ];
 
   const aplicarCor = (mudanca: { fundo?: string; opacidade?: number }) => {
     cfg.definirIlha(mudanca);
@@ -111,6 +121,12 @@ export function Personalizacao({ topo, aoFechar }: { topo: number; aoFechar: () 
         </div>
         <p className="ilha-rapido-vazio">{T.configuracoes.textoAutomatico}</p>
       </Secao>
+
+      {monitores.length >= 2 && (
+        <Secao titulo={P.monitores.titulo}>
+          <Escolha rotulo={P.monitores.titulo} valor={escolhaDoDock} aoMudar={(escolha) => cfg.definir({ dock: { ...useConfig.getState().dock, monitores: escolha } })} opcoes={opcoesDeMonitor} />
+        </Secao>
+      )}
 
       <Secao titulo={P.tamanhoDaIlha}>
         <Escolha rotulo={P.tamanhoDaIlha} valor={cfg.ilha.tamanho} aoMudar={(tamanho) => cfg.definirIlha({ tamanho })} opcoes={(["pequena", "media", "grande"] as const).map((t) => ({ valor: t, rotulo: T.configuracoes.tamanhos[t] }))} />

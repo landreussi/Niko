@@ -122,7 +122,7 @@ export interface Configuracoes {
   gruposFechados: string[];
   blocosInicio: { id: BlocoInicio; visivel: boolean }[];
   ilha: ConfigIlha;
-  dock: { ativo: boolean; modo: ModoBorda; favoritos: Rota[]; atalhos: AtalhoDock[]; ampliar: boolean; fundo: string; opacidade: number };
+  dock: { ativo: boolean; modo: ModoBorda; favoritos: Rota[]; atalhos: AtalhoDock[]; ampliar: boolean; fundo: string; opacidade: number; monitores: string };
   pomodoro: { foco: number; curta: number; longa: number; ciclos: number; autoProxima: boolean; tique: boolean };
   agua: { meta: number; copo: number };
   sons: { ligado: boolean; volume: number; categorias: Record<CategoriaSom, boolean> };
@@ -174,7 +174,7 @@ export const CONFIG_PADRAO: Configuracoes = {
     notificacoes: "importantes",
     laterais: true,
   },
-  dock: { ativo: true, modo: "inteligente", favoritos: ["chat", "journal", "estudos", "financas", "calendario"], atalhos: [], ampliar: true, fundo: FUNDO_PADRAO_DAS_BORDAS, opacidade: 1 },
+  dock: { ativo: true, modo: "inteligente", favoritos: ["chat", "journal", "estudos", "financas", "calendario"], atalhos: [], ampliar: true, fundo: FUNDO_PADRAO_DAS_BORDAS, opacidade: 1, monitores: "todos" },
   pomodoro: { foco: 25, curta: 5, longa: 15, ciclos: 4, autoProxima: false, tique: false },
   agua: { meta: 2000, copo: 250 },
   sons: {
