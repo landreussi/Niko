@@ -22,11 +22,14 @@ interface EstadoDaIlha {
   estado: EstadoIlha;
   aba: VisaoIlha;
   secaoHoje: SecaoHoje;
+  saudacao: { id: number; versaoNova?: string } | null;
   revelacao: Revelacao | null;
   ultimaInteracao: number;
   definirEstado: (estado: EstadoIlha) => void;
   abrir: (aba?: VisaoIlha) => void;
   definirSecaoHoje: (secao: SecaoHoje) => void;
+  saudar: (versaoNova?: string) => void;
+  encerrarSaudacao: () => void;
   recolher: () => void;
   revelar: (r: Revelacao, ms?: number, importancia?: "alta" | "normal") => void;
   dispensarRevelacao: () => void;
@@ -54,11 +57,14 @@ export const useIlha = create<EstadoDaIlha>()((set, get) => {
     estado: "compacta",
     aba: "hoje",
     secaoHoje: "agenda",
+    saudacao: null,
     revelacao: null,
     ultimaInteracao: Date.now(),
     definirEstado: (estado) => set({ estado, ultimaInteracao: Date.now() }),
     abrir: (aba) => set({ estado: "expandida", aba: aba ?? get().aba, ultimaInteracao: Date.now() }),
     definirSecaoHoje: (secaoHoje) => set({ secaoHoje, ultimaInteracao: Date.now() }),
+    saudar: (versaoNova) => set({ saudacao: { id: Date.now(), versaoNova }, estado: "compacta", ultimaInteracao: Date.now() }),
+    encerrarSaudacao: () => set({ saudacao: null, ultimaInteracao: Date.now() }),
     recolher: () => set({ estado: "compacta", ultimaInteracao: Date.now() }),
     revelar: (r, ms = 4500, importancia = "alta") => {
       const { ilha, naoPerturbe } = useConfig.getState();

@@ -439,6 +439,11 @@ export const T = {
     secoesHoje: { agenda: "Agenda", tarefas: "Tarefas", habitos: "Hábitos" },
     feitosDoTotal: (feitos: number, total: number) => `${feitos}/${total}`,
     capturar: "Capturar",
+    saudacao: {
+      titulo: (saudacao: string, nome: string) => (nome ? `${saudacao}, ${nome}` : saudacao),
+      equipe: "A equipe está pronta para hoje.",
+      atualizado: (versao: string) => `Tudo novo por aqui: versão ${versao}.`,
+    },
     novaTarefaHoje: "Nova tarefa para hoje. Ex.: ligar pro banco 15h",
     semTarefasHoje: "Nada para hoje. Adicione abaixo.",
     tiposCaptura: { tarefa: "Tarefa", gasto: "Gasto", link: "Link", nota: "Nota", lembrete: "Lembrete" },
@@ -1955,6 +1960,8 @@ export const T = {
     previaVisual: "Prévia do visual",
     aplicar: "Aplicar",
     ilhaAtiva: "Mostrar a ilha",
+    verSaudacao: "Ver a saudação",
+    verSaudacaoDica: "Mostra na ilha a saudação da equipe, a mesma que vai aparecer ao abrir o Niko.",
     modo: "Modo",
     modos: { fixo: "Fixo", esconder: "Esconder", inteligente: "Inteligente" },
     modosDica: {

@@ -93,6 +93,24 @@ export function mostrarSistema() {
   return invocar("mostrar_sistema");
 }
 
+export function liberarSistemaInicial() {
+  return invocar("liberar_sistema_inicial");
+}
+
+export function tempoOciosoMs() {
+  return invocar<number>("tempo_ocioso_ms");
+}
+
+export async function versaoDoApp(): Promise<string> {
+  if (!NATIVO) return "web";
+  try {
+    const { getVersion } = await import("@tauri-apps/api/app");
+    return await getVersion();
+  } catch {
+    return "desconhecida";
+  }
+}
+
 export function informarAreaInterativa(retangulos: { x: number; y: number; w: number; h: number }[]) {
   return invocar("area_interativa", { janela: JANELA, retangulos });
 }

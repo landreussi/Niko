@@ -63,6 +63,30 @@ fn mostrar_sistema(app: AppHandle) {
 }
 
 static ULTIMA_FRENTE: AtomicIsize = AtomicIsize::new(0);
+static ABERTURA_PENDENTE: AtomicBool = AtomicBool::new(false);
+const LIMITE_DA_ABERTURA: Duration = Duration::from_secs(9);
+
+fn liberar_abertura(app: &AppHandle) {
+    if ABERTURA_PENDENTE.swap(false, Ordering::Relaxed) {
+        mostrar(app);
+    }
+}
+
+#[tauri::command]
+fn liberar_sistema_inicial(app: AppHandle) {
+    liberar_abertura(&app);
+}
+
+#[tauri::command]
+fn tempo_ocioso_ms() -> u64 {
+    use windows::Win32::System::SystemInformation::GetTickCount;
+    use windows::Win32::UI::Input::KeyboardAndMouse::{GetLastInputInfo, LASTINPUTINFO};
+    let mut info = LASTINPUTINFO { cbSize: std::mem::size_of::<LASTINPUTINFO>() as u32, dwTime: 0 };
+    if !unsafe { GetLastInputInfo(&mut info) }.as_bool() {
+        return 0;
+    }
+    u64::from(unsafe { GetTickCount() }.wrapping_sub(info.dwTime))
+}
 
 fn registrar_frente(app: &AppHandle) {
     let frente = unsafe { windows::Win32::UI::WindowsAndMessaging::GetForegroundWindow() }.0 as isize;
@@ -132,6 +156,7 @@ fn sair_salvando(app: &AppHandle) {
 }
 
 fn mostrar(app: &AppHandle) {
+    ABERTURA_PENDENTE.store(false, Ordering::Relaxed);
     if let Some(janela) = app.get_webview_window("sistema") {
         let _ = janela.unminimize();
         let _ = janela.show();
@@ -329,6 +354,8 @@ pub fn run() {
             porta_ponte,
             mostrar_sistema,
             alternar_sistema,
+            liberar_sistema_inicial,
+            tempo_ocioso_ms,
             abrir_link,
             sair,
             barra_windows::barra_windows,
@@ -367,8 +394,16 @@ pub fn run() {
                 .background_color(tauri::window::Color(14, 14, 16, 255))
                 .disable_drag_drop_handler()
                 .center()
-                .visible(!escondido)
+                .visible(false)
                 .build()?;
+            if !escondido {
+                ABERTURA_PENDENTE.store(true, Ordering::Relaxed);
+                let reserva = handle.clone();
+                std::thread::spawn(move || {
+                    std::thread::sleep(LIMITE_DA_ABERTURA);
+                    liberar_abertura(&reserva);
+                });
+            }
             let sistema_ref = sistema.clone();
             sistema.on_window_event(move |evento| {
                 if let WindowEvent::CloseRequested { api, .. } = evento {

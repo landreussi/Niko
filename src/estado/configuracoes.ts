@@ -141,6 +141,7 @@ export interface Configuracoes {
   notificarClaude: boolean;
   claudeInstalado: boolean;
   funcoesDesligadas: ("journal" | "estudos" | "financas" | "metas" | "calendario")[];
+  ultimaSaudacao: { dia: string; versao: string } | null;
 }
 
 export const CONFIG_PADRAO: Configuracoes = {
@@ -201,6 +202,7 @@ export const CONFIG_PADRAO: Configuracoes = {
   notificarClaude: false,
   claudeInstalado: false,
   funcoesDesligadas: [],
+  ultimaSaudacao: null,
 };
 
 interface AcoesConfig {

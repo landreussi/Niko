@@ -19,6 +19,24 @@ test("clicar novamente na mesma aba recolhe a ilha", () => {
   assert.equal(useIlha.getState().estado, "compacta");
 });
 
+test("saudação ao abrir: primeira vez, dia novo e versão nova saúdam, mesmo dia não", async () => {
+  const { decidirSaudacaoAoAbrir } = await servidor.ssrLoadModule("/src/janelas/ilha/animacoes/usarSaudacaoDiaria.ts");
+  assert.deepEqual(decidirSaudacaoAoAbrir(null, "2026-10-07", "0.2.1"), { saudar: true });
+  assert.deepEqual(decidirSaudacaoAoAbrir({ dia: "2026-10-07", versao: "0.2.1" }, "2026-10-07", "0.2.1"), { saudar: false });
+  assert.deepEqual(decidirSaudacaoAoAbrir({ dia: "2026-10-06", versao: "0.2.1" }, "2026-10-07", "0.2.1"), { saudar: true });
+  assert.deepEqual(decidirSaudacaoAoAbrir({ dia: "2026-10-07", versao: "0.2.0" }, "2026-10-07", "0.2.1"), { saudar: true, versaoNova: "0.2.1" });
+});
+
+test("saudação na volta: só depois de 30 min longe ou do PC dormir, e quando a pessoa mexe de novo", async () => {
+  const { voltouDepoisDeAusencia } = await servidor.ssrLoadModule("/src/janelas/ilha/animacoes/usarSaudacaoDiaria.ts");
+  const minuto = 60_000;
+  assert.deepEqual(voltouDepoisDeAusencia(minuto, 5_000, false), { ausente: false, voltou: false });
+  assert.deepEqual(voltouDepoisDeAusencia(minuto, 40 * minuto, false), { ausente: true, voltou: false });
+  assert.deepEqual(voltouDepoisDeAusencia(minuto, 10_000, true), { ausente: false, voltou: true });
+  assert.deepEqual(voltouDepoisDeAusencia(8 * 60 * minuto, 3_000, false), { ausente: false, voltou: true });
+  assert.deepEqual(voltouDepoisDeAusencia(minuto, 5 * minuto, true), { ausente: true, voltou: false });
+});
+
 test("rolar sobre as abas anda uma aba por vez e para nas pontas", () => {
   const abas = ["hoje", "conexoes", "chat"];
   assert.equal(abaVizinha(abas, "hoje", 1), "conexoes");

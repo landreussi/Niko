@@ -26,7 +26,10 @@ import { abaLigada } from "../../utilitarios/funcoes";
 import { tiposDeCapturaLigados } from "../../utilitarios/captura";
 import { useClaudeCode, sessaoAtiva, nomeDoModelo } from "../../estado/claudeCode";
 import { useAtualizacao } from "../../estado/atualizacao";
-import { NATIVO, usarAreaInterativa, usarCursorFora, usarEstadoDaFrente } from "../../desktop/desktop";
+import { NATIVO, ouvirEvento, usarAreaInterativa, usarCursorFora, usarEstadoDaFrente } from "../../desktop/desktop";
+import { Saudacao } from "./animacoes/Saudacao";
+import { usarSaudacaoDiaria } from "./animacoes/usarSaudacaoDiaria";
+import { ALTURA_DA_SAUDACAO, EVENTO_DA_SAUDACAO, LARGURA_DA_SAUDACAO } from "./animacoes/pedirSaudacao";
 import { BarraDoTopo, ALTURA_DA_FAIXA } from "./barra/BarraDoTopo";
 import { abaVizinha, alternarAbaDaBarra } from "./barra/acoesDaBarra";
 import { EspacoDoPersonagem, PersonagemContinuo } from "./animacoes/PersonagemContinuo";
@@ -121,6 +124,10 @@ export function Ilha() {
   const aba = useIlha((s) => s.aba);
   const secaoHoje = useIlha((s) => s.secaoHoje);
   const revelacao = useIlha((s) => s.revelacao);
+  const saudacao = useIlha((s) => s.saudacao);
+  const encerrarSaudacao = useIlha((s) => s.encerrarSaudacao);
+  const saudando = saudacao !== null;
+  usarSaudacaoDiaria(cfg.ativa);
   const definirEstado = useIlha((s) => s.definirEstado);
   const abrir = useIlha((s) => s.abrir);
   const recolher = useIlha((s) => s.recolher);
@@ -155,6 +162,18 @@ export function Ilha() {
   }, []);
   usarAreaInterativa([".ilha-raiz .ilha", ".ilha-gatilho", ".ilha-barra-aba", ".ilha-pop"]);
   usarCursorFora(useCallback(() => setSobre(false), []));
+  useEffect(() => {
+    let ativo = true;
+    let desligar: () => void = () => undefined;
+    void ouvirEvento(EVENTO_DA_SAUDACAO, () => useIlha.getState().saudar()).then((f) => {
+      if (ativo) desligar = f;
+      else f();
+    });
+    return () => {
+      ativo = false;
+      desligar();
+    };
+  }, []);
   const [barraEmUso, setBarraEmUso] = useState(false);
   const aparencia = usarAparenciaDeBorda(cfg.fundo, cfg.opacidade);
   const [restanteFechar, setRestanteFechar] = useState<number | null>(null);
@@ -194,7 +213,7 @@ export function Ilha() {
   const trabalhando = AGENTES.filter((a) => ["pensando", "escrevendo"].includes(estadoDoAgente(agentes, a)));
 
   const pedidoPendente = pedidosClaude.length > 0;
-  const estadoEfetivo = coberta && estado !== "expandida" && !revelacao && !pedidoPendente ? "escondida" : (cfg.modo === "fixo" || pedidoPendente) && estado === "escondida" ? "compacta" : estado;
+  const estadoEfetivo = saudando ? "compacta" : coberta && estado !== "expandida" && !revelacao && !pedidoPendente ? "escondida" : (cfg.modo === "fixo" || pedidoPendente) && estado === "escondida" ? "compacta" : estado;
 
   useEffect(() => {
     if (cfg.modo !== "esconder" || estadoEfetivo !== "compacta" || sobre || barraEmUso || revelacao || frescos > 0 || pomodoro.rodando || atualizacao.fase !== "nada" || pedidoPendente) return;
@@ -275,8 +294,9 @@ export function Ilha() {
   if (!cfg.ativa || frente.telaCheia) return null;
 
   const escala = ESCALA[cfg.tamanho];
-  const alvo =
-    estadoEfetivo === "escondida"
+  const alvo = saudando
+    ? { w: LARGURA_DA_SAUDACAO, h: ALTURA_DA_SAUDACAO, r: 40 }
+    : estadoEfetivo === "escondida"
       ? { w: 120, h: 6, r: 6 }
       : estadoEfetivo === "compacta"
         ? { w: compacta.largura, h: compacta.tipo === "midia" ? ALTURA_COMPACTA_MIDIA : ALTURA_COMPACTA, r: compacta.tipo === "midia" ? 14 : 12 }
@@ -290,7 +310,7 @@ export function Ilha() {
   const agenteCompacto = ["agente", "pomodoro", "relogio", "nada"].includes(compacta.tipo) ? agenteDaVez : compacta.tipo === "trabalho" ? trabalhando[0] : compacta.tipo === "revelacao" && !revelacao?.marca ? revelacao?.agente : undefined;
   const agenteContinuo = estadoEfetivo === "expandida" ? agenteLateral : agenteCompacto ?? agenteDaVez;
   const restantePomodoro = restanteAtual(pomodoro, agora);
-  const barraVisivel = cfg.laterais && estadoEfetivo !== "escondida" && lateraisLivres;
+  const barraVisivel = cfg.laterais && estadoEfetivo !== "escondida" && lateraisLivres && !saudando;
 
   const abaDaCompacta = (): VisaoIlha | undefined =>
     compacta.tipo === "revelacao" ? revelacao?.aba : compacta.tipo === "pomodoro" ? "foco" : compacta.tipo === "midia" ? "midia" : compacta.tipo === "trabalho" ? "chat" : compacta.tipo === "claude" || compacta.tipo === "claudePedido" ? "claude" : undefined;
@@ -488,7 +508,8 @@ export function Ilha() {
         >
           <div className="ilha-recorte">
             <AnimatePresence mode="popLayout" initial={false}>
-              {estadoEfetivo === "compacta" && (
+              {saudacao && <Saudacao key={`saudacao-${saudacao.id}`} versaoNova={saudacao.versaoNova} aoTerminar={encerrarSaudacao} />}
+              {estadoEfetivo === "compacta" && !saudando && (
                 <motion.div
                   key={`c-${compacta.tipo}`}
                   className="ilha-compacta"
@@ -657,7 +678,7 @@ export function Ilha() {
               )}
             </AnimatePresence>
           </div>
-          <PersonagemContinuo ilha={corpoIlha} posicao={estadoEfetivo === "expandida" ? "expandida" : "compacta"} ativo={estadoEfetivo !== "escondida"} escala={escala} agente={agenteContinuo} estado={estadoEfetivo === "compacta" ? estadoCalmo(estadoDoAgente(agentes, agenteContinuo)) : estadoDoAgente(agentes, agenteContinuo)} rotulo={nomes[agenteContinuo]} destinoKey={estadoEfetivo === "expandida" ? abaAtual : compacta.tipo} />
+          <PersonagemContinuo ilha={corpoIlha} posicao={estadoEfetivo === "expandida" ? "expandida" : "compacta"} ativo={estadoEfetivo !== "escondida" && !saudando} escala={escala} agente={agenteContinuo} estado={estadoEfetivo === "compacta" ? estadoCalmo(estadoDoAgente(agentes, agenteContinuo)) : estadoDoAgente(agentes, agenteContinuo)} rotulo={nomes[agenteContinuo]} destinoKey={estadoEfetivo === "expandida" ? abaAtual : compacta.tipo} />
           {restanteFechar != null && restanteFechar <= 10000 && (
             <span className="ilha-contagem" style={{ width: (restanteFechar / 10000) * 160 }} aria-hidden="true" />
           )}
