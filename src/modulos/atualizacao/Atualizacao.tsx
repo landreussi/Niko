@@ -48,7 +48,7 @@ export default function Atualizacao() {
             <div className="atualizacao-logo"><LogoNiko tamanho={56} /></div>
             <div className="coluna" style={{ gap: 4 }}>
               <h2 className="titulo-secao">{T.app.nome}</h2>
-              <span className="texto-2">{T.atualizacao.plataforma}</span>
+              <span className="texto-2">{T.getCurrentSystemVersion()}</span>
             </div>
             <div className="atualizacao-versao">
               <span className="rotulo-pequeno">{T.atualizacao.versaoAtual}</span>
