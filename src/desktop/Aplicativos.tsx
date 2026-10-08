@@ -13,13 +13,15 @@ import { usarTema } from "../janelas/area-de-trabalho/usarTema";
 import { usarAtalhos } from "../janelas/area-de-trabalho/usarAtalhos";
 import { useServicos } from "../servicos/servicos";
 import { usarPreferenciasDaJanela } from "../servicos/usarPreferenciasDaJanela";
-import { janelaAtual, ouvirComandos, ouvirEvento, sincronizarInicioComWindows } from "./desktop";
+import { definirMonitorDaIlha, janelaAtual, ouvirComandos, ouvirEvento, sincronizarInicioComWindows } from "./desktop";
 import { usarSincronia } from "./sincronia";
+import { usarAtalhosDaIlha, usarAtalhosGlobais } from "./usarAtalhosGlobais";
 
 export function AppSistema() {
   usarTema();
   usarPreferenciasDaJanela();
   usarAtalhos();
+  usarAtalhosGlobais();
   usarSincronia();
   const janelas = useInterface((s) => s.janelasConexao);
   const primeira = useConfig((s) => s.primeiraExecucaoFeita);
@@ -69,10 +71,19 @@ function usarMostrarAoMontar() {
   }, []);
 }
 
+function usarMonitorDaIlha() {
+  const monitor = useConfig((s) => s.ilha.monitor);
+  useEffect(() => {
+    void definirMonitorDaIlha(monitor);
+  }, [monitor]);
+}
+
 export function AppIlha() {
   usarMostrarAoMontar();
+  usarMonitorDaIlha();
   usarTema();
   usarSincronia();
+  usarAtalhosDaIlha();
   useServicos();
   return (
     <div className="area-sobreposta">

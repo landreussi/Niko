@@ -156,9 +156,14 @@ export async function verificarPublicacao(versao, pedir = fetch) {
   throw new Error(`Não foi possível verificar a release no GitHub (HTTP ${resposta.status}). Nenhuma versão foi alterada.`);
 }
 
-export function validarArtefatos(raiz, versao, inicio) {
-  const pasta = join(raiz, "src-tauri", "target", "release", "bundle", "nsis");
-  const instalador = `Niko_${validarVersao(versao)}_x64-setup.exe`;
+export const INSTALADORES = {
+  nsis: (versao) => `Niko_${versao}_x64-setup.exe`,
+  msi: (versao) => `Niko_${versao}_x64_pt-BR.msi`,
+};
+
+export function validarArtefatos(raiz, versao, inicio, tipo = "nsis") {
+  const pasta = join(raiz, "src-tauri", "target", "release", "bundle", tipo);
+  const instalador = INSTALADORES[tipo](validarVersao(versao));
   for (const nome of [instalador, `${instalador}.sig`]) {
     const caminho = join(pasta, nome);
     if (!existsSync(caminho)) throw new Error(`${nome} não foi gerado. Não publique uma versão anterior.`);
@@ -169,4 +174,19 @@ export function validarArtefatos(raiz, versao, inicio) {
   const assinatura = readFileSync(join(pasta, `${instalador}.sig`), "utf8").trim();
   if (!assinatura) throw new Error("A assinatura do instalador está vazia.");
   return { pasta, instalador, assinatura };
+}
+
+export function montarManifesto(versao, notas, nsis, msi, data = new Date()) {
+  const endereco = (instalador) => `https://github.com/vitorcgo/niko/releases/download/v${validarVersao(versao)}/${instalador}`;
+  const entradaNsis = { signature: nsis.assinatura, url: endereco(nsis.instalador) };
+  return {
+    version: versao,
+    notes: notas || `Niko ${versao}`,
+    pub_date: data.toISOString(),
+    platforms: {
+      "windows-x86_64": entradaNsis,
+      "windows-x86_64-nsis": entradaNsis,
+      "windows-x86_64-msi": { signature: msi.assinatura, url: endereco(msi.instalador) },
+    },
+  };
 }

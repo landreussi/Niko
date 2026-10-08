@@ -25,6 +25,8 @@ import { DESTAQUE_PADRAO } from "../../janelas/area-de-trabalho/usarTema";
 import { EditorFoto } from "../../componentes/FotoPerfil";
 import { SeletorDeFundo } from "./SeletorDeFundo";
 import { SecaoClaudeCode } from "./SecaoClaudeCode";
+import { EditorDeAtalhos } from "./EditorDeAtalhos";
+import { NATIVO } from "../../desktop/desktop";
 import { pedirSaudacao } from "../../janelas/ilha/animacoes/pedirSaudacao";
 import type { EstadoAgente, Rota } from "../../tipos";
 
@@ -618,7 +620,10 @@ export default function Configuracoes() {
     ),
     atalhos: (
       <>
-        <AvisoFaixa>{T.configuracoes.atalhosDica}</AvisoFaixa>
+        <AvisoFaixa>{NATIVO ? T.configuracoes.atalhosGlobais.dica : T.configuracoes.atalhosDica}</AvisoFaixa>
+        <h3 className="titulo-secao">{T.configuracoes.atalhosGlobais.titulo}</h3>
+        <EditorDeAtalhos />
+        <h3 className="titulo-secao">{T.configuracoes.atalhosGlobais.internos}</h3>
         <div className="lista">
           {T.configuracoes.listaAtalhos.map(([tecla, acao]) => (
             <div key={tecla} className="lista-item">

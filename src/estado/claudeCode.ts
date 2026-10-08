@@ -43,6 +43,29 @@ export interface PedidoDePermissao {
   recebidoEm: string;
   alteracao?: AlteracaoDeArquivo;
   sugestoes: RegraSugerida[];
+  perguntas?: PerguntaDoClaude[];
+}
+
+export interface PerguntaDoClaude {
+  pergunta: string;
+  titulo: string;
+  varias: boolean;
+  opcoes: { rotulo: string; descricao: string }[];
+}
+
+export function perguntasDaEntrada(ferramenta: string, entrada: Record<string, unknown>): PerguntaDoClaude[] | undefined {
+  if (ferramenta !== "AskUserQuestion" || !Array.isArray(entrada.questions)) return undefined;
+  const perguntas: PerguntaDoClaude[] = [];
+  for (const q of entrada.questions) {
+    const p = (q ?? {}) as Record<string, unknown>;
+    const opcoes = (Array.isArray(p.options) ? p.options : [])
+      .map((o) => (o ?? {}) as Record<string, unknown>)
+      .filter((o) => texto(o.label))
+      .map((o) => ({ rotulo: texto(o.label), descricao: texto(o.description) }));
+    if (!texto(p.question) || opcoes.length === 0) return undefined;
+    perguntas.push({ pergunta: texto(p.question), titulo: texto(p.header), varias: p.multiSelect === true, opcoes });
+  }
+  return perguntas.length ? perguntas : undefined;
 }
 
 const MAXIMO_PASSOS = 80;
@@ -268,7 +291,7 @@ export const useClaudeCode = create<EstadoClaude>((set, get) => ({
           const ferramenta = texto(d.tool_name) || "Tool";
           const entrada = (d.tool_input ?? {}) as Record<string, unknown>;
           sessao.estado = "aprovacao";
-          pedidos = [...pedidos.filter((p) => p.pedidoId !== e.pedidoId), { pedidoId: e.pedidoId, ferramentaDeCodigo: sessao.ferramenta, sessao: e.sessao, projeto: sessao.projeto, ferramenta, alvo: alvoDaFerramenta(entrada), entrada: formatarEntrada(entrada), recebidoEm: e.recebidoEm, alteracao: alteracaoDaFerramenta(ferramenta, entrada), sugestoes: sugestoesDoEvento(d) }];
+          pedidos = [...pedidos.filter((p) => p.pedidoId !== e.pedidoId), { pedidoId: e.pedidoId, ferramentaDeCodigo: sessao.ferramenta, sessao: e.sessao, projeto: sessao.projeto, ferramenta, alvo: alvoDaFerramenta(entrada), entrada: formatarEntrada(entrada), recebidoEm: e.recebidoEm, alteracao: alteracaoDaFerramenta(ferramenta, entrada), sugestoes: sugestoesDoEvento(d), perguntas: sessao.ferramenta === "claude" ? perguntasDaEntrada(ferramenta, entrada) : undefined }];
           break;
         }
         case "Notification": {

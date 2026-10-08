@@ -8,8 +8,9 @@ use serde::Deserialize;
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Emitter, Manager, RunEvent, WebviewUrl, WebviewWindow, WebviewWindowBuilder, WindowEvent};
-use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
+use tauri_plugin_global_shortcut::ShortcutState;
 
+mod atalhos;
 mod barra_windows;
 mod docks;
 mod janela_frente;
@@ -17,7 +18,7 @@ mod miniaturas;
 
 const PORTA: u16 = 47831;
 const ALTURA_ILHA: f64 = 720.0;
-const ALTURA_DOCK: f64 = 250.0;
+const ALTURA_DOCK: f64 = 400.0;
 
 #[derive(Deserialize, Clone, Copy)]
 struct Retangulo {
@@ -101,6 +102,17 @@ fn registrar_frente(app: &AppHandle) {
 }
 
 #[tauri::command]
+fn devolver_foco() {
+    let anterior = ULTIMA_FRENTE.load(Ordering::Relaxed);
+    if anterior != 0 {
+        let janela = windows::Win32::Foundation::HWND(anterior as *mut core::ffi::c_void);
+        unsafe {
+            let _ = windows::Win32::UI::WindowsAndMessaging::SetForegroundWindow(janela);
+        }
+    }
+}
+
+#[tauri::command]
 fn alternar_sistema(app: AppHandle) {
     if let Some(janela) = app.get_webview_window("sistema") {
         let visivel = janela.is_visible().unwrap_or(false) && !janela.is_minimized().unwrap_or(false);
@@ -163,6 +175,25 @@ fn mostrar(app: &AppHandle) {
         let _ = janela.show();
         let _ = janela.set_focus();
     }
+}
+
+fn dock_sob_o_cursor(app: &AppHandle) -> Option<WebviewWindow> {
+    let docks: Vec<(String, WebviewWindow)> = app.webview_windows().into_iter().filter(|(r, j)| docks::eh_dock(r) && j.is_visible().unwrap_or(false)).collect();
+    let cursor = app.cursor_position().ok();
+    let sob_o_cursor = cursor.and_then(|c| {
+        docks.iter().find(|(_, j)| {
+            let Ok(Some(m)) = j.current_monitor() else { return false };
+            let (p, t) = (m.position(), m.size());
+            c.x >= p.x as f64 && c.x < p.x as f64 + t.width as f64 && c.y >= p.y as f64 && c.y < p.y as f64 + t.height as f64
+        })
+    });
+    sob_o_cursor.or_else(|| docks.iter().find(|(r, _)| r == "dock")).or(docks.first()).map(|(_, j)| j.clone())
+}
+
+fn abrir_lupa(app: &AppHandle) {
+    let Some(dock) = dock_sob_o_cursor(app) else { return };
+    let _ = dock.set_focus();
+    let _ = dock.emit_to(dock.label(), "niko://lupa", ());
 }
 
 fn criar_sobreposta(app: &AppHandle, rotulo: &str, y: f64, x: f64, largura: f64, altura: f64) -> tauri::Result<WebviewWindow> {
@@ -355,16 +386,27 @@ pub fn run() {
         .plugin(tauri_plugin_autostart::init(tauri_plugin_autostart::MacosLauncher::LaunchAgent, Some(vec!["--escondido"])))
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
-                .with_handler(|app, _atalho, evento| {
-                    if evento.state() == ShortcutState::Pressed {
-                        mostrar(app);
-                        let _ = app.emit_to("sistema", "niko://captura", ());
+                .with_handler(|app, atalho, evento| {
+                    if evento.state() != ShortcutState::Pressed {
+                        return;
+                    }
+                    let Some(acao) = atalhos::acao_de(app, atalho) else { return };
+                    match acao.as_str() {
+                        "lupa" => abrir_lupa(app),
+                        "sistema" => alternar_sistema(app.clone()),
+                        "captura" => {
+                            mostrar(app);
+                            let _ = app.emit_to("sistema", "niko://captura", ());
+                        }
+                        "pedido" | "proximaAba" | "terminal" => atalhos::avisar_janela(app, "ilha", &acao),
+                        _ => atalhos::avisar_janela(app, "sistema", &acao),
                     }
                 })
                 .build(),
         )
         .manage(Estado { areas: Mutex::new(HashMap::new()), token: token.clone(), ponte: Mutex::new(None) })
         .manage(miniaturas::Miniaturas::default())
+        .manage(atalhos::Atalhos::default())
         .invoke_handler(tauri::generate_handler![
             area_interativa,
             token_ponte,
@@ -373,6 +415,7 @@ pub fn run() {
             alternar_sistema,
             docks::monitores,
             docks::definir_docks,
+            docks::definir_monitor_da_ilha,
             liberar_sistema_inicial,
             preparar_atualizacao,
             tempo_ocioso_ms,
@@ -381,7 +424,9 @@ pub fn run() {
             barra_windows::barra_windows,
             barra_windows::reservar_dock,
             janela_frente::frente_cobre_tela,
-            miniaturas::miniaturas_janelas
+            miniaturas::miniaturas_janelas,
+            atalhos::definir_atalhos,
+            devolver_foco
         ])
         .setup(move |app| {
             let handle = app.handle().clone();
@@ -463,7 +508,7 @@ pub fn run() {
                 })
                 .build(app)?;
 
-            let _ = app.global_shortcut().register("ctrl+alt+space");
+            atalhos::registrar_padrao(&handle);
             Ok(())
         })
         .build(tauri::generate_context!())

@@ -2,6 +2,9 @@ import { useEffect } from "react";
 import { claudeCode, ouvirClaudeCode, type EventoClaude } from "../../../ponte/claudeCode";
 import { frenteCobreAIlha, frenteEmTelaCheia, notificarWindows } from "../../../desktop/desktop";
 import { useClaudeCode } from "../../../estado/claudeCode";
+import { useHistoricoCodigo } from "../../../estado/historicoCodigo";
+import { resumoDaSemana, semanaPassada } from "../../../utilitarios/resumoSemanal";
+import { paraISO } from "../../../utilitarios/datas";
 import { avisoLigado, useIlha } from "../../../estado/ilha";
 import { useConfig } from "../../../estado/configuracoes";
 import { tocarSom } from "../../../ponte/sons";
@@ -38,6 +41,16 @@ export function devolverPendentesAoTerminal() {
   for (const p of useClaudeCode.getState().pedidos) devolverAoTerminal(p.pedidoId);
 }
 
+function avisarResumoDaSemana() {
+  if (!useHistoricoCodigo.persist.hasHydrated()) return;
+  const historico = useHistoricoCodigo.getState();
+  const semana = paraISO(semanaPassada(new Date()));
+  if (historico.ultimoResumoVisto === semana || useConfig.getState().naoPerturbe || !avisoLigado("codigo") || !abaLigada()) return;
+  if (resumoDaSemana(historico.historico, semanaPassada(new Date())).sessoes === 0) return;
+  historico.definir({ ultimoResumoVisto: semana });
+  useIlha.getState().revelar({ texto: T.ilha.claude.resumo.aviso, tipo: "info", marca: "claudecode", aba: "claude" }, 6000, "normal");
+}
+
 function reagir(e: EventoClaude) {
   const estado = useClaudeCode.getState();
   const sessao = estado.sessoes[e.sessao];
@@ -62,8 +75,9 @@ function reagir(e: EventoClaude) {
         }
         if (!useClaudeCode.getState().pedidos.some((p) => p.pedidoId === pedidoId)) return;
         useClaudeCode.getState().focar(e.sessao);
-        void tocarSom("approval", "avisos");
-        void notificarSeEscondida(T.ilha.claude.notificacao.permissao(nome, projeto));
+        const ehPergunta = e.dados.tool_name === "AskUserQuestion";
+        void tocarSom(ehPergunta ? "question" : "approval", "avisos");
+        void notificarSeEscondida(ehPergunta ? T.ilha.claude.notificacao.pergunta(nome, projeto) : T.ilha.claude.notificacao.permissao(nome, projeto));
         const ilhaAgora = useIlha.getState();
         if (ilhaAgora.estado === "escondida") ilhaAgora.definirEstado("compacta");
       });
@@ -127,6 +141,8 @@ export function usarClaudeCode(ligado: boolean) {
       (e) => {
         if (e.sessao) marcarInstalado(true);
         useClaudeCode.getState().aplicar(e);
+        useHistoricoCodigo.getState().registrar(e);
+        if (e.evento === "UserPromptSubmit") avisarResumoDaSemana();
         if (Date.parse(e.recebidoEm) >= conectadoEm - TOLERANCIA_MS) reagir(e);
       },
       (conectado) => {

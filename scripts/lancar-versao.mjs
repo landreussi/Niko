@@ -3,7 +3,7 @@ import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { homedir } from "node:os";
 import { fileURLToPath } from "node:url";
-import { lerArgumentos, lerVersoes, validarVersoes, validarTag, planejarVersao, sincronizarVersao, verificarPublicacao, validarArtefatos } from "./versao-release.mjs";
+import { lerArgumentos, lerVersoes, validarVersoes, validarTag, planejarVersao, sincronizarVersao, verificarPublicacao, validarArtefatos, montarManifesto } from "./versao-release.mjs";
 
 const raiz = join(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -44,18 +44,12 @@ async function lancar() {
     env: { ...process.env, TAURI_SIGNING_PRIVATE_KEY: chaveConfigurada || readFileSync(chave, "utf8"), TAURI_SIGNING_PRIVATE_KEY_PASSWORD: process.env.TAURI_SIGNING_PRIVATE_KEY_PASSWORD ?? "" },
   });
   validarVersoes(lerVersoes(raiz), versao);
-  const { pasta, instalador, assinatura } = validarArtefatos(raiz, versao, inicio);
-  const manifesto = {
-    version: versao,
-    notes: opcoes.notas || `Niko ${versao}`,
-    pub_date: new Date().toISOString(),
-    platforms: {
-      "windows-x86_64": { signature: assinatura, url: `https://github.com/vitorcgo/niko/releases/download/v${versao}/${instalador}` },
-    },
-  };
-  writeFileSync(join(pasta, "latest.json"), JSON.stringify(manifesto, null, 2));
+  const nsis = validarArtefatos(raiz, versao, inicio, "nsis");
+  const msi = validarArtefatos(raiz, versao, inicio, "msi");
+  const manifesto = montarManifesto(versao, opcoes.notas, nsis, msi);
+  writeFileSync(join(nsis.pasta, "latest.json"), JSON.stringify(manifesto, null, 2));
   if (opcoes.recompilar) console.log("Recompilação concluída. Isso não cria nem substitui uma release no GitHub.");
-  console.log(`\nPronto. Para a release v${versao} em github.com/vitorcgo/niko, os arquivos são:\n  ${join(pasta, instalador)}\n  ${join(pasta, "latest.json")}\nNada foi publicado automaticamente.`);
+  console.log(`\nPronto. Para a release v${versao} em github.com/vitorcgo/niko, os arquivos são:\n  ${join(nsis.pasta, nsis.instalador)}\n  ${join(msi.pasta, msi.instalador)}\n  ${join(nsis.pasta, "latest.json")}\nNada foi publicado automaticamente.`);
 }
 
 try {

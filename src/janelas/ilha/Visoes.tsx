@@ -9,7 +9,7 @@ import { useMidia, posicaoAtual, capaDaFaixa, fundoDaCapa } from "../../estado/m
 import { usePomodoro, restanteAtual, formatarRelogio } from "../../estado/pomodoro";
 import { useEstudos } from "../../estado/estudos";
 import { useOrganizacao } from "../../estado/organizacao";
-import { useComunicacao } from "../../estado/comunicacao";
+import { falhasNaoVistas, useComunicacao } from "../../estado/comunicacao";
 import { useAgentes } from "../../estado/agentes";
 import { useConfig, type SecaoHoje } from "../../estado/configuracoes";
 import { useInterface } from "../../estado/interface";
@@ -514,6 +514,7 @@ function SecaoHabitos() {
 export function VisaoConexoes() {
   const conexoes = useComunicacao((s) => s.conexoes);
   const eventos = useComunicacao((s) => s.eventosConexao);
+  const marcarFalhasVistas = useComunicacao((s) => s.marcarFalhasVistas);
   const abrirJanela = useInterface((s) => s.abrirJanelaConexao);
   const irPara = useInterface((s) => s.irPara);
   const [aberta, setAberta] = useState<string | null>(null);
@@ -534,7 +535,7 @@ export function VisaoConexoes() {
               <div className="ilha-conexoes-grade">
                 {lista.map((c, i) => {
                   const cor = `#${MARCAS[c.id].hex}`;
-                  const falhas = eventos.filter((e) => e.servico === c.id && e.tipo === "falha").length;
+                  const falhas = falhasNaoVistas(c, eventos);
                   return (
                     <motion.button
                       key={c.id}
@@ -548,6 +549,7 @@ export function VisaoConexoes() {
                       whileTap={{ scale: 0.96 }}
                       onClick={() => {
                         void tocarSom("blip");
+                        if (falhas > 0) marcarFalhasVistas(c.id);
                         setAberta(c.id);
                       }}
                     >

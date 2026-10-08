@@ -237,6 +237,11 @@
   color: var(--i-dim-2);
 }
 
+.ilha-acao[data-ativa] {
+  color: rgba(var(--i-rgb), 0.95);
+  background: rgba(var(--i-rgb), 0.1);
+}
+
 .ilha-acao:hover {
   background: rgba(var(--i-rgb), 0.07);
   color: var(--i-tinta);

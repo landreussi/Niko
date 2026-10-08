@@ -37,6 +37,24 @@ test("saudação na volta: só depois de 30 min longe ou do PC dormir, e quando 
   assert.deepEqual(voltouDepoisDeAusencia(minuto, 5 * minuto, true), { ausente: true, voltou: false });
 });
 
+test("volta ao PC: saúda no primeiro retorno do dia, só avisa depois de muito tempo fora e nunca atrapalha", async () => {
+  const { reagirAVolta } = await servidor.ssrLoadModule("/src/janelas/ilha/animacoes/usarSaudacaoDiaria.ts");
+  const hora = 3_600_000;
+  const base = { jaSaudouHoje: false, ausenciaMs: hora, naoPerturbe: false, ilhaEmUso: false };
+  assert.equal(reagirAVolta(base), "saudar");
+  assert.equal(reagirAVolta({ ...base, naoPerturbe: true }), "nada");
+  assert.equal(reagirAVolta({ ...base, ilhaEmUso: true }), "esperar");
+  assert.equal(reagirAVolta({ ...base, jaSaudouHoje: true }), "nada");
+  assert.equal(reagirAVolta({ ...base, jaSaudouHoje: true, ausenciaMs: 3 * hora }), "boasVindas");
+});
+
+test("subtítulo da saudação diz o que tem para hoje", async () => {
+  const { T } = await servidor.ssrLoadModule("/src/textos/textos.ts");
+  assert.equal(T.ilha.saudacao.hoje({ tarefas: 3, habitos: 1 }), "Hoje: 3 tarefas e 1 hábito.");
+  assert.equal(T.ilha.saudacao.hoje({ tarefas: 1, habitos: 0 }), "Hoje: 1 tarefa.");
+  assert.equal(T.ilha.saudacao.hoje({ tarefas: 0, habitos: 0 }), T.ilha.saudacao.equipe);
+});
+
 test("rolar sobre as abas anda uma aba por vez e para nas pontas", () => {
   const abas = ["hoje", "conexoes", "chat"];
   assert.equal(abaVizinha(abas, "hoje", 1), "conexoes");

@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { homedir } from "node:os";
 import { randomUUID } from "node:crypto";
 import { lerSegredo, gravarSegredo, apagarSegredo } from "./segredos";
+import { criarFiltroDePensamento } from "./pensamento";
 
 export type TipoProvedor = "anthropic" | "openai_compativel";
 
@@ -318,6 +319,7 @@ export async function* conversar(provedorId: string, sistema: string, mensagens:
     let teveTexto = false;
     let teveRaciocinio = false;
     let cortado = false;
+    const pensamento = criarFiltroDePensamento();
     armar(60000);
     for await (const dado of linhasSse(resposta.body)) {
       armar(60000);
@@ -357,8 +359,12 @@ export async function* conversar(provedorId: string, sistema: string, mensagens:
       } else {
         const escolha = (json.choices as { finish_reason?: string | null; delta?: { content?: string; reasoning_content?: string; reasoning?: string; tool_calls?: { index?: number; id?: string; function?: { name?: string; arguments?: string } }[] } }[] | undefined)?.[0];
         if (escolha?.delta?.content) {
-          yield { tipo: "texto", texto: escolha.delta.content };
-          teveTexto = true;
+          const visivel = pensamento.receber(escolha.delta.content);
+          if (pensamento.pensou()) teveRaciocinio = true;
+          if (visivel) {
+            yield { tipo: "texto", texto: visivel };
+            teveTexto = true;
+          }
         }
         if (escolha?.delta?.reasoning_content || escolha?.delta?.reasoning) teveRaciocinio = true;
         if (escolha?.finish_reason === "length") cortado = true;
@@ -376,6 +382,11 @@ export async function* conversar(provedorId: string, sistema: string, mensagens:
           saida = uso.completion_tokens ?? saida;
         }
       }
+    }
+    const restoVisivel = pensamento.terminar();
+    if (restoVisivel) {
+      yield { tipo: "texto", texto: restoVisivel };
+      teveTexto = true;
     }
     for (const [indice, c] of [...chamadasCompativel.entries()].sort((a, b) => a[0] - b[0])) {
       if (c.nome) yield { tipo: "ferramenta", chamada: { id: c.id || `chamada_${indice}_${randomUUID().slice(0, 6)}`, nome: c.nome, argumentos: lerArgumentos(c.json) } };

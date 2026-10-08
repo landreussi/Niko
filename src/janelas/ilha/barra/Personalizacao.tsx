@@ -11,6 +11,7 @@ import { FUNDO_DESTAQUE, hexValido, misturar, textoSobre } from "../../../utilit
 import { T } from "../../../textos/textos";
 import { usarMonitores } from "../../../desktop/desktop";
 import { TODOS_OS_MONITORES } from "../../dock/monitores";
+import { BUSCADORES, type Buscador } from "../../../utilitarios/buscaApps";
 
 const MONITOR_PRINCIPAL = "principal";
 
@@ -88,6 +89,18 @@ export function Personalizacao({ topo, aoFechar }: { topo: number; aoFechar: () 
         { valor: "secundario", rotulo: P.monitores.secundario },
       ];
 
+  const monitorPrincipal = monitores.find((m) => m.principal);
+  const monitorDaIlha = variosMonitores && monitores.some((m) => m.nome === cfg.ilha.monitor && !m.principal) ? cfg.ilha.monitor : MONITOR_PRINCIPAL;
+  const opcoesDaIlha = variosMonitores
+    ? [
+        { valor: MONITOR_PRINCIPAL, rotulo: monitores.length === 2 ? P.monitores.principal : P.monitores.numero(monitorPrincipal?.numero ?? 1, true) },
+        ...monitores.filter((m) => !m.principal).map((m) => ({ valor: m.nome, rotulo: monitores.length === 2 ? P.monitores.secundario : P.monitores.numero(m.numero, false) })),
+      ]
+    : [
+        { valor: MONITOR_PRINCIPAL, rotulo: P.monitores.principal },
+        { valor: "secundario", rotulo: P.monitores.secundario },
+      ];
+
   const aplicarCor = (mudanca: { fundo?: string; opacidade?: number }) => {
     cfg.definirIlha(mudanca);
     cfg.definir({ dock: { ...useConfig.getState().dock, ...mudanca } });
@@ -147,6 +160,9 @@ export function Personalizacao({ topo, aoFechar }: { topo: number; aoFechar: () 
         <Linha rotulo={P.tamanhoDaIlha}>
           <Escolha rotulo={P.tamanhoDaIlha} valor={cfg.ilha.tamanho} aoMudar={(tamanho) => cfg.definirIlha({ tamanho })} opcoes={(["pequena", "media", "grande"] as const).map((t) => ({ valor: t, rotulo: T.configuracoes.tamanhos[t] }))} />
         </Linha>
+        <Linha rotulo={P.monitorDaIlha}>
+          <Escolha desativada={!variosMonitores} rotulo={P.monitorDaIlha} valor={monitorDaIlha} aoMudar={(monitor) => cfg.definirIlha({ monitor: monitor === MONITOR_PRINCIPAL ? "" : monitor })} opcoes={opcoesDaIlha} />
+        </Linha>
         <Linha rotulo={P.repouso}>
           <Escolha<RepousoIlha> grade rotulo={P.repouso} valor={cfg.ilha.repouso} aoMudar={(repouso) => cfg.definirIlha({ repouso })} opcoes={(Object.keys(T.configuracoes.repousos) as RepousoIlha[]).map((r) => ({ valor: r, rotulo: T.configuracoes.repousos[r] }))} />
         </Linha>
@@ -177,6 +193,9 @@ export function Personalizacao({ topo, aoFechar }: { topo: number; aoFechar: () 
               {P.monitores.naoReconhecido}
             </span>
           )}
+        </Linha>
+        <Linha rotulo={P.buscador}>
+          <Escolha<Buscador> rotulo={P.buscador} valor={cfg.dock.buscador} aoMudar={(buscador) => cfg.definir({ dock: { ...useConfig.getState().dock, buscador } })} opcoes={BUSCADORES.map((b) => ({ valor: b, rotulo: P.buscadores[b] }))} />
         </Linha>
       </Grupo>
       <div className="ilha-personalizar-rodape">

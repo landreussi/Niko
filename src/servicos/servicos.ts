@@ -235,6 +235,7 @@ async function acertarConexoes() {
 }
 
 const proximaLeitura = new Map<ServicoId, number>();
+const LEITURA_COM_CI_RODANDO_MS = 60_000;
 const emLeitura = new Set<ServicoId>();
 const vistas = new Map<ServicoId, Set<string>>();
 
@@ -245,7 +246,13 @@ export async function atualizarConexaoAgora(id: ServicoId, forcar = true) {
   try {
     const dados = await conexoesPonte.ler(id, forcar);
     com.atualizarConexao(id, { ultimaAtualizacao: new Date().toISOString(), resumo: resumoDe(id, dados), status: "conectado" });
-    if (id === "github") guardarCommits((dados as DadosGithub).commitsPorDia ?? {});
+    if (id === "github") {
+      const g = dados as DadosGithub;
+      guardarCommits(g.commitsPorDia ?? {});
+      if (g.actions.some((a) => a.status === "rodando") || g.prs.some((p) => p.ci === "rodando")) {
+        proximaLeitura.set(id, Math.min(proximaLeitura.get(id) ?? Infinity, Date.now() + LEITURA_COM_CI_RODANDO_MS));
+      }
+    }
     const ocorrencias = ocorrenciasDe(id, dados);
     const conhecidas = vistas.get(id);
     if (!conhecidas) {

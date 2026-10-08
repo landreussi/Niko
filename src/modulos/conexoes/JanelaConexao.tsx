@@ -60,7 +60,7 @@ function Estado({ valor }: { valor: string }) {
     ? "sucesso"
     : ["falhou", "erro", "devolvido", "spam", "cancelado"].includes(valor)
       ? "erro"
-      : ["rodando", "construindo", "a_caminho", "pendente", "mudancas", "reembolsado"].includes(valor)
+      : ["rodando", "construindo", "a_caminho", "pendente", "mudancas", "reembolsado", "revisar"].includes(valor)
         ? "alerta"
         : "";
   return <span className={`etiqueta ${tom ? `etiqueta-${tom}` : ""}`}>{E[valor] ?? valor}</span>;
@@ -157,7 +157,8 @@ function ConteudoServico({ servico, aba, filtro, dados }: { servico: ServicoId; 
         { titulo: C.titulo, render: (l) => `#${l.numero} ${l.titulo}`, texto: (l) => l.titulo },
         { titulo: C.repo, render: (l) => l.repo, texto: (l) => l.repo },
         { titulo: C.autor, render: (l) => l.autor, texto: (l) => l.autor },
-        { titulo: C.revisao, render: (l) => <Estado valor={l.revisao} /> },
+        { titulo: C.revisao, render: (l) => <Estado valor={l.tipo === "revisar" ? "revisar" : l.revisao} /> },
+        { titulo: C.ci, render: (l) => (l.tipo === "revisar" || !l.ci ? "" : <Estado valor={l.ci} />) },
         { titulo: C.data, render: (l) => horarioRelativo(l.data), direita: true },
       ]} />;
     if (aba === "issues")
@@ -527,6 +528,9 @@ export function JanelaConexao({ janela }: { janela: EstadoJanela }) {
   useEffect(() => {
     if (ativaAgora) void buscar(false);
   }, [ativaAgora, buscar]);
+  useEffect(() => {
+    if (!janela.minimizada) useComunicacao.getState().marcarFalhasVistas(janela.id);
+  }, [janela.id, janela.minimizada]);
   const aoMudarGeometria = useCallback((g: EstadoJanela["geometria"]) => atualizarJanela(janela.id, { geometria: g }), [atualizarJanela, janela.id]);
 
   if (!conexao || janela.minimizada) return null;

@@ -21,7 +21,8 @@
     "bundle":  {
                    "active":  true,
                    "targets":  [
-                                   "nsis"
+                                   "nsis",
+                                   "msi"
                                ],
                    "icon":  [
                                 "icons/32x32.png",
@@ -42,7 +43,11 @@
                                                                   "PortugueseBR"
                                                               ],
                                                 "displayLanguageSelector":  false
-                                            }
+                                            },
+                                   "wix":  {
+                                               "language":  "pt-BR",
+                                               "upgradeCode":  "ac8ba0fd-ee33-50ad-a11c-dd31ff03d717"
+                                           }
                                },
                    "createUpdaterArtifacts":  true
                },

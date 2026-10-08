@@ -122,6 +122,22 @@ export async function versaoDoApp(): Promise<string> {
   }
 }
 
+export interface ResultadoDoAtalho {
+  acao: string;
+  teclas: string;
+  situacao: string;
+}
+
+export function definirAtalhosGlobais(lista: { acao: string; teclas: string }[]) {
+  return invocar<ResultadoDoAtalho[]>("definir_atalhos", { lista });
+}
+
+export async function ouvirAtalho(fn: (acao: string) => void): Promise<() => void> {
+  if (!NATIVO || !ROTULO) return () => undefined;
+  const { listen } = await import("@tauri-apps/api/event");
+  return listen<string>("niko://atalho", (e) => fn(e.payload), { target: { kind: "WebviewWindow", label: ROTULO } });
+}
+
 export function informarAreaInterativa(retangulos: { x: number; y: number; w: number; h: number }[]) {
   return invocar("area_interativa", { janela: ROTULO, retangulos });
 }
@@ -131,10 +147,10 @@ export async function janelaAtual() {
   return getCurrentWindow();
 }
 
-export async function ouvirEvento(nome: string, fn: () => void): Promise<() => void> {
+export async function ouvirEvento(nome: string, fn: () => void, soDestaJanela = false): Promise<() => void> {
   if (!NATIVO) return () => undefined;
   const { listen } = await import("@tauri-apps/api/event");
-  return listen(nome, fn);
+  return listen(nome, fn, soDestaJanela && ROTULO ? { target: { kind: "WebviewWindow", label: ROTULO } } : undefined);
 }
 
 function enviarPelaPonte(base: string, token: string | null) {
@@ -225,7 +241,7 @@ export function usarCursorFora(fn: () => void) {
     if (!NATIVO) return;
     let desligar: () => void = () => undefined;
     let ativo = true;
-    void ouvirEvento("niko://cursor-fora", fn).then((f) => {
+    void ouvirEvento("niko://cursor-fora", fn, true).then((f) => {
       if (ativo) desligar = f;
       else f();
     });
@@ -261,6 +277,14 @@ export interface MonitorDoNiko {
 
 export function definirDocks(ligado: boolean, escolha: string) {
   return invocar("definir_docks", { ligado, escolha });
+}
+
+export function devolverFoco() {
+  return invocar("devolver_foco");
+}
+
+export function definirMonitorDaIlha(escolha: string) {
+  return invocar("definir_monitor_da_ilha", { escolha });
 }
 
 export function usarMonitores(): MonitorDoNiko[] {

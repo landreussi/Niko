@@ -15,6 +15,7 @@ static LIGADO: AtomicBool = AtomicBool::new(false);
 static ESCOLHA: Mutex<String> = Mutex::new(String::new());
 static ASSINATURA: Mutex<String> = Mutex::new(String::new());
 static SINCRONIZANDO: Mutex<()> = Mutex::new(());
+static MONITOR_DA_ILHA: Mutex<String> = Mutex::new(String::new());
 
 #[derive(Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -87,9 +88,19 @@ pub fn posicionar(janela: &WebviewWindow, monitor: &Monitor) {
     let _ = janela.set_position(destino);
 }
 
+pub fn monitor_da_ilha(escolha: &str, lista: &[MonitorDoNiko]) -> usize {
+    lista.iter().position(|m| !escolha.is_empty() && m.nome == escolha).unwrap_or(0)
+}
+
 pub fn posicionar_ilha(app: &AppHandle) {
     let Some(janela) = app.get_webview_window("ilha") else { return };
-    let Some((monitor, _)) = monitores_ordenados(app).into_iter().next() else { return };
+    let escolha = MONITOR_DA_ILHA.lock().map(|e| e.clone()).unwrap_or_default();
+    let mut monitores = monitores_ordenados(app);
+    if monitores.is_empty() {
+        return;
+    }
+    let infos: Vec<MonitorDoNiko> = monitores.iter().map(|(_, i)| i.clone()).collect();
+    let (monitor, _) = monitores.swap_remove(monitor_da_ilha(&escolha, &infos));
     let altura = (ALTURA_ILHA * monitor.scale_factor()).round() as u32;
     let destino = *monitor.position();
     let _ = janela.set_position(destino);
@@ -169,6 +180,14 @@ pub async fn definir_docks(app: AppHandle, ligado: bool, escolha: String) {
         *atual = escolha.chars().take(200).collect();
     }
     sincronizar(&app);
+}
+
+#[tauri::command]
+pub fn definir_monitor_da_ilha(app: AppHandle, escolha: String) {
+    if let Ok(mut atual) = MONITOR_DA_ILHA.lock() {
+        *atual = escolha.chars().take(200).collect();
+    }
+    posicionar_ilha(&app);
 }
 
 pub fn vigiar_monitores(app: AppHandle) {

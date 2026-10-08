@@ -58,6 +58,7 @@ interface EstadoComunicacao extends DadosComunicacao {
   esquecer: (id: string) => void;
   atualizarConexao: (id: ServicoId, parcial: Partial<Conexao>) => void;
   registrarEventoConexao: (evento: Omit<EventoConexao, "id" | "data">) => void;
+  marcarFalhasVistas: (id: ServicoId) => void;
   definirUsoIa: (uso: UsoIa[]) => void;
   substituir: (dados: Partial<DadosComunicacao>) => void;
 }
@@ -113,6 +114,7 @@ export const useComunicacao = create<EstadoComunicacao>()(
         set((s) => ({ memoria: [...s.memoria, { id: gerarId(), texto: texto.trim().slice(0, 300), agenteId, origem, data: new Date().toISOString() }] })),
       esquecer: (id) => set((s) => ({ memoria: s.memoria.filter((m) => m.id !== id) })),
       atualizarConexao: (id, parcial) => set((s) => ({ conexoes: s.conexoes.map((c) => (c.id === id ? { ...c, ...parcial } : c)) })),
+      marcarFalhasVistas: (id) => set((s) => ({ conexoes: s.conexoes.map((c) => (c.id === id ? { ...c, falhasVistasEm: new Date().toISOString() } : c)) })),
       registrarEventoConexao: (evento) =>
         set((s) => ({ eventosConexao: [{ ...evento, id: gerarId(), data: new Date().toISOString() }, ...s.eventosConexao].slice(0, 200) })),
       definirUsoIa: (usoIa) => set({ usoIa }),
@@ -129,3 +131,8 @@ export const useComunicacao = create<EstadoComunicacao>()(
     },
   ),
 );
+
+export function falhasNaoVistas(conexao: Conexao, eventos: EventoConexao[]): number {
+  const desde = conexao.falhasVistasEm ? Date.parse(conexao.falhasVistasEm) : 0;
+  return eventos.filter((e) => e.servico === conexao.id && e.tipo === "falha" && Date.parse(e.data) > desde).length;
+}

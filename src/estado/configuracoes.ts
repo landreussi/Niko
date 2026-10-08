@@ -4,6 +4,8 @@ import { armazenamento, chave } from "../ponte/armazenamento";
 import type { AgenteId, CartaoConfirmacao, Rota } from "../tipos";
 import type { CategoriaSom } from "../ponte/sons";
 import { FUNDO_DESTAQUE, hexValido, misturar } from "../utilitarios/cores";
+import type { Buscador } from "../utilitarios/buscaApps";
+import { ATALHOS_PADRAO, atalhosComPadrao, type AcaoGlobal } from "../utilitarios/atalhos";
 
 const DESTAQUE_ESCURO_PADRAO = "#a78bfa";
 
@@ -105,6 +107,7 @@ export interface ConfigIlha {
   notificacoes: "todas" | "importantes" | "nenhuma";
   laterais: boolean;
   iconesDaBarra: Record<IconeDaBarra, boolean>;
+  monitor: string;
 }
 
 export type CategoriaDeAviso = "lembretes" | "habitos" | "estudos" | "financas" | "conexoes" | "codigo" | "conquistas" | "consumo";
@@ -129,7 +132,8 @@ export interface Configuracoes {
   gruposFechados: string[];
   blocosInicio: { id: BlocoInicio; visivel: boolean }[];
   ilha: ConfigIlha;
-  dock: { ativo: boolean; modo: ModoBorda; favoritos: Rota[]; atalhos: AtalhoDock[]; ampliar: boolean; fundo: string; opacidade: number; monitores: string };
+  dock: { ativo: boolean; modo: ModoBorda; favoritos: Rota[]; atalhos: AtalhoDock[]; ampliar: boolean; fundo: string; opacidade: number; monitores: string; buscador: Buscador };
+  atalhosGlobais: Record<AcaoGlobal, string>;
   pomodoro: { foco: number; curta: number; longa: number; ciclos: number; autoProxima: boolean; tique: boolean };
   agua: { meta: number; copo: number };
   sons: { ligado: boolean; volume: number; categorias: Record<CategoriaSom, boolean> };
@@ -183,8 +187,10 @@ export const CONFIG_PADRAO: Configuracoes = {
     notificacoes: "importantes",
     laterais: true,
     iconesDaBarra: { rede: true, volume: true, bateria: true },
+    monitor: "",
   },
-  dock: { ativo: true, modo: "inteligente", favoritos: ["chat", "journal", "estudos", "financas", "calendario"], atalhos: [], ampliar: true, fundo: FUNDO_PADRAO_DAS_BORDAS, opacidade: 1, monitores: "todos" },
+  dock: { ativo: true, modo: "inteligente", favoritos: ["chat", "journal", "estudos", "financas", "calendario"], atalhos: [], ampliar: true, fundo: FUNDO_PADRAO_DAS_BORDAS, opacidade: 1, monitores: "todos", buscador: "google" },
+  atalhosGlobais: ATALHOS_PADRAO,
   pomodoro: { foco: 25, curta: 5, longa: 15, ciclos: 4, autoProxima: false, tique: false },
   agua: { meta: 2000, copo: 250 },
   sons: {
@@ -309,6 +315,7 @@ export const useConfig = create<Configuracoes & AcoesConfig>()(
             ],
           },
           dock: { ...CONFIG_PADRAO.dock, ...salvo.dock },
+          atalhosGlobais: atalhosComPadrao(salvo.atalhosGlobais),
           pomodoro: { ...CONFIG_PADRAO.pomodoro, ...salvo.pomodoro },
           agua: { ...CONFIG_PADRAO.agua, ...salvo.agua },
           sons: { ...CONFIG_PADRAO.sons, ...salvo.sons },

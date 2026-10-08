@@ -410,6 +410,7 @@ export interface Conexao {
   ultimaAtualizacao?: string;
   resumo: string;
   fixadaNaIlha: boolean;
+  falhasVistasEm?: string;
 }
 
 export interface UsoIa {

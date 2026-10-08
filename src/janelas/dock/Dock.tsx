@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { X } from "lucide-react";
-import { NATIVO, ROTULO, usarAreaInterativa, usarCursorFora, usarAppsAbertos, agirNaJanela, alternarSistemaNativo, mostrarMiniaturas, ocultarBarraDoWindows, reservarEspacoDoDock, usarEstadoDaFrente, definirDocks, usarMonitores, type AppAberto } from "../../desktop/desktop";
+import { Search, X } from "lucide-react";
+import { NATIVO, ROTULO, usarAreaInterativa, usarCursorFora, usarAppsAbertos, agirNaJanela, alternarSistemaNativo, mostrarMiniaturas, ocultarBarraDoWindows, reservarEspacoDoDock, usarEstadoDaFrente, definirDocks, usarMonitores, ouvirEvento, devolverFoco, type AppAberto } from "../../desktop/desktop";
+import { BuscaApps } from "./BuscaApps";
 import { cadaDockMostraSeusApps, dockAtivoNoMonitor, meuMonitor, TODOS_OS_MONITORES } from "./monitores";
 import { agruparApps, nomeDoGrupo } from "./grupos";
 import { AnimatePresence, motion, useMotionValue, useSpring, useTransform, type MotionValue } from "motion/react";
@@ -241,7 +242,15 @@ export function Dock() {
   const alerta = useAgentes((s) => s.alertas[0]);
   const mouseX = useMotionValue(Infinity);
   const [perto, setPerto] = useState(false);
-  usarAreaInterativa([".dock", ".dock-gatilho", ".dock-previa"]);
+  const [buscaAberta, setBuscaAberta] = useState(false);
+  const buscaAbertaAgora = useRef(false);
+  buscaAbertaAgora.current = buscaAberta;
+  const fecharBusca = useCallback(() => setBuscaAberta(false), []);
+  const alternarBusca = useCallback(() => {
+    if (buscaAbertaAgora.current) void devolverFoco();
+    setBuscaAberta(!buscaAbertaAgora.current);
+  }, []);
+  usarAreaInterativa([".dock", ".dock-gatilho", ".dock-previa", ".dock-busca"]);
   usarCursorFora(useCallback(() => setPerto(false), []));
   const caixa = useRef<HTMLDivElement>(null);
 
@@ -280,12 +289,29 @@ export function Dock() {
     if (frente.telaCheia) setPerto(false);
   }, [frente.telaCheia]);
 
+  useEffect(() => {
+    let vivo = true;
+    let desligar: () => void = () => undefined;
+    void ouvirEvento("niko://lupa", alternarBusca, true).then((f) => {
+      if (vivo) desligar = f;
+      else f();
+    });
+    return () => {
+      vivo = false;
+      desligar();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!ativoAqui || frente.telaCheia) setBuscaAberta(false);
+  }, [ativoAqui, frente.telaCheia]);
+
   if (!ativoAqui || frente.telaCheia) return null;
 
   const largura = 90 + (janelas.length + (aberto ? 1 : 0)) * 50;
   const area = { x: (window.innerWidth - largura) / 2, y: window.innerHeight - ALTURA_DOCK, w: largura, h: ALTURA_DOCK };
   const coberto = cfg.modo === "inteligente" && (NATIVO ? frente.cobre : alguemCobre(area));
-  const escondido = (cfg.modo === "esconder" || coberto) && !perto;
+  const escondido = (cfg.modo === "esconder" || coberto) && !perto && !buscaAberta;
   const sistemaNaFrente = aberto && !minimizado && zSistema === proximoZ - 1;
   const fundo = aparencia.fundo;
   const IconeAba = ICONE_ROTA[rota];
@@ -342,6 +368,19 @@ export function Dock() {
         <ItemDock mouseX={mouseX} ampliar={cfg.ampliar} rotulo={T.dock.abrir} aoClicar={abrirNiko} alerta={alerta ? COR_AGENTE[alerta.agenteId] : undefined}>
           <span className="dock-logo"><LogoNiko tamanho={28} /></span>
         </ItemDock>
+        <ItemDock
+          mouseX={mouseX}
+          ampliar={cfg.ampliar}
+          rotulo={T.dock.busca.botao}
+          estado={buscaAberta ? "aberto" : undefined}
+          aoClicar={() => {
+            void tocarSom(buscaAberta ? "close" : "open");
+            alternarBusca();
+          }}
+        >
+          <span className="dock-icone"><Search size={19} /></span>
+        </ItemDock>
+        {buscaAberta && <BuscaApps aoFechar={fecharBusca} />}
         {NATIVO ? (
           <AppsDoWindows mouseX={mouseX} ampliar={cfg.ampliar} ativo={!escondido} monitor={monitorDosApps} />
         ) : (

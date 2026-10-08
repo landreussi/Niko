@@ -2256,6 +2256,18 @@
   margin-top: auto;
 }
 
+.inicio-revisoes-grafico {
+  gap: 4px;
+  flex: 1 1 auto;
+  min-height: 84px;
+}
+
+.inicio-revisoes-grafico > .barras-v {
+  flex: 1 1 auto;
+  min-height: 64px;
+  max-height: 260px;
+}
+
 .inicio-planos {
   display: grid;
   gap: 12px;

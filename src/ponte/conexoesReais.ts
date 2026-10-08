@@ -14,7 +14,7 @@ export interface DadosGithub {
   usuario: string;
   commitsPorDia?: Record<string, number>;
   repositorios: { nome: string; linguagem: string; estrelas: number; atualizado: string; privado: boolean }[];
-  prs: { titulo: string; repo: string; numero: number; autor: string; revisao: "pendente" | "aprovado" | "mudancas"; data: string }[];
+  prs: { titulo: string; repo: string; numero: number; autor: string; revisao: "pendente" | "aprovado" | "mudancas"; data: string; url?: string; tipo?: "meu" | "revisar"; ci?: "sucesso" | "falhou" | "rodando" | "nenhum" }[];
   issues: { titulo: string; repo: string; numero: number; rotulos: string[]; data: string }[];
   actions: { workflow: string; repo: string; branch: string; status: "sucesso" | "falhou" | "rodando"; duracao: number; data: string }[];
 }
@@ -183,8 +183,16 @@ export function ocorrenciasDe<S extends ServicoId>(servico: S, dados: DadosServi
   switch (servico) {
     case "stripe":
       return (d as DadosStripe).cobrancas.slice(0, 10).map((c) => ({ chave: c.id, texto: c.status === "falhou" ? O.cobrancaFalhou(nome, c.cliente) : O.cobrancaPaga(nome, c.cliente), tipo: c.status === "falhou" ? "falha" : "sucesso", data: c.data }));
-    case "github":
-      return (d as DadosGithub).actions.filter((a) => a.status !== "rodando").map((a) => ({ chave: `${a.repo}-${a.workflow}-${a.data}`, texto: a.status === "falhou" ? O.actionFalhou(a.repo, a.workflow) : O.actionOk(a.repo, a.workflow), tipo: a.status === "falhou" ? "falha" : "sucesso", data: a.data }));
+    case "github": {
+      const g = d as DadosGithub;
+      const agora = new Date().toISOString();
+      const actions: OcorrenciaConexao[] = g.actions.filter((a) => a.status !== "rodando").map((a) => ({ chave: `${a.repo}-${a.workflow}-${a.data}`, texto: a.status === "falhou" ? O.actionFalhou(a.repo, a.workflow) : O.actionOk(a.repo, a.workflow), tipo: a.status === "falhou" ? "falha" : "sucesso", data: a.data }));
+      const ciDosPrs: OcorrenciaConexao[] = g.prs
+        .filter((p) => p.tipo === "meu" && (p.ci === "falhou" || p.ci === "sucesso"))
+        .map((p) => ({ chave: `pr-ci-${p.repo}-${p.numero}-${p.ci}`, texto: p.ci === "falhou" ? O.prCiFalhou(p.repo, p.numero) : O.prCiOk(p.repo, p.numero), tipo: p.ci === "falhou" ? "falha" : "sucesso", data: agora }));
+      const revisoes: OcorrenciaConexao[] = g.prs.filter((p) => p.tipo === "revisar").map((p) => ({ chave: `pr-revisar-${p.repo}-${p.numero}`, texto: O.revisaoPedida(p.autor, p.repo, p.numero), tipo: "sucesso", data: p.data }));
+      return [...actions, ...ciDosPrs, ...revisoes];
+    }
     case "vercel":
       return (d as DadosVercel).deploys.filter((x) => x.estado === "pronto" || x.estado === "erro").map((x) => ({ chave: `${x.projeto}-${x.data}`, texto: x.estado === "erro" ? O.deployFalhou(x.projeto) : O.deployPronto(x.projeto), tipo: x.estado === "erro" ? "falha" : "sucesso", data: x.data }));
     case "resend":

@@ -2,9 +2,11 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import { closeSync, copyFileSync, existsSync, mkdirSync, openSync, readFileSync, readSync, renameSync, statSync, writeFileSync } from "node:fs";
 import { spawn } from "node:child_process";
 import { homedir } from "node:os";
-import { isAbsolute, join } from "node:path";
+import { isAbsolute, join, relative, resolve } from "node:path";
 import { randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import { pastaDados } from "./ia";
+import { donoDaConexao, focarJanelaDoProcesso } from "./controleRapido";
+import { CAMINHO_DA_STATUS, anteriorDaStatus, caminhoDoScript, ehStatusDoNiko, garantirScript, receberStatus, statusDoNiko } from "./statusClaude";
 
 export const CABECALHO_SEGREDO = "x-niko-gancho";
 const CAMINHO_EVENTO = "/ponte/claude/evento";
@@ -12,7 +14,7 @@ const LIMITE_CORPO = 2 * 1024 * 1024;
 const LIMITE_CAMPO = 4000;
 const LIMITE_RESPOSTA_FINAL = 12000;
 const ESPERA_DECISAO_MS = 110_000;
-const TEMPO_HOOK_RAPIDO = 5;
+const TEMPO_HOOK_RAPIDO = 2;
 const TEMPO_HOOK_DECISAO = 120;
 const MAXIMO_HISTORICO = 300;
 const PROFUNDIDADE_MAXIMA = 6;
@@ -35,7 +37,7 @@ const CAMPOS_DESCARTADOS = ["tool_response", "tool_result", "transcript_path", "
 const FERRAMENTAS_QUE_DECIDEM = new Set<FerramentaDeCodigo>(["claude", "codex", "copilot"]);
 const MENSAGEM_DE_NEGACAO = "Negado pelo usuário no Niko.";
 
-export type FerramentaDeCodigo = "claude" | "copilot" | "codex" | "opencode" | "antigravity" | "kimi";
+export type FerramentaDeCodigo = "claude" | "copilot" | "codex" | "opencode" | "antigravity" | "kimi" | "gemini" | "amp";
 
 export interface EventoClaude {
   id: string;
@@ -59,9 +61,48 @@ interface Pendente {
   temporizador: NodeJS.Timeout;
   sessao: string;
   sugestoes: RegraSugerida[];
+  pergunta: ReturnType<typeof perguntasDoPedido>;
 }
 
 const projetosConhecidos = new Set<string>();
+const LIMITE_RESPOSTA = 2000;
+
+interface PerguntaDoClaude {
+  question: string;
+  multiSelect: boolean;
+  rotulos: string[];
+}
+
+export function perguntasDoPedido(dados: Record<string, unknown>): { entrada: Record<string, unknown>; perguntas: PerguntaDoClaude[] } | null {
+  if (dados.tool_name !== "AskUserQuestion" || !dados.tool_input || typeof dados.tool_input !== "object") return null;
+  const entrada = dados.tool_input as Record<string, unknown>;
+  if (!Array.isArray(entrada.questions) || entrada.questions.length === 0) return null;
+  const perguntas: PerguntaDoClaude[] = [];
+  for (const q of entrada.questions) {
+    const p = q as { question?: unknown; multiSelect?: unknown; options?: unknown };
+    if (typeof p?.question !== "string" || !p.question || !Array.isArray(p.options)) return null;
+    const rotulos = p.options.map((o) => (o as { label?: unknown })?.label).filter((l): l is string => typeof l === "string" && l.length > 0);
+    if (rotulos.length === 0) return null;
+    perguntas.push({ question: p.question, multiSelect: p.multiSelect === true, rotulos });
+  }
+  return { entrada, perguntas };
+}
+
+export function respostasValidas(perguntas: PerguntaDoClaude[], respostas: unknown): Record<string, string> {
+  if (!Array.isArray(respostas) || respostas.length !== perguntas.length) throw new Error("respostas_invalidas");
+  const saida: Record<string, string> = {};
+  perguntas.forEach((p, i) => {
+    const indices = respostas[i];
+    if (!Array.isArray(indices) || indices.length === 0 || (!p.multiSelect && indices.length !== 1)) throw new Error("respostas_invalidas");
+    if (indices.some((x) => !Number.isInteger(x) || x < 0 || x >= p.rotulos.length) || new Set(indices).size !== indices.length) throw new Error("respostas_invalidas");
+    const escolhidas = (indices as number[]).map((x) => p.rotulos[x]);
+    if (escolhidas.length > 1 && escolhidas.some((r) => r.includes(","))) throw new Error("respostas_invalidas");
+    const texto = escolhidas.join(",");
+    if (texto.length > LIMITE_RESPOSTA) throw new Error("respostas_invalidas");
+    saida[p.question] = texto;
+  });
+  return saida;
+}
 
 function regrasSugeridas(dados: Record<string, unknown>): RegraSugerida[] {
   const lista = Array.isArray(dados.permission_suggestions) ? dados.permission_suggestions : [];
@@ -164,7 +205,14 @@ function semGanchosDoNiko(dados: Settings): Settings {
     else delete hooks[evento];
   }
   if (Object.keys(hooks).length === 0) delete copia.hooks;
-  return copia;
+  return semStatusDoNiko(copia);
+}
+
+function semStatusDoNiko(dados: Settings): Settings {
+  if (!ehStatusDoNiko(dados.statusLine)) return dados;
+  const anterior = anteriorDaStatus(dados.statusLine);
+  const { statusLine: _niko, ...resto } = dados;
+  return anterior ? { ...resto, statusLine: anterior } : resto;
 }
 
 function comGanchosDoNiko(dados: Settings): Settings {
@@ -187,11 +235,32 @@ function comGanchosDoNiko(dados: Settings): Settings {
       },
     ];
   }
-  return { ...limpo, hooks };
+  const anterior = limpo.statusLine && typeof limpo.statusLine === "object" ? (limpo.statusLine as Record<string, unknown>) : undefined;
+  return { ...limpo, hooks, statusLine: statusDoNiko(anterior, porta(), chave) };
 }
 
 function ocultarSegredo(texto: string) {
   return texto.split(segredo()).join("••••••••");
+}
+
+function statusAtual(valor: unknown) {
+  if (!ehStatusDoNiko(valor)) return false;
+  garantirScript();
+  const esperado = statusDoNiko(anteriorDaStatus(valor), porta(), segredo()).command;
+  return (valor as { command: string }).command === esperado && existsSync(caminhoDoScript());
+}
+
+export function ehRotaDaStatus(caminho: string) {
+  return caminho === CAMINHO_DA_STATUS;
+}
+
+export async function receberStatusDoClaude(req: IncomingMessage, res: ServerResponse) {
+  if (req.headers.origin || !segredoConfere(req.headers[CABECALHO_SEGREDO])) {
+    res.statusCode = 403;
+    return res.end();
+  }
+  await lerCorpoJson(req).then(receberStatus).catch(() => undefined);
+  responderVazio(res);
 }
 
 export function estadoDaInstalacao() {
@@ -209,8 +278,8 @@ export function estadoDaInstalacao() {
     .flatMap((g) => (Array.isArray((g as { hooks?: unknown[] })?.hooks) ? (g as { hooks: unknown[] }).hooks : []))
     .filter(ehGanchoDoNiko);
   const atual = (h: unknown) => {
-    const g = h as { url: string; headers: Record<string, unknown> };
-    return g.url === urlDoGancho() && g.headers[CABECALHO_SEGREDO] === segredo();
+    const g = h as { url: string; headers: Record<string, unknown>; timeout?: unknown };
+    return g.url === urlDoGancho() && g.headers[CABECALHO_SEGREDO] === segredo() && (g.timeout === TEMPO_HOOK_RAPIDO || g.timeout === TEMPO_HOOK_DECISAO);
   };
   const instalados = EVENTOS_INSTALADOS.filter((evento) => {
     const grupos = hooks[evento];
@@ -224,7 +293,7 @@ export function estadoDaInstalacao() {
     instalado: instalados.length === EVENTOS_INSTALADOS.length,
     parcial: instalados.length > 0 && instalados.length < EVENTOS_INSTALADOS.length,
     eventos: instalados,
-    desatualizado: ganchosDoNiko.some((h) => !atual(h)),
+    desatualizado: ganchosDoNiko.some((h) => !atual(h)) || (instalados.length > 0 && !statusAtual(dados.statusLine)),
     conectado: ouvintes.size > 0,
   };
 }
@@ -251,6 +320,7 @@ function gravarComCopia(conteudo: Settings) {
 
 export function instalarGanchos(corpo: Record<string, unknown>) {
   if (corpo.confirmacao !== "INSTALAR") throw new Error("confirmacao_invalida");
+  garantirScript();
   return gravarComCopia(comGanchosDoNiko(lerSettings().dados));
 }
 
@@ -349,7 +419,41 @@ export async function receberEventoDoGancho(req: IncomingMessage, res: ServerRes
   } catch {
     return responderVazio(res);
   }
+  await lembrarProcesso(req, corpo);
   processarEvento(corpo, "claude", res);
+}
+
+const processoDaSessao = new Map<string, number>();
+const procurando = new Set<string>();
+const LIMITE_DE_SESSOES_COM_PROCESSO = 50;
+const ESPERA_PELO_PROCESSO_MS = 700;
+export const buscaDeProcesso = { dono: donoDaConexao, focar: focarJanelaDoProcesso };
+
+/** Descobre qual processo abriu a conexão do gancho, enquanto ela ainda está aberta, para depois trazer o terminal da sessão para frente. */
+export async function lembrarProcesso(req: IncomingMessage, corpo: Record<string, unknown>) {
+  const sessao = typeof corpo.session_id === "string" ? corpo.session_id : "";
+  const portaCliente = req.socket.remotePort;
+  if (!sessao || !portaCliente || processoDaSessao.has(sessao) || procurando.has(sessao)) return;
+  procurando.add(sessao);
+  const busca = buscaDeProcesso
+    .dono(portaCliente, porta())
+    .then((pid) => {
+      if (!pid) return;
+      processoDaSessao.set(sessao, pid);
+      if (processoDaSessao.size > LIMITE_DE_SESSOES_COM_PROCESSO) processoDaSessao.delete(processoDaSessao.keys().next().value as string);
+    })
+    .catch(() => undefined)
+    .finally(() => procurando.delete(sessao));
+  if (corpo.hook_event_name === "PermissionRequest") return;
+  await Promise.race([busca, new Promise((r) => setTimeout(r, ESPERA_PELO_PROCESSO_MS))]);
+}
+
+export async function trazerTerminal(corpo: Record<string, unknown>) {
+  const sessao = typeof corpo.sessao === "string" ? corpo.sessao : "";
+  const pid = processoDaSessao.get(sessao);
+  if (!pid) throw new Error("sem_processo");
+  await buscaDeProcesso.focar(pid);
+  return { ok: true };
 }
 
 export function processarEvento(corpo: Record<string, unknown>, ferramenta: FerramentaDeCodigo, res: ServerResponse, aoResponderVazio: (res: ServerResponse) => void = responderVazio) {
@@ -381,14 +485,21 @@ export function processarEvento(corpo: Record<string, unknown>, ferramenta: Ferr
   const pedidoId = randomUUID();
   evento.pedidoId = pedidoId;
   const temporizador = setTimeout(() => encerrarPedido(pedidoId, null, "expirou"), ESPERA_DECISAO_MS);
-  pendentes.set(pedidoId, { res, ferramenta, temporizador, sessao: evento.sessao, sugestoes: ferramenta === "claude" ? regrasSugeridas(corpo) : [] });
+  pendentes.set(pedidoId, { res, ferramenta, temporizador, sessao: evento.sessao, sugestoes: ferramenta === "claude" ? regrasSugeridas(corpo) : [], pergunta: ferramenta === "claude" ? perguntasDoPedido(corpo) : null });
   res.on("close", () => {
     if (pendentes.has(pedidoId)) encerrarPedido(pedidoId, null, "cancelado");
   });
   transmitir(evento);
 }
 
-function encerrarPedido(pedidoId: string, decisao: "allow" | "deny" | null, motivo: string, regra?: RegraSugerida) {
+function decisaoDePermissao(decisao: "allow" | "deny", pendente: Pendente, regra?: RegraSugerida, respostas?: Record<string, string>) {
+  if (decisao === "deny") return { behavior: "deny", message: MENSAGEM_DE_NEGACAO };
+  if (respostas && pendente.pergunta) return { behavior: "allow", updatedInput: { ...pendente.pergunta.entrada, answers: respostas } };
+  if (regra) return { behavior: "allow", updatedPermissions: [{ type: "allow", toolName: regra.toolName, ruleContent: regra.ruleContent, behavior: "allow", mode: "local", directories: [] }] };
+  return { behavior: "allow" };
+}
+
+function encerrarPedido(pedidoId: string, decisao: "allow" | "deny" | null, motivo: string, regra?: RegraSugerida, respostas?: Record<string, string>) {
   const pendente = pendentes.get(pedidoId);
   if (!pendente) return false;
   pendentes.delete(pedidoId);
@@ -399,17 +510,7 @@ function encerrarPedido(pedidoId: string, decisao: "allow" | "deny" | null, moti
       pendente.res.setHeader("content-type", "application/json; charset=utf-8");
       pendente.res.end(JSON.stringify(decisao === "allow" ? { behavior: "allow" } : { behavior: "deny", message: MENSAGEM_DE_NEGACAO }));
     } else if (decisao) {
-      const corpo = {
-        hookSpecificOutput: {
-          hookEventName: "PermissionRequest",
-          decision:
-            decisao === "deny"
-              ? { behavior: "deny", message: MENSAGEM_DE_NEGACAO }
-              : regra
-                ? { behavior: "allow", updatedPermissions: [{ type: "allow", toolName: regra.toolName, ruleContent: regra.ruleContent, behavior: "allow", mode: "local", directories: [] }] }
-                : { behavior: "allow" },
-        },
-      };
+      const corpo = { hookSpecificOutput: { hookEventName: "PermissionRequest", decision: decisaoDePermissao(decisao, pendente, regra, respostas) } };
       pendente.res.statusCode = 200;
       pendente.res.setHeader("content-type", "application/json; charset=utf-8");
       pendente.res.end(JSON.stringify(corpo));
@@ -430,7 +531,14 @@ export function decidirPedido(corpo: Record<string, unknown>) {
     regra = pendentes.get(pedidoId)?.sugestoes.find((s) => s.toolName === pedida.toolName && s.ruleContent === pedida.ruleContent);
     if (!regra) throw new Error("regra_invalida");
   }
-  if (!encerrarPedido(pedidoId, decisao, decisao ? "decidido" : "terminal", regra)) throw new Error("pedido_expirou");
+  let respostas: Record<string, string> | undefined;
+  if (corpo.respostas !== undefined) {
+    const pergunta = pendentes.get(pedidoId)?.pergunta;
+    if (decisao !== "allow" || regra) throw new Error("decisao_invalida");
+    if (!pergunta) throw new Error(pendentes.has(pedidoId) ? "respostas_invalidas" : "pedido_expirou");
+    respostas = respostasValidas(pergunta.perguntas, corpo.respostas);
+  } else if (decisao === "allow" && pendentes.get(pedidoId)?.pergunta) throw new Error("respostas_invalidas");
+  if (!encerrarPedido(pedidoId, decisao, decisao ? "decidido" : "terminal", regra, respostas)) throw new Error("pedido_expirou");
   return { ok: true };
 }
 
@@ -454,13 +562,21 @@ function abrirDesacoplado(programa: string, argumentos: string[]) {
   filho.unref();
 }
 
+export function arquivoDoProjeto(cwd: string, arquivo: unknown): string {
+  if (typeof arquivo !== "string" || !arquivo || arquivo.length > 1000 || /[\u0000-\u001f]/.test(arquivo)) throw new Error("arquivo_invalido");
+  const caminho = resolve(cwd, arquivo);
+  const relativo = relative(cwd, caminho);
+  if (!relativo || relativo.startsWith("..") || isAbsolute(relativo) || !existsSync(caminho) || !statSync(caminho).isFile()) throw new Error("arquivo_invalido");
+  return caminho;
+}
+
 export function abrirProjeto(corpo: Record<string, unknown>) {
   const cwd = typeof corpo.cwd === "string" ? corpo.cwd : "";
   if (!projetosConhecidos.has(cwd) || !isAbsolute(cwd) || !existsSync(cwd) || !statSync(cwd).isDirectory()) throw new Error("projeto_desconhecido");
-  if (corpo.como === "vscode") {
+  if (corpo.como === "vscode" || corpo.como === "arquivo") {
     const code = caminhoDoVsCode();
     if (!code) throw new Error("vscode_nao_encontrado");
-    abrirDesacoplado(code, [cwd]);
+    abrirDesacoplado(code, corpo.como === "arquivo" ? [cwd, arquivoDoProjeto(cwd, corpo.arquivo)] : [cwd]);
   } else if (corpo.como === "pasta") {
     abrirDesacoplado("explorer.exe", [cwd]);
   } else throw new Error("acao_invalida");

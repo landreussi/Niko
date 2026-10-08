@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync, utimesSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { lerArgumentos, lerVersoes, validarVersoes, validarTag, planejarVersao, sincronizarVersao, verificarPublicacao, validarArtefatos } from "./versao-release.mjs";
+import { lerArgumentos, lerVersoes, validarVersoes, validarTag, planejarVersao, sincronizarVersao, verificarPublicacao, validarArtefatos, montarManifesto } from "./versao-release.mjs";
 
 function projeto(t, versoes = ["0.1.1", "0.1.1", "0.1.1", "0.1.1"]) {
   const raiz = mkdtempSync(join(tmpdir(), "niko-release-teste-"));
@@ -127,4 +127,20 @@ test("exige instalador e assinatura da versão certa e do build atual", (t) => {
   assert.throws(() => validarArtefatos(raiz, "0.1.2", Date.now()), /build atual/);
   writeFileSync(assinatura, "   ");
   assert.throws(() => validarArtefatos(raiz, "0.1.2", Date.now()), /vazia/);
+});
+
+test("aceita o MSI e monta o manifesto com uma entrada por instalador", (t) => {
+  const raiz = projeto(t);
+  const pasta = join(raiz, "src-tauri", "target", "release", "bundle", "msi");
+  mkdirSync(pasta, { recursive: true });
+  assert.throws(() => validarArtefatos(raiz, "0.1.2", Date.now(), "msi"), /não foi gerado/);
+  writeFileSync(join(pasta, "Niko_0.1.2_x64_pt-BR.msi"), "msi de teste");
+  writeFileSync(join(pasta, "Niko_0.1.2_x64_pt-BR.msi.sig"), "assinatura msi");
+  const msi = validarArtefatos(raiz, "0.1.2", Date.now(), "msi");
+  const nsis = { instalador: "Niko_0.1.2_x64-setup.exe", assinatura: "assinatura nsis" };
+  const manifesto = montarManifesto("0.1.2", "", nsis, msi, new Date("2026-10-08T12:00:00Z"));
+  assert.equal(manifesto.notes, "Niko 0.1.2");
+  assert.deepEqual(manifesto.platforms["windows-x86_64"], manifesto.platforms["windows-x86_64-nsis"]);
+  assert.equal(manifesto.platforms["windows-x86_64-nsis"].url, "https://github.com/vitorcgo/niko/releases/download/v0.1.2/Niko_0.1.2_x64-setup.exe");
+  assert.deepEqual(manifesto.platforms["windows-x86_64-msi"], { signature: "assinatura msi", url: "https://github.com/vitorcgo/niko/releases/download/v0.1.2/Niko_0.1.2_x64_pt-BR.msi" });
 });

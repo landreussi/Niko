@@ -182,6 +182,19 @@ export interface ItemDaBandeja {
   icone: string | null;
 }
 
+export interface AppInstalado {
+  id: string;
+  nome: string;
+  admin: boolean;
+}
+
+export interface IconeDeApp {
+  id: string;
+  icone: string | null;
+}
+
+export type ComandoDoSistema = "rede" | "wifi" | "bluetooth" | "som" | "tela" | "configuracoes" | "atualizacoes" | "tarefas" | "adaptadores" | "terminal" | "arquivos" | "painel";
+
 export type AlvoDeAudio = "saida" | "entrada";
 export type FerramentaWindows = "captura" | "teclado" | "iniciar" | "papelDeParede";
 export type AcaoDeEnergia = "bloquear" | "suspender" | "reiniciar" | "desligar";
@@ -209,10 +222,18 @@ export const controle = {
   abrirDaBandeja: (caminho: string) => enviar("/controle/bandeja", { caminho }),
   pastaDaBandeja: (caminho: string) => enviar("/controle/bandejaPasta", { caminho }),
   encerrarDaBandeja: (caminho: string) => enviar("/controle/bandejaEncerrar", { caminho, confirmacao: "CONFIRMADO" }),
+  apps: (forcar = false) => enviar<{ apps: AppInstalado[] | AppInstalado | null }>("/controle/apps", { forcar }).then((r) => comoLista(r.apps)),
+  iconesDeApps: (ids: string[]) => enviar<{ icones: IconeDeApp[] | IconeDeApp | null }>("/controle/iconesApps", { ids }).then((r) => comoLista(r.icones)),
+  abrirApp: (id: string, admin = false) => enviar("/controle/abrirApp", { id, admin }),
+  comandoDoSistema: (comando: ComandoDoSistema) => enviar("/controle/comandoDoSistema", { comando }),
 };
 
 export function lerConsumo(forcar = false) {
   return pedir<Consumo>(`/consumo${forcar ? "?forcar=1" : ""}`);
+}
+
+export function lerUsoOficial() {
+  return pedir<Consumo>("/consumo?oficial=1");
 }
 
 export async function* conversarIa(

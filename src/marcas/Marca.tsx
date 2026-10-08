@@ -6,6 +6,7 @@ import {
 import type { ServicoId } from "../tipos";
 import logoCodex from "./lobe/codex.svg";
 import logoAntigravity from "./lobe/antigravity.svg";
+import logoAmp from "./lobe/amp.svg";
 
 interface IconeMarca {
   title: string;
@@ -15,12 +16,17 @@ interface IconeMarca {
 
 export type MarcaId = ServicoId | "anthropic" | "ollama" | "nvidia" | "opencode" | "qwen" | "gemini" | "openrouter" | "mistral" | "huggingface" | "deepseek" | "lmstudio" | "claudecode" | "copilot" | "kimi" | MarcaDeMidia | MarcaColorida;
 
-export type MarcaColorida = "codex" | "antigravity";
+export type MarcaColorida = "codex" | "antigravity" | "amp";
 
 const MARCAS_COLORIDAS: Record<MarcaColorida, { title: string; url: string }> = {
   codex: { title: "Codex", url: logoCodex },
   antigravity: { title: "Antigravity", url: logoAntigravity },
+  amp: { title: "Amp", url: logoAmp },
 };
+
+function ehColorida(marca: MarcaId): marca is MarcaColorida {
+  return Object.hasOwn(MARCAS_COLORIDAS, marca);
+}
 
 export type MarcaDeMidia = "spotify" | "chrome" | "firefox" | "zen" | "youtube" | "youtubemusic" | "deezer" | "applemusic" | "tidal" | "soundcloud";
 
@@ -94,7 +100,7 @@ interface Props {
 }
 
 export function Marca({ marca, tamanho = 18, monocromatica = false }: Props) {
-  if (marca === "codex" || marca === "antigravity") {
+  if (ehColorida(marca)) {
     const colorida = MARCAS_COLORIDAS[marca];
     return <img src={colorida.url} alt={colorida.title} width={tamanho} height={tamanho} draggable={false} style={{ flex: "0 0 auto", filter: monocromatica ? "grayscale(1) brightness(1.4)" : undefined }} />;
   }

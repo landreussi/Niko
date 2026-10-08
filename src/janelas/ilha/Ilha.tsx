@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import {
-  Plus, Music, Timer, CalendarDays, MessageCircle, Plug, Bell, Volume2, VolumeX, AppWindow, ChevronUp, Check, CircleAlert, Download, CodeXml, ShieldAlert, LoaderCircle,
+  Plus, Music, Timer, CalendarDays, MessageCircle, Plug, Bell, Volume2, VolumeX, AppWindow, ChevronUp, Pin, PinOff, Check, CircleAlert, Download, CodeXml, ShieldAlert, LoaderCircle,
   type LucideIcon,
 } from "lucide-react";
 import { useConfig, type AbaIlha, type SecaoHoje, type VisaoIlha } from "../../estado/configuracoes";
@@ -27,7 +27,7 @@ import { abaLigada } from "../../utilitarios/funcoes";
 import { tiposDeCapturaLigados } from "../../utilitarios/captura";
 import { useClaudeCode, sessaoAtiva, nomeDoModelo } from "../../estado/claudeCode";
 import { useAtualizacao } from "../../estado/atualizacao";
-import { NATIVO, ouvirEvento, usarAreaInterativa, usarCursorFora, usarEstadoDaFrente } from "../../desktop/desktop";
+import { NATIVO, liberarSistemaInicial, ouvirAtalho, ouvirEvento, usarAreaInterativa, usarCursorFora, usarEstadoDaFrente } from "../../desktop/desktop";
 import { Saudacao } from "./animacoes/Saudacao";
 import { usarSaudacaoDiaria } from "./animacoes/usarSaudacaoDiaria";
 import { ALTURA_DA_SAUDACAO, EVENTO_DA_SAUDACAO, LARGURA_DA_SAUDACAO } from "./animacoes/pedirSaudacao";
@@ -85,6 +85,7 @@ function estadoCalmo(e: EstadoAgente): EstadoAgente {
   return e === "alerta" || e === "erro" ? "ocioso" : e;
 }
 const LARGURA_EXPANDIDA = 660;
+const SAUDACAO_VENCE_EM_MS = 15 * 60_000;
 const ALTURA_COMPACTA = 30;
 const ALTURA_COMPACTA_MIDIA = 34;
 const TAMANHO_DA_CAPA_COMPACTA = 28;
@@ -196,6 +197,28 @@ export function Ilha() {
   const abaAtual: VisaoIlha = aba === "captura" && capturaDisponivel ? "captura" : abas.includes(aba as AbaIlha) ? aba : abas[0] ?? "hoje";
   const abaAntesDaCaptura = useRef<AbaIlha>("hoje");
   const rolagemDasAbas = useRef({ acumulado: 0, ultimaTroca: 0 });
+  const [fixada, setFixada] = useState(false);
+  const paraOAtalho = useRef({ abas, abaAtual, estado });
+  paraOAtalho.current = { abas, abaAtual, estado };
+  useEffect(() => {
+    let vivo = true;
+    let desligar: () => void = () => undefined;
+    void ouvirAtalho((acao) => {
+      if (acao !== "proximaAba") return;
+      const { abas: lista, abaAtual: atual, estado: agora } = paraOAtalho.current;
+      if (lista.length === 0) return;
+      const indice = lista.indexOf(atual as AbaIlha);
+      void tocarSom("blip");
+      abrir(agora === "expandida" ? lista[(indice + 1) % lista.length] : lista[Math.max(0, indice)]);
+    }).then((f) => {
+      if (vivo) desligar = f;
+      else f();
+    });
+    return () => {
+      vivo = false;
+      desligar();
+    };
+  }, [abrir]);
   const frente = usarEstadoDaFrente(cfg.ativa);
   const [lateraisLivresNativo, setLateraisLivresNativo] = useState(true);
   useEffect(() => {
@@ -226,7 +249,11 @@ export function Ilha() {
   }, [estado, abaAtual, alertas.length]);
 
   useEffect(() => {
-    if (estadoEfetivo !== "expandida" || sobre || cfg.fechamentoSeg === 0 || abaAtual === "claude") {
+    if (estadoEfetivo !== "expandida") setFixada(false);
+  }, [estadoEfetivo]);
+
+  useEffect(() => {
+    if (estadoEfetivo !== "expandida" || sobre || cfg.fechamentoSeg === 0 || abaAtual === "claude" || fixada) {
       setRestanteFechar(null);
       return;
     }
@@ -244,7 +271,7 @@ export function Ilha() {
       setRestanteFechar(r);
     }, 100);
     return () => window.clearInterval(t);
-  }, [estadoEfetivo, sobre, cfg.fechamentoSeg, recolher, abaAtual]);
+  }, [estadoEfetivo, sobre, cfg.fechamentoSeg, recolher, abaAtual, fixada]);
 
   useEffect(() => {
     if (estadoEfetivo !== "expandida") return;
@@ -255,7 +282,7 @@ export function Ilha() {
       }
     };
     const aoClicarFora = (e: PointerEvent) => {
-      if (raiz.current && !raiz.current.contains(e.target as Node)) recolher();
+      if (!fixada && raiz.current && !raiz.current.contains(e.target as Node)) recolher();
     };
     window.addEventListener("keydown", aoTeclar);
     window.addEventListener("pointerdown", aoClicarFora, true);
@@ -263,12 +290,21 @@ export function Ilha() {
       window.removeEventListener("keydown", aoTeclar);
       window.removeEventListener("pointerdown", aoClicarFora, true);
     };
-  }, [estadoEfetivo, recolher]);
+  }, [estadoEfetivo, recolher, fixada]);
 
   const claudeIndisponivel = !cfg.ativa || !cfg.blocos.claude;
   useEffect(() => {
     if (claudeIndisponivel && pedidosClaude.length > 0) devolverPendentesAoTerminal();
   }, [claudeIndisponivel, pedidosClaude.length]);
+
+  useEffect(() => {
+    if (!saudacao) return;
+    if (frente.telaCheia) {
+      void liberarSistemaInicial();
+      return;
+    }
+    if (Date.now() - saudacao.id > SAUDACAO_VENCE_EM_MS) encerrarSaudacao();
+  }, [saudacao, frente.telaCheia, encerrarSaudacao]);
 
   useEffect(() => {
     if (!frente.telaCheia) return;
@@ -640,6 +676,20 @@ export function Ilha() {
                         }}
                       >
                         <AppWindow size={14} />
+                      </button>
+                      <button
+                        type="button"
+                        className="ilha-acao"
+                        aria-label={fixada ? T.ilha.desafixar : T.ilha.fixar}
+                        data-dica={fixada ? T.ilha.desafixar : T.ilha.fixar}
+                        aria-pressed={fixada}
+                        data-ativa={fixada || undefined}
+                        onClick={() => {
+                          void tocarSom("blip");
+                          setFixada((f) => !f);
+                        }}
+                      >
+                        {fixada ? <PinOff size={14} /> : <Pin size={14} />}
                       </button>
                       <button type="button" className="ilha-acao" aria-label={T.ilha.fecharIlha} data-dica={T.ilha.fecharIlha} onClick={() => recolher()}>
                         <ChevronUp size={14} />

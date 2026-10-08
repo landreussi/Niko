@@ -464,9 +464,9 @@ function BlocoRevisoes() {
           <span className="etiqueta etiqueta-alerta">{descreverDistancia(prova.data)}</span>
         </div>
       )}
-      <div className="coluna" style={{ gap: 4 }}>
+      <div className="coluna inicio-revisoes-grafico">
         <span className="rotulo-secao">{T.inicio.ultimos7}</span>
-        <BarrasVerticais altura={64} formatar={(v) => `${v}`} barras={ultimos.map((d) => ({ rotulo: formatar(d, "EEEEE"), valor: (estudos.registroRevisoes.find((r) => r.data === d)?.quantidade ?? 0) + Math.round((minutos.get(d) ?? 0) / 25), detalhe: `${estudos.registroRevisoes.find((r) => r.data === d)?.quantidade ?? 0} cartões, ${minutos.get(d) ?? 0} min` }))} />
+        <BarrasVerticais altura="auto" formatar={(v) => `${v}`} barras={ultimos.map((d) => ({ rotulo: formatar(d, "EEEEE"), valor: (estudos.registroRevisoes.find((r) => r.data === d)?.quantidade ?? 0) + Math.round((minutos.get(d) ?? 0) / 25), detalhe: `${estudos.registroRevisoes.find((r) => r.data === d)?.quantidade ?? 0} cartões, ${minutos.get(d) ?? 0} min` }))} />
       </div>
       <Botao variante={n > 0 ? "primario" : "secundario"} disabled={n === 0} onClick={() => irPara("estudos", { aba: "revisoes", sessao: "1" })}>{T.inicio.revisar}</Botao>
     </div>
