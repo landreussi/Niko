@@ -110,11 +110,21 @@ pub fn posicionar_ilha(app: &AppHandle) {
 
 pub fn reposicionar_todos(app: &AppHandle) {
     posicionar_ilha(app);
+    posicionar_assistive(app);
     for (monitor, info) in monitores_ordenados(app) {
         if let Some(janela) = app.get_webview_window(&info.rotulo) {
             posicionar(&janela, &monitor);
         }
     }
+}
+
+pub fn posicionar_assistive(app: &AppHandle) {
+    let Some(janela) = app.get_webview_window("assistive") else { return };
+    let Some(monitor) = monitores_ordenados(app).into_iter().next().map(|(m, _)| m) else { return };
+    let area = monitor.work_area();
+    let _ = janela.set_position(area.position);
+    let _ = janela.set_size(area.size);
+    let _ = janela.set_position(area.position);
 }
 
 fn assinatura(lista: &[(Monitor, MonitorDoNiko)]) -> String {
@@ -162,6 +172,7 @@ pub fn sincronizar(app: &AppHandle) {
     }
 
     posicionar_ilha(app);
+    posicionar_assistive(app);
     if let Ok(mut atual) = ASSINATURA.lock() {
         *atual = assinatura(&monitores);
     }

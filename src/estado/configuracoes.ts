@@ -6,6 +6,7 @@ import type { CategoriaSom } from "../ponte/sons";
 import { FUNDO_DESTAQUE, hexValido, misturar } from "../utilitarios/cores";
 import type { Buscador } from "../utilitarios/buscaApps";
 import { ATALHOS_PADRAO, atalhosComPadrao, type AcaoGlobal } from "../utilitarios/atalhos";
+import { ASSISTIVE_PADRAO, validarAssistive, type ConfigAssistive } from "../janelas/assistive/regras";
 
 const DESTAQUE_ESCURO_PADRAO = "#a78bfa";
 
@@ -132,6 +133,7 @@ export interface Configuracoes {
   gruposFechados: string[];
   blocosInicio: { id: BlocoInicio; visivel: boolean }[];
   ilha: ConfigIlha;
+  assistive: ConfigAssistive;
   dock: { ativo: boolean; modo: ModoBorda; favoritos: Rota[]; atalhos: AtalhoDock[]; ampliar: boolean; fundo: string; opacidade: number; monitores: string; buscador: Buscador };
   atalhosGlobais: Record<AcaoGlobal, string>;
   pomodoro: { foco: number; curta: number; longa: number; ciclos: number; autoProxima: boolean; tique: boolean };
@@ -190,6 +192,7 @@ export const CONFIG_PADRAO: Configuracoes = {
     monitor: "",
   },
   dock: { ativo: true, modo: "inteligente", favoritos: ["chat", "journal", "estudos", "financas", "calendario"], atalhos: [], ampliar: true, fundo: FUNDO_PADRAO_DAS_BORDAS, opacidade: 1, monitores: "todos", buscador: "google" },
+  assistive: ASSISTIVE_PADRAO,
   atalhosGlobais: ATALHOS_PADRAO,
   pomodoro: { foco: 25, curta: 5, longa: 15, ciclos: 4, autoProxima: false, tique: false },
   agua: { meta: 2000, copo: 250 },
@@ -226,6 +229,7 @@ export const CONFIG_PADRAO: Configuracoes = {
 interface AcoesConfig {
   definir: (parcial: Partial<Configuracoes>) => void;
   definirIlha: (parcial: Partial<ConfigIlha>) => void;
+  definirAssistive: (parcial: Partial<ConfigAssistive>) => void;
   restaurar: () => void;
 }
 
@@ -235,6 +239,7 @@ export const useConfig = create<Configuracoes & AcoesConfig>()(
       ...CONFIG_PADRAO,
       definir: (parcial) => set(parcial),
       definirIlha: (parcial) => set((s) => ({ ilha: { ...s.ilha, ...parcial } })),
+      definirAssistive: (parcial) => set((s) => ({ assistive: validarAssistive({ ...s.assistive, ...parcial }) })),
       restaurar: () => set({ ...CONFIG_PADRAO, primeiraExecucaoFeita: true }),
     }),
     {
@@ -315,6 +320,7 @@ export const useConfig = create<Configuracoes & AcoesConfig>()(
             ],
           },
           dock: { ...CONFIG_PADRAO.dock, ...salvo.dock },
+          assistive: validarAssistive(salvo.assistive),
           atalhosGlobais: atalhosComPadrao(salvo.atalhosGlobais),
           pomodoro: { ...CONFIG_PADRAO.pomodoro, ...salvo.pomodoro },
           agua: { ...CONFIG_PADRAO.agua, ...salvo.agua },

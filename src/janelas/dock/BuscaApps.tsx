@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { motion, useReducedMotion } from "motion/react";
 import {
-  Activity, AppWindow, Bluetooth, Calculator, CornerDownLeft, FolderOpen, Globe, Monitor, Network, RefreshCw, Search, Settings, SlidersHorizontal, SquareTerminal, Volume2, Wifi, type LucideIcon,
+  Activity, AppWindow, Bluetooth, Calculator, CircleDot, CornerDownLeft, FolderOpen, Globe, Monitor, Network, RefreshCw, Search, Settings, SlidersHorizontal, SquareTerminal, Volume2, Wifi, type LucideIcon,
 } from "lucide-react";
 import { NATIVO, abrirLink, agirNaJanela, devolverFoco, janelaAtual, usarAppsAbertos } from "../../desktop/desktop";
 import { controle, type AppInstalado, type ComandoDoSistema } from "../../ponte/ponteLocal";
@@ -36,7 +36,7 @@ const ICONE_DO_COMANDO: Record<ComandoDoSistema, LucideIcon> = {
 const GRUPOS_EM_BLOCOS = new Set<Grupo>(["recentes", "sistema"]);
 
 type Grupo = keyof typeof B.grupos;
-type Tipo = "app" | "janela" | "comando" | "calculo" | "web";
+type Tipo = "app" | "janela" | "comando" | "calculo" | "web" | "acao";
 
 interface Item {
   chave: string;
@@ -59,6 +59,7 @@ const iconesEmMemoria: Record<string, string | null> = {};
 function IconeDoItem({ item, tamanho = 22 }: { item: Item; tamanho?: number }) {
   if (item.icone) return <img src={item.icone} alt="" width={tamanho} height={tamanho} draggable={false} />;
   const traco = Math.round(tamanho * 0.78);
+  if (item.chave === "assistive") return <CircleDot size={traco} />;
   if (item.tipo === "calculo") return <Calculator size={traco} />;
   if (item.tipo === "web") return <Globe size={traco} />;
   if (item.comando) {
@@ -84,6 +85,7 @@ export function BuscaApps({ aoFechar }: { aoFechar: () => void }) {
   const usos = useBuscaApps((s) => s.usos);
   const usar = useBuscaApps((s) => s.usar);
   const buscador = useConfig((s) => s.dock.buscador);
+  const assistiveAtivo = useConfig((s) => s.assistive.ativo);
   const reduzirAnimacoes = useConfig((s) => s.reduzirAnimacoes);
   const reduzido = (useReducedMotion() ?? false) || reduzirAnimacoes;
   const campo = useRef<HTMLInputElement>(null);
@@ -134,6 +136,15 @@ export function BuscaApps({ aoFechar }: { aoFechar: () => void }) {
   const itens = useMemo<Item[]>(() => {
     const q = consulta.trim();
     const saida: Item[] = [];
+    if (!q || pontuarNome(q, T.assistive.palavrasBusca) > 0) saida.push({
+      chave: "assistive", grupo: "sistema", tipo: "acao", titulo: T.assistive.titulo,
+      detalhe: assistiveAtivo ? T.assistive.ligadoNaLupa : T.assistive.desligadoNaLupa,
+      executar: () => {
+        const s = useConfig.getState();
+        s.definirAssistive({ ativo: !s.assistive.ativo });
+        aoFechar();
+      },
+    });
     const abrirDepois = (acao: () => Promise<unknown>, falha: string) => async () => {
       void tocarSom("blip");
       try {
@@ -172,7 +183,7 @@ export function BuscaApps({ aoFechar }: { aoFechar: () => void }) {
         .slice(0, LIMITE_RECENTES);
       for (const a of recentes) saida.push(doApp(a, "recentes"));
       for (const c of COMANDOS_INICIAIS) saida.push(doComando(c));
-      return saida;
+      return saida.sort((x, y) => ORDEM.indexOf(x.grupo) - ORDEM.indexOf(y.grupo));
     }
 
     const conta = calcular(q);
@@ -240,7 +251,7 @@ export function BuscaApps({ aoFechar }: { aoFechar: () => void }) {
       },
     });
     return saida.sort((x, y) => ORDEM.indexOf(x.grupo) - ORDEM.indexOf(y.grupo));
-  }, [consulta, apps, janelas, usos, icones, buscador, usar, aoFechar]);
+  }, [consulta, apps, janelas, usos, icones, buscador, assistiveAtivo, usar, aoFechar]);
 
   useEffect(() => setAtivo(0), [consulta]);
 
@@ -309,7 +320,7 @@ export function BuscaApps({ aoFechar }: { aoFechar: () => void }) {
     };
     if (emBloco) {
       return (
-        <button key={item.chave} {...comum} className="dock-busca-bloco" title={item.titulo}>
+        <button key={item.chave} {...comum} className="dock-busca-bloco" data-assistive={item.chave === "assistive" || undefined} data-ligado={item.chave === "assistive" && assistiveAtivo || undefined} title={item.chave === "assistive" ? `${item.titulo}: ${item.detalhe}` : item.titulo} aria-label={item.chave === "assistive" ? (assistiveAtivo ? T.assistive.desativarNaLupa : T.assistive.ativarNaLupa) : undefined}>
           <span className="dock-busca-icone dock-busca-icone-grande">
             <IconeDoItem item={item} tamanho={28} />
           </span>

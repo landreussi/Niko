@@ -17,6 +17,7 @@
         "lancar": "node scripts/lancar-versao.mjs",
         "lancar:verificar": "node scripts/lancar-versao.mjs --verificar",
         "lancar:testar": "node --test scripts/versao-release.test.mjs",
+        "assistive:testar": "node --test scripts/assistive.test.mjs",
         "chat:testar": "node --test scripts/chat.test.mjs",
         "midia:testar": "node --test scripts/midia.test.mjs"
     },

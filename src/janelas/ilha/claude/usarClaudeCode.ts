@@ -83,18 +83,17 @@ function reagir(e: EventoClaude) {
       });
       return;
     }
-    case "Stop":
+    case "Stop": {
       if (silencio || !abaLigada()) return;
       estado.focar(e.sessao);
-      void tocarSom("finish", "avisos");
+      if (ilha.revelar({ texto: T.ilha.claude.terminouAviso(nome, projeto), tipo: "sucesso", marca, aba: "claude" }, 7000)) void tocarSom("finish", "avisos");
       void notificarSeEscondida(T.ilha.claude.notificacao.terminou(nome, projeto));
-      if (ilha.estado !== "expandida") ilha.revelar({ texto: T.ilha.claude.terminouAviso(nome, projeto), tipo: "sucesso", marca, aba: "claude" }, 7000);
       return;
+    }
     case "StopFailure":
       if (silencio || !abaLigada()) return;
-      void tocarSom("error", "avisos");
+      if (ilha.revelar({ texto: T.ilha.claude.erroAviso(nome, projeto), tipo: "alerta", marca, aba: "claude" }, 6000)) void tocarSom("error", "avisos");
       void notificarSeEscondida(T.ilha.claude.notificacao.erro(nome, projeto));
-      ilha.revelar({ texto: T.ilha.claude.erroAviso(nome, projeto), tipo: "alerta", marca, aba: "claude" }, 6000);
       return;
     case "NikoPedidoEncerrado": {
       const motivo = e.dados.motivo;
@@ -105,11 +104,9 @@ function reagir(e: EventoClaude) {
     case "Notification":
       if (silencio || !abaLigada()) return;
       if (sessao?.estado === "esperando") {
-        void tocarSom("question", "avisos");
-        ilha.revelar({ texto: T.ilha.claude.esperandoAviso(nome, projeto), tipo: "info", marca, aba: "claude" }, 6000);
+        if (ilha.revelar({ texto: T.ilha.claude.esperandoAviso(nome, projeto), tipo: "info", marca, aba: "claude" }, 6000)) void tocarSom("question", "avisos");
       } else if (sessao?.estado === "limite") {
-        void tocarSom("rate", "avisos");
-        ilha.revelar({ texto: T.ilha.claude.limiteAviso(nome, projeto), tipo: "alerta", marca, aba: "claude" }, 6000);
+        if (ilha.revelar({ texto: T.ilha.claude.limiteAviso(nome, projeto), tipo: "alerta", marca, aba: "claude" }, 6000)) void tocarSom("rate", "avisos");
       }
       return;
     default:

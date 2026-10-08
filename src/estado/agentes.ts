@@ -105,8 +105,8 @@ export const useAgentes = create<EstadoAgentes>()(
           mudarSinal(agente, (x) => x);
           const categoria = rota ? CATEGORIA_DA_ROTA[rota] : undefined;
           if (avisoLigado(categoria)) {
-            void tocarSom(som, "avisos");
-            useIlha.getState().revelar({ texto, tipo: "alerta", agente, aba: "avisos", categoria }, urgente ? 6000 : 4200, urgente ? "alta" : "normal");
+            const aceito = useIlha.getState().revelar({ texto, tipo: "alerta", agente, aba: "avisos", categoria }, urgente ? 6000 : 4200, urgente ? "alta" : "normal");
+            if (aceito) void tocarSom(som, "avisos");
           }
           window.setTimeout(() => set({ relogio: Date.now() }), ALERTA_FRESCO + 200);
           return id;

@@ -95,7 +95,7 @@ fn registrar_frente(app: &AppHandle) {
     if frente == 0 {
         return;
     }
-    let sobreposta = app.webview_windows().iter().any(|(r, j)| (r == "ilha" || docks::eh_dock(r)) && j.hwnd().map(|h| h.0 as isize == frente).unwrap_or(false));
+    let sobreposta = app.webview_windows().iter().any(|(r, j)| (r == "ilha" || r == "assistive" || docks::eh_dock(r)) && j.hwnd().map(|h| h.0 as isize == frente).unwrap_or(false));
     if !sobreposta {
         ULTIMA_FRENTE.store(frente, Ordering::Relaxed);
     }
@@ -222,7 +222,7 @@ fn vigiar_cursor(app: AppHandle) {
                 Ok(a) => a.clone(),
                 Err(_) => continue,
             };
-            let sobrepostas: Vec<(String, WebviewWindow)> = app.webview_windows().into_iter().filter(|(r, _)| r == "ilha" || docks::eh_dock(r)).collect();
+            let sobrepostas: Vec<(String, WebviewWindow)> = app.webview_windows().into_iter().filter(|(r, _)| r == "ilha" || r == "assistive" || docks::eh_dock(r)).collect();
             fora.retain(|r, _| sobrepostas.iter().any(|(s, _)| s == r));
             for (rotulo, janela) in &sobrepostas {
                 let rotulo = rotulo.as_str();
@@ -479,7 +479,8 @@ pub fn run() {
 
             criar_sobreposta(&handle, "ilha", tela_y, tela_x, tela_largura, ALTURA_ILHA)?;
             criar_sobreposta(&handle, "dock", my + mh - ALTURA_DOCK, mx, mw, ALTURA_DOCK)?;
-            for rotulo in ["ilha", "dock"] {
+            criar_sobreposta(&handle, "assistive", my, mx, mw, mh)?;
+            for rotulo in ["ilha", "dock", "assistive"] {
                 if let Some(j) = handle.get_webview_window(rotulo) {
                     let _ = j.set_ignore_cursor_events(true);
                 }

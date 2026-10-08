@@ -25,6 +25,7 @@ import { DESTAQUE_PADRAO } from "../../janelas/area-de-trabalho/usarTema";
 import { EditorFoto } from "../../componentes/FotoPerfil";
 import { SeletorDeFundo } from "./SeletorDeFundo";
 import { SecaoClaudeCode } from "./SecaoClaudeCode";
+import { SecaoAssistive } from "./SecaoAssistive";
 import { EditorDeAtalhos } from "./EditorDeAtalhos";
 import { NATIVO } from "../../desktop/desktop";
 import { pedirSaudacao } from "../../janelas/ilha/animacoes/pedirSaudacao";
@@ -37,6 +38,7 @@ const ICONES: Record<Secao, React.ReactNode> = {
   aparencia: <Palette size={15} />,
   ilha: <PanelTop size={15} />,
   dock: <PanelBottom size={15} />,
+  assistive: <Hand size={15} />,
   pomodoro: <Timer size={15} />,
   agentes: <Users size={15} />,
   sons: <Volume2 size={15} />,
@@ -647,6 +649,7 @@ export default function Configuracoes() {
     ),
     dados: <SecaoDados />,
     claude: <SecaoClaudeCode />,
+    assistive: <SecaoAssistive />,
     sobre: (
       <>
         <p>{T.configuracoes.sobreTexto}</p>

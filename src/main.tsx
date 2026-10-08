@@ -20,7 +20,7 @@ document.documentElement.dataset.tema = "claro";
 const SELETOR_DAS_SOBREPOSTAS = ".ilha-raiz, .ilha-gatilho, .ilha-barra, .ilha-pop, .dock, .dock-gatilho, .dock-previa";
 
 async function iniciar() {
-  const sobreposta = JANELA === "ilha" || JANELA === "dock";
+  const sobreposta = JANELA === "ilha" || JANELA === "dock" || JANELA === "assistive";
   if (sobreposta) document.documentElement.classList.add("janela-sobreposta");
   document.addEventListener("contextmenu", (e) => {
     const alvo = e.target as HTMLElement | null;
@@ -42,12 +42,12 @@ async function iniciar() {
     raiz.innerHTML = `<div class="falha-ponte"><h1>${T.app.ponteFalhou}</h1><p>${T.app.ponteFalhouDica}</p></div>`;
     return;
   }
-  if (JANELA === "ilha" || JANELA === "dock") document.documentElement.classList.add("janela-sobreposta");
+  if (sobreposta) document.documentElement.classList.add("janela-sobreposta");
   let Raiz: () => React.ReactElement;
   if (!NATIVO) Raiz = (await import("./janelas/area-de-trabalho/AreaDeTrabalho")).AreaDeTrabalho;
   else {
     const apps = await import("./desktop/Aplicativos");
-    Raiz = JANELA === "ilha" ? apps.AppIlha : JANELA === "dock" ? apps.AppDock : apps.AppSistema;
+    Raiz = JANELA === "ilha" ? apps.AppIlha : JANELA === "dock" ? apps.AppDock : JANELA === "assistive" ? apps.AppAssistive : apps.AppSistema;
   }
   createRoot(raiz).render(
     <StrictMode>

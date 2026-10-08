@@ -362,6 +362,9 @@
   color: rgba(var(--d-rgb), 0.82);
 }
 
+.dock-busca-bloco[data-assistive] .dock-busca-bloco-nome { font-size: 11px; }
+.dock-busca-bloco[data-ligado] .dock-busca-icone { color: var(--busca-destaque); background: color-mix(in srgb,var(--busca-destaque) 12%,transparent); }
+
 .dock-busca-texto {
   flex: 1;
   min-width: 0;

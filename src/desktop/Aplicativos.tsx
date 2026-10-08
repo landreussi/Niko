@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { AnimatePresence } from "motion/react";
 import { Ilha } from "../janelas/ilha/Ilha";
 import { Dock } from "../janelas/dock/Dock";
+import { AssistiveTouch } from "../janelas/assistive/AssistiveTouch";
 import { JanelaSistema } from "../janelas/sistema/JanelaSistema";
 import { JanelaConexao } from "../modulos/conexoes/JanelaConexao";
 import { BuscaGlobal } from "../modulos/busca/BuscaGlobal";
@@ -102,4 +103,16 @@ export function AppDock() {
       <Dock />
     </div>
   );
+}
+
+export function AppAssistive() {
+  usarTema();
+  usarSincronia();
+  const ativo = useConfig((s) => s.assistive.ativo);
+  useEffect(() => {
+    let vivo = true;
+    void janelaAtual().then((j) => { if (vivo) return ativo ? j.show() : j.hide(); }).catch(() => undefined);
+    return () => { vivo = false; };
+  }, [ativo]);
+  return <div className="area-sobreposta"><AssistiveTouch /></div>;
 }

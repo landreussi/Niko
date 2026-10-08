@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { emitTo, listen } from "@tauri-apps/api/event";
 import type { Rota, ServicoId } from "../tipos";
 
-export type NomeJanela = "sistema" | "ilha" | "dock";
+export type NomeJanela = "sistema" | "ilha" | "dock" | "assistive";
 
 interface InternosTauri {
   metadata?: { currentWindow?: { label?: string } };
@@ -16,6 +16,7 @@ export const ROTULO: string | null = NATIVO ? internos?.metadata?.currentWindow?
 
 export function tipoDaJanela(rotulo: string): NomeJanela {
   if (rotulo === "dock" || rotulo.startsWith("dock-")) return "dock";
+  if (rotulo === "assistive") return "assistive";
   return rotulo === "ilha" ? "ilha" : "sistema";
 }
 

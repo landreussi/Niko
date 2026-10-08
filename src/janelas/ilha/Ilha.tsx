@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AnimatePresence, motion } from "motion/react";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import {
   Plus, Music, Timer, CalendarDays, MessageCircle, Plug, Bell, Volume2, VolumeX, AppWindow, ChevronUp, Pin, PinOff, Check, CircleAlert, Download, CodeXml, ShieldAlert, LoaderCircle,
   type LucideIcon,
 } from "lucide-react";
 import { useConfig, type AbaIlha, type SecaoHoje, type VisaoIlha } from "../../estado/configuracoes";
-import { useIlha } from "../../estado/ilha";
+import { estadoComAviso, useIlha } from "../../estado/ilha";
 import { useInterface } from "../../estado/interface";
 import { useAgentes, AGENTES, estadoDoAgente, alertaFresco } from "../../estado/agentes";
 import { usePomodoro, restanteAtual, formatarRelogio } from "../../estado/pomodoro";
@@ -122,6 +122,9 @@ export function Ilha() {
   const nomes = useConfig((s) => s.agentes.nomes);
   const cargos = useConfig((s) => s.agentes.cargos);
   const privacidade = useConfig((s) => s.privacidade);
+  const preferenciaDeMovimento = useReducedMotion();
+  const animacoesDesligadas = useConfig((s) => s.reduzirAnimacoes);
+  const reduzirAnimacoes = animacoesDesligadas || preferenciaDeMovimento;
   const estado = useIlha((s) => s.estado);
   const aba = useIlha((s) => s.aba);
   const secaoHoje = useIlha((s) => s.secaoHoje);
@@ -236,7 +239,7 @@ export function Ilha() {
   const trabalhando = AGENTES.filter((a) => ["pensando", "escrevendo"].includes(estadoDoAgente(agentes, a)));
 
   const pedidoPendente = pedidosClaude.length > 0;
-  const estadoEfetivo = saudando ? "compacta" : coberta && estado !== "expandida" && !revelacao && !pedidoPendente ? "escondida" : (cfg.modo === "fixo" || pedidoPendente) && estado === "escondida" ? "compacta" : estado;
+  const estadoEfetivo = saudando ? "compacta" : coberta && estado !== "expandida" && !revelacao && !pedidoPendente ? "escondida" : (cfg.modo === "fixo" || pedidoPendente) && estado === "escondida" ? "compacta" : estadoComAviso(estado, Boolean(revelacao));
 
   useEffect(() => {
     if (cfg.modo !== "esconder" || estadoEfetivo !== "compacta" || sobre || barraEmUso || revelacao || frescos > 0 || pomodoro.rodando || atualizacao.fase !== "nada" || pedidoPendente) return;
@@ -314,8 +317,8 @@ export function Ilha() {
   }, [frente.telaCheia, recolher]);
 
   const compacta = useMemo(() => {
+    if (revelacao) return { tipo: "revelacao" as const, largura: 380 };
     if (atualizacao.fase !== "nada") return { tipo: "atualizacao" as const, largura: 350 };
-    if (revelacao) return { tipo: "revelacao" as const, largura: 340 };
     if (pedidosClaude.length > 0) return { tipo: "claudePedido" as const, largura: 340 };
     if (pomodoroIniciado) return { tipo: "pomodoro" as const, largura: midia.tocando ? 330 : 290 };
     if (cfg.blocos.midia && midiaAtivaNaIlha(midia)) return { tipo: "midia" as const, largura: 330 };
@@ -335,7 +338,7 @@ export function Ilha() {
     : estadoEfetivo === "escondida"
       ? { w: 120, h: 6, r: 6 }
       : estadoEfetivo === "compacta"
-        ? { w: compacta.largura, h: compacta.tipo === "midia" ? ALTURA_COMPACTA_MIDIA : ALTURA_COMPACTA, r: compacta.tipo === "midia" ? 14 : 12 }
+        ? { w: compacta.largura, h: compacta.tipo === "revelacao" ? 56 : compacta.tipo === "midia" ? ALTURA_COMPACTA_MIDIA : ALTURA_COMPACTA, r: compacta.tipo === "midia" || compacta.tipo === "revelacao" ? 14 : 12 }
         : { w: LARGURA_ABA[abaAtual] ?? LARGURA_EXPANDIDA, h: alturaDaVisao(abaAtual, secaoHoje), r: 30 };
   const crescendo = alvo.w * alvo.h >= anterior.current.w * anterior.current.h;
   anterior.current = { w: alvo.w, h: alvo.h };
@@ -384,7 +387,7 @@ export function Ilha() {
             <div className="ilha-compacta-lado">
               {revelacao?.marca ? <Marca marca={revelacao.marca} tamanho={16} /> : revelacao?.agente ? <EspacoDoPersonagem agente={revelacao.agente} tamanho={20} posicao="compacta" /> : null}
             </div>
-            <span className="ilha-compacta-texto privado">{revelacao?.texto}</span>
+            <span className="ilha-compacta-texto privado" role="status">{revelacao?.texto}</span>
             <div className="ilha-compacta-lado">
               {revelacao?.tipo === "alerta" ? <CircleAlert size={15} color="#f5a524" /> : <Check size={15} color="#34d399" />}
             </div>
@@ -542,6 +545,14 @@ export function Ilha() {
           animate={{ width: alvo.w, height: alvo.h, borderBottomLeftRadius: alvo.r, borderBottomRightRadius: alvo.r }}
           transition={transicao}
         >
+          <AnimatePresence>
+            {revelacao && !saudando && <motion.div key={revelacao.texto} className="ilha-sinal-aviso" aria-hidden="true" initial={{ opacity: 0 }} animate={{ opacity: reduzirAnimacoes ? 0.45 : [0, 0.7, 0.25, 0.6, 0.25] }} exit={{ opacity: 0 }} transition={{ duration: reduzirAnimacoes ? 0.12 : 1.2 }} />}
+          </AnimatePresence>
+          <AnimatePresence>
+            {revelacao && estadoEfetivo === "expandida" && !saudando && <motion.button key={revelacao.texto} type="button" className="ilha-aviso-aberta" initial={{ opacity: 0, y: reduzirAnimacoes ? 0 : -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} onClick={() => { abrir(revelacao.aba); useIlha.getState().dispensarRevelacao(); }}>
+              <Bell size={16} /><span className="privado" role="status">{revelacao.texto}</span>
+            </motion.button>}
+          </AnimatePresence>
           <div className="ilha-recorte">
             <AnimatePresence mode="popLayout" initial={false}>
               {saudacao && <Saudacao key={`saudacao-${saudacao.id}`} versaoNova={saudacao.versaoNova} aoTerminar={encerrarSaudacao} />}
