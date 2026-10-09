@@ -19,6 +19,7 @@ import type {
 import { gerarId, normalizarTexto } from "../utilitarios/basicos";
 import { deISO, hojeISO, paraISO } from "../utilitarios/datas";
 import { T } from "../textos/textos";
+import { exigir, validarTransacao } from "../utilitarios/validacoes";
 
 export const EU = "eu";
 
@@ -159,7 +160,10 @@ export const useFinancas = create<EstadoFinancas>()(
           };
         }),
       lancar: ({ parcelas = 1, ...dados }) => {
-        const total = Math.max(1, Math.min(48, Math.round(parcelas)));
+        validarTransacao(dados, get().contas, get().categorias);
+        exigir(Number.isInteger(parcelas) && parcelas >= 1 && parcelas <= 48, T.validacao.entre(1, 48));
+        exigir(dados.valor >= parcelas, T.validacao.parcelasSemValor);
+        const total = parcelas;
         const grupo = total > 1 ? gerarId() : undefined;
         const criadaEm = new Date().toISOString();
         const base = Math.floor(dados.valor / total);
@@ -177,7 +181,12 @@ export const useFinancas = create<EstadoFinancas>()(
         set((s) => ({ transacoes: [...s.transacoes, ...novas] }));
         return novas;
       },
-      atualizarTransacao: (id, parcial) => set((s) => ({ transacoes: s.transacoes.map((t) => (t.id === id ? { ...t, ...parcial } : t)) })),
+      atualizarTransacao: (id, parcial) => set((s) => ({ transacoes: s.transacoes.map((t) => {
+        if (t.id !== id) return t;
+        const nova = { ...t, ...parcial, id: t.id, criadaEm: t.criadaEm };
+        validarTransacao(nova, s.contas, s.categorias);
+        return nova;
+      }) })),
       excluirTransacao: (id) => {
         const alvo = get().transacoes.find((t) => t.id === id);
         if (!alvo) return [];
@@ -188,8 +197,21 @@ export const useFinancas = create<EstadoFinancas>()(
         set((s) => ({ transacoes: s.transacoes.filter((t) => !ids.has(t.id)) }));
         return removidas;
       },
-      restaurarTransacoes: (itens) => set((s) => ({ transacoes: [...s.transacoes, ...itens] })),
+      restaurarTransacoes: (itens) => set((s) => {
+        const ids = new Set(s.transacoes.map((t) => t.id));
+        const novas: Transacao[] = [];
+        for (const t of itens) {
+          exigir(typeof t.id === "string" && t.id.length > 0);
+          if (ids.has(t.id)) continue;
+          validarTransacao(t, s.contas, s.categorias);
+          ids.add(t.id);
+          novas.push(t);
+        }
+        return { transacoes: [...s.transacoes, ...novas] };
+      }),
       ajustarSaldo: (contaId, saldoReal) => {
+        exigir(Number.isSafeInteger(saldoReal), T.validacao.valorInvalido);
+        exigir(get().contas.some((c) => c.id === contaId), T.validacao.contaObrigatoria);
         const atual = saldoDaConta(get(), contaId);
         const diferenca = saldoReal - atual;
         if (diferenca === 0) return;
@@ -343,6 +365,7 @@ export const useFinancas = create<EstadoFinancas>()(
         return get().regras.find((r) => r.contem && alvo.includes(normalizarTexto(r.contem)))?.categoriaId;
       },
       importar: (itens) => {
+        itens.forEach((item) => validarTransacao(item, get().contas, get().categorias));
         const existentes = new Set(get().transacoes.map((t) => `${t.data}|${t.valor}|${normalizarTexto(t.descricao)}`));
         const novas: Transacao[] = [];
         let duplicados = 0;

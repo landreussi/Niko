@@ -15,9 +15,11 @@ import { htmlParaTexto } from "../../utilitarios/sanitizar";
 import { formatarDinheiro } from "../../utilitarios/dinheiro";
 import { formatar } from "../../utilitarios/datas";
 import { ICONE_ROTA } from "../../janelas/sistema/rotas";
-import { Tecla } from "../../componentes/basicos";
 import type { Rota } from "../../tipos";
 import { funcaoLigada, rotaLigada } from "../../utilitarios/funcoes";
+import { formatarTeclas, type AcaoGlobal } from "../../utilitarios/atalhos";
+
+const ATALHO_DA_ACAO: Record<string, AcaoGlobal> = { "a-pomodoro": "pomodoro", "a-priv": "privacidade", "a-captura": "captura" };
 
 interface Resultado {
   id: string;
@@ -66,6 +68,7 @@ export function BuscaGlobal() {
   }, [aberta]);
 
   const desligadas = useConfig((s) => s.funcoesDesligadas);
+  const atalhosGlobais = useConfig((s) => s.atalhosGlobais);
   const resultados = useMemo<Resultado[]>(() => {
     if (!aberta) return [];
     const t = termo.trim();
@@ -148,11 +151,17 @@ export function BuscaGlobal() {
     return acc;
   }, []);
 
+  const atalhoDe = (id: string) => {
+    const acao = ATALHO_DA_ACAO[id];
+    const teclas = acao ? atalhosGlobais[acao] : "";
+    return teclas ? formatarTeclas(teclas).split(" + ").join(" ") : "";
+  };
+
   return (
     <AnimatePresence>
       {aberta && (
         <motion.div
-          className="sobreposicao"
+          className="estilo-sistema busca-fundo"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
@@ -160,17 +169,17 @@ export function BuscaGlobal() {
           onPointerDown={(e) => e.target === e.currentTarget && abrir(false)}
         >
           <motion.div
-            className="paleta"
+            className="busca-caixa"
             role="dialog"
             aria-modal="true"
             aria-label={T.busca.placeholder}
             initial={{ opacity: 0, y: -8, scale: 0.98 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -6, scale: 0.98 }}
-            transition={{ duration: 0.18, ease: [0.3, 0.9, 0.3, 1] }}
+            transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
           >
-            <div className="paleta-campo">
-              <Search size={16} />
+            <div className="busca-campo">
+              <Search size={17} />
               <input
                 ref={campo}
                 value={termo}
@@ -195,40 +204,45 @@ export function BuscaGlobal() {
                   if (e.key === "Enter") resultados[ativo]?.executar();
                 }}
               />
-              <Tecla>Esc</Tecla>
+              <kbd className="busca-tecla">Esc</kbd>
             </div>
-            <div className="paleta-lista" id="paleta-lista" role="listbox" ref={lista}>
+            <div className="busca-lista" id="paleta-lista" role="listbox" ref={lista}>
               {resultados.length === 0 ? (
                 <div className="vazio">{termo ? T.busca.vazio : T.busca.dica}</div>
               ) : (
                 grupos.map((g) => (
-                  <div key={g.grupo} role="group" aria-label={T.busca.grupos[g.grupo]}>
-                    <div className="rotulo-secao paleta-grupo">{T.busca.grupos[g.grupo]}</div>
-                    {g.itens.map(({ r, i }) => (
-                      <button
-                        key={r.id}
-                        id={`paleta-${r.id}`}
-                        type="button"
-                        role="option"
-                        aria-selected={i === ativo}
-                        data-indice={i}
-                        className="paleta-item"
-                        onPointerMove={() => setAtivo(i)}
-                        onClick={r.executar}
-                      >
-                        <span className="paleta-icone">{r.icone}</span>
-                        <span className="cortar">{r.titulo}</span>
-                        {r.sub && <span className="texto-3 cortar paleta-sub privado">{r.sub}</span>}
-                        {i === ativo && <CornerDownLeft size={13} className="empurrar texto-3" />}
-                      </button>
-                    ))}
+                  <div key={g.grupo} className="busca-grupo" role="group" aria-label={T.busca.grupos[g.grupo]}>
+                    <div className="busca-grupo-nome">{T.busca.grupos[g.grupo]}</div>
+                    {g.itens.map(({ r, i }) => {
+                      const atalho = atalhoDe(r.id);
+                      return (
+                        <button
+                          key={r.id}
+                          id={`paleta-${r.id}`}
+                          type="button"
+                          role="option"
+                          aria-selected={i === ativo}
+                          data-indice={i}
+                          className="busca-item"
+                          onPointerMove={() => setAtivo(i)}
+                          onClick={r.executar}
+                        >
+                          <span className="busca-icone">{r.icone}</span>
+                          <span className="busca-item-texto">
+                            <span className="busca-item-titulo">{r.titulo}</span>
+                            {r.sub && <span className="busca-item-sub privado">{r.sub}</span>}
+                          </span>
+                          {atalho ? <span className="busca-atalho">{atalho}</span> : i === ativo && <CornerDownLeft size={13} className="busca-enter" />}
+                        </button>
+                      );
+                    })}
                   </div>
                 ))
               )}
             </div>
-            <div className="paleta-rodape texto-3">
-              <span className="linha"><Tecla><ArrowUp size={11} /></Tecla><Tecla><ArrowDown size={11} /></Tecla>{T.busca.navegar}</span>
-              <span><Tecla>Enter</Tecla> {T.busca.abrir}</span>
+            <div className="busca-rodape">
+              <span><b><ArrowUp size={11} /><ArrowDown size={11} /></b> {T.busca.navegar}</span>
+              <span><b>Enter</b> {T.busca.abrir}</span>
             </div>
           </motion.div>
         </motion.div>

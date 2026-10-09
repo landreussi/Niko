@@ -1,20 +1,53 @@
 import { ArrowDown, ArrowUp, RotateCcw, X } from "lucide-react";
-import { Botao, Campo, LinhaAlternador } from "../../componentes/basicos";
+import { Botao, Segmentado } from "../../componentes/basicos";
 import { useConfig } from "../../estado/configuracoes";
 import { ASSISTIVE_PADRAO, moverAtalho } from "../../janelas/assistive/regras";
 import { T } from "../../textos/textos";
+import { AlternadorAjuste, FaixaAjuste, GrupoAjuste, LinhaAjuste, NotaAjuste } from "./LinhaAjuste";
 
 export function SecaoAssistive() {
   const cfg = useConfig((s) => s.assistive);
   const definir = useConfig((s) => s.definirAssistive);
   const C = T.assistive;
-  return <div className="coluna" style={{ gap: 16 }}>
-    <p className="campo-dica">{C.dicaConfiguracao}</p>
-    <LinhaAlternador rotulo={C.ativar} ligado={cfg.ativo} aoMudar={(ativo) => definir({ ativo })} />
-    <LinhaAlternador rotulo={C.fixar} ligado={cfg.fixado} aoMudar={(fixado) => definir({ fixado })} />
-    <Campo id="assistive-cor" rotulo={C.origemCor}><select id="assistive-cor" className="seletor" value={cfg.origemCor} onChange={(e) => definir({ origemCor: e.target.value as "ilha" | "dock" })}><option value="ilha">{C.ilha}</option><option value="dock">{C.dock}</option></select></Campo>
-    <Campo id="assistive-opacidade" rotulo={C.opacidade}><div className="linha" style={{ gap: 12 }}><input id="assistive-opacidade" type="range" min={0.3} max={1} step={0.05} value={cfg.opacidade} onChange={(e) => definir({ opacidade: Number(e.target.value) })} /><output>{Math.round(cfg.opacidade * 100)}%</output></div></Campo>
-    <Botao variante="secundario" icone={<RotateCcw size={15} />} onClick={() => definir({ posicao: { ...ASSISTIVE_PADRAO.posicao } })}>{C.restaurarPosicao}</Botao>
-    {cfg.apps.length > 0 && <div className="coluna" style={{ gap: 8 }}><b className="campo-rotulo">{C.editar}</b>{cfg.apps.map((app, i) => <div key={app.id} className="linha" style={{ gap: 8 }}><span style={{ flex: 1 }}>{app.nome}</span><Botao pequeno variante="fantasma" soIcone icone={<ArrowUp size={14} />} aria-label={C.anterior(app.nome)} disabled={i === 0} onClick={() => definir({ apps: moverAtalho(useConfig.getState().assistive.apps, app.id, -1) })} /><Botao pequeno variante="fantasma" soIcone icone={<ArrowDown size={14} />} aria-label={C.proximo(app.nome)} disabled={i === cfg.apps.length - 1} onClick={() => definir({ apps: moverAtalho(useConfig.getState().assistive.apps, app.id, 1) })} /><Botao pequeno variante="fantasma" soIcone icone={<X size={14} />} aria-label={C.remover(app.nome)} onClick={() => definir({ apps: useConfig.getState().assistive.apps.filter((a) => a.id !== app.id) })} /></div>)}</div>}
-  </div>;
+  const percentual = Math.round(cfg.opacidade * 100);
+  return (
+    <>
+      <NotaAjuste>
+        <p className="ajuste-nota-texto">{C.dicaConfiguracao}</p>
+      </NotaAjuste>
+      <AlternadorAjuste rotulo={C.ativar} ligado={cfg.ativo} aoMudar={(ativo) => definir({ ativo })} />
+      <AlternadorAjuste rotulo={C.fixar} ligado={cfg.fixado} aoMudar={(fixado) => definir({ fixado })} />
+      <LinhaAjuste rotulo={C.origemCor}>
+        <Segmentado<"ilha" | "dock">
+          rotulo={C.origemCor}
+          valor={cfg.origemCor}
+          aoMudar={(origemCor) => definir({ origemCor })}
+          opcoes={[
+            { valor: "ilha", rotulo: C.ilha },
+            { valor: "dock", rotulo: C.dock },
+          ]}
+        />
+      </LinhaAjuste>
+      <LinhaAjuste rotulo={C.opacidade} para="assistive-opacidade" esticar>
+        <FaixaAjuste id="assistive-opacidade" rotulo={C.opacidade} valor={cfg.opacidade} min={0.3} max={1} passo={0.05} texto={`${percentual}%`} aoMudar={(opacidade) => definir({ opacidade })} />
+      </LinhaAjuste>
+      <LinhaAjuste rotulo={T.configuracoes.posicao}>
+        <Botao icone={<RotateCcw size={13} />} onClick={() => definir({ posicao: { ...ASSISTIVE_PADRAO.posicao } })}>
+          {C.restaurarPosicao}
+        </Botao>
+      </LinhaAjuste>
+      {cfg.apps.length > 0 && (
+        <>
+          <GrupoAjuste titulo={C.editar} />
+          {cfg.apps.map((app, i) => (
+            <LinhaAjuste key={app.id} rotulo={app.nome}>
+              <Botao pequeno variante="fantasma" soIcone icone={<ArrowUp size={14} />} aria-label={C.anterior(app.nome)} disabled={i === 0} onClick={() => definir({ apps: moverAtalho(useConfig.getState().assistive.apps, app.id, -1) })} />
+              <Botao pequeno variante="fantasma" soIcone icone={<ArrowDown size={14} />} aria-label={C.proximo(app.nome)} disabled={i === cfg.apps.length - 1} onClick={() => definir({ apps: moverAtalho(useConfig.getState().assistive.apps, app.id, 1) })} />
+              <Botao pequeno variante="fantasma" soIcone icone={<X size={14} />} aria-label={C.remover(app.nome)} onClick={() => definir({ apps: useConfig.getState().assistive.apps.filter((a) => a.id !== app.id) })} />
+            </LinhaAjuste>
+          ))}
+        </>
+      )}
+    </>
+  );
 }

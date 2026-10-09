@@ -26,6 +26,8 @@ export interface SessaoClaude {
   resposta?: string;
   erro?: string;
   modo?: string;
+  modoAtualizadoEm?: string;
+  modoConfirmado?: boolean;
   modelo?: string;
   ferramentasUsadas: number;
   iniciadaEm: string;
@@ -252,7 +254,17 @@ export const useClaudeCode = create<EstadoClaude>((set, get) => ({
         iniciadaEm: e.recebidoEm,
         atualizadaEm: e.recebidoEm,
       };
-      const sessao: SessaoClaude = { ...base, cwd: e.cwd || base.cwd, projeto: e.cwd ? nomeDoProjeto(e.cwd, nomeReserva) : base.projeto, atualizadaEm: e.recebidoEm, modo: texto(d.permission_mode) || base.modo, modelo: texto(d.model) || base.modelo };
+      const modoInformado = texto(d.permission_mode);
+      const modoMaisRecente = Boolean(modoInformado) && (!base.modoAtualizadoEm || Date.parse(e.recebidoEm) >= Date.parse(base.modoAtualizadoEm));
+      const reiniciouSemModo = e.evento === "SessionStart" && !modoInformado;
+      const sessao: SessaoClaude = {
+        ...base, cwd: e.cwd || base.cwd, projeto: e.cwd ? nomeDoProjeto(e.cwd, nomeReserva) : base.projeto,
+        atualizadaEm: e.recebidoEm,
+        modo: modoMaisRecente ? modoInformado : reiniciouSemModo ? undefined : base.modo,
+        modoAtualizadoEm: modoMaisRecente ? e.recebidoEm : reiniciouSemModo ? undefined : base.modoAtualizadoEm,
+        modoConfirmado: modoMaisRecente,
+        modelo: texto(d.model) || base.modelo,
+      };
       const passos = [...sessao.passos];
       let pedidos = s.pedidos;
       switch (e.evento) {

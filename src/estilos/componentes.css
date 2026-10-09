@@ -219,7 +219,7 @@
 }
 
 .alternador[aria-checked="true"] {
-  background: var(--sucesso);
+  background: var(--destaque-sistema, #ff3b47);
 }
 
 .alternador[aria-checked="true"]::after {

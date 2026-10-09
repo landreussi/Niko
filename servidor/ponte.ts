@@ -34,7 +34,9 @@ function lerCorpo(req: IncomingMessage): Promise<Record<string, unknown>> {
     });
     req.on("end", () => {
       try {
-        resolver(partes.length ? JSON.parse(Buffer.concat(partes).toString("utf8")) : {});
+        const corpo: unknown = partes.length ? JSON.parse(Buffer.concat(partes).toString("utf8")) : {};
+        if (corpo === null || typeof corpo !== "object" || Array.isArray(corpo)) throw new Error("json_invalido");
+        resolver(corpo as Record<string, unknown>);
       } catch {
         rejeitar(new Error("json_invalido"));
       }

@@ -4,6 +4,8 @@ use std::time::Duration;
 
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, Monitor, PhysicalPosition, PhysicalSize, WebviewWindow};
+use windows::Win32::Foundation::{HWND, RECT};
+use windows::Win32::UI::WindowsAndMessaging::GetWindowRect;
 
 use crate::{barra_windows, criar_sobreposta, Estado, ALTURA_DOCK, ALTURA_ILHA};
 
@@ -73,7 +75,7 @@ pub fn monitor_escolhido(escolha: &str, info: &MonitorDoNiko, lista: &[MonitorDo
     info.principal
 }
 
-pub fn posicionar(janela: &WebviewWindow, monitor: &Monitor) {
+pub fn posicionar(janela: &WebviewWindow, monitor: &Monitor) -> bool {
     let escala = monitor.scale_factor();
     let (posicao, tamanho) = if barra_windows::barra_oculta() {
         (*monitor.position(), *monitor.size())
@@ -82,10 +84,17 @@ pub fn posicionar(janela: &WebviewWindow, monitor: &Monitor) {
         (area.position, area.size)
     };
     let altura = (ALTURA_DOCK * escala).round() as i32;
-    let destino = PhysicalPosition::new(posicao.x, posicao.y + tamanho.height as i32 - altura);
+    let reserva = barra_windows::retangulo_reservado(janela, monitor);
+    let limites = barra_windows::retangulo_da_sobreposta(reserva.unwrap_or(RECT { left: posicao.x, top: posicao.y, right: posicao.x + tamanho.width as i32, bottom: posicao.y + tamanho.height as i32 }), altura);
+    if let Ok(h) = janela.hwnd() {
+        let mut atual = RECT::default();
+        if unsafe { GetWindowRect(HWND(h.0), &mut atual) }.is_ok() && atual.left == limites.left && atual.top == limites.top && atual.right == limites.right && atual.bottom == limites.bottom { return false; }
+    }
+    let destino = PhysicalPosition::new(limites.left, limites.top);
     let _ = janela.set_position(destino);
-    let _ = janela.set_size(PhysicalSize::new(tamanho.width, altura as u32));
+    let _ = janela.set_size(PhysicalSize::new((limites.right - limites.left) as u32, altura as u32));
     let _ = janela.set_position(destino);
+    true
 }
 
 pub fn monitor_da_ilha(escolha: &str, lista: &[MonitorDoNiko]) -> usize {
