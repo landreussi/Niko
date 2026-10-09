@@ -27,6 +27,42 @@ claude.buscaDeProcesso.focar = async (pid) => {
   return { ok: true };
 };
 const { useClaudeCode } = await vite.ssrLoadModule("/src/estado/claudeCode.ts");
+const { indicadorDePermissoes } = await vite.ssrLoadModule("/src/janelas/ilha/claude/indicadorDePermissoes.ts");
+
+test("modo sem confirmação recente fica identificado como último modo conhecido", () => {
+  const agora = Date.now();
+  const data = new Date(agora).toISOString();
+  const base = { sessao: "modo-teste", cwd: "", ferramenta: "claude", recebidoEm: data };
+  const aplicar = useClaudeCode.getState().aplicar;
+  aplicar({ ...base, id: "modo-1", evento: "SessionStart", dados: { permission_mode: "default" } });
+  assert.equal(indicadorDePermissoes(useClaudeCode.getState().sessoes[base.sessao], agora).texto, "Modo: Manual");
+  aplicar({ ...base, id: "modo-2", evento: "PreToolUse", dados: { tool_name: "Read" } });
+  assert.equal(indicadorDePermissoes(useClaudeCode.getState().sessoes[base.sessao], agora).texto, "Último modo: Manual");
+  aplicar({ ...base, id: "modo-3", evento: "PreToolUse", dados: { tool_name: "Read", permission_mode: "auto" } });
+  assert.equal(indicadorDePermissoes(useClaudeCode.getState().sessoes[base.sessao], agora).texto, "Modo: Automático");
+  assert.equal(indicadorDePermissoes(useClaudeCode.getState().sessoes[base.sessao], agora + 90000).texto, "Último modo: Automático");
+});
+
+test("reiniciar sessão sem modo não reaproveita permissão antiga", () => {
+  const recebidoEm = new Date().toISOString();
+  const base = { sessao: "modo-reinicio", cwd: "", ferramenta: "claude", recebidoEm };
+  useClaudeCode.getState().aplicar({ ...base, id: "modo-reinicio-1", evento: "SessionStart", dados: { permission_mode: "auto" } });
+  useClaudeCode.getState().aplicar({ ...base, id: "modo-reinicio-2", evento: "SessionStart", dados: {} });
+  assert.equal(indicadorDePermissoes(useClaudeCode.getState().sessoes[base.sessao], Date.now()).texto, "Modo não informado");
+});
+
+test("evento antigo não sobrescreve modo mais recente", () => {
+  const agora = Date.now();
+  const base = { sessao: "modo-atrasado", cwd: "", ferramenta: "claude", evento: "PreToolUse" };
+  useClaudeCode.getState().aplicar({ ...base, id: "modo-atrasado-1", recebidoEm: new Date(agora).toISOString(), dados: { permission_mode: "auto", tool_name: "Read" } });
+  useClaudeCode.getState().aplicar({ ...base, id: "modo-atrasado-2", recebidoEm: new Date(agora - 1000).toISOString(), dados: { permission_mode: "default", tool_name: "Read" } });
+  assert.equal(useClaudeCode.getState().sessoes[base.sessao].modo, "auto");
+});
+
+test("modo desconhecido ou data inválida não inventa confirmação", () => {
+  assert.equal(indicadorDePermissoes({ modo: "inventado" }, Date.now()).texto, "Modo não informado");
+  assert.equal(indicadorDePermissoes({ modo: "auto", modoAtualizadoEm: "inválida", modoConfirmado: true }, Date.now()).texto, "Último modo: Automático");
+});
 const pastaClaude = join(raizTemporaria, ".claude");
 const settings = join(pastaClaude, "settings.json");
 const lerSettings = () => JSON.parse(readFileSync(settings, "utf8"));

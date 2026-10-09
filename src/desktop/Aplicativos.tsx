@@ -51,7 +51,7 @@ export function AppSistema() {
   }, []);
 
   return (
-    <div className="area-trabalho area-nativa">
+    <div className="area-trabalho area-nativa estilo-sistema">
       <JanelaSistema />
       <AnimatePresence>
         {janelas.filter((j) => !j.minimizada).map((j) => (

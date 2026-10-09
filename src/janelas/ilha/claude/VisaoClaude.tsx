@@ -20,6 +20,7 @@ import { ConfigDasFerramentas } from "./ConfigDasFerramentas";
 import { ResumoDaSemana } from "./ResumoDaSemana";
 import { trazerTerminalDaSessao } from "../../../desktop/usarAtalhosGlobais";
 import { MARCA_DA_FERRAMENTA, nomeDaFerramenta } from "./ferramentas";
+import { indicadorDePermissoes } from "./indicadorDePermissoes";
 
 const ESPERA_MS = 110_000;
 const C = T.ilha.claude;
@@ -370,6 +371,7 @@ export function VisaoClaude() {
   const sessao = sessoes[focada ?? ""] ?? sessoes[ordem[0]];
   const pedido = pedidos.find((p) => p.sessao === sessao?.id) ?? pedidos[0];
   const [painel, setPainel] = useState<"resposta" | "atividade">("atividade");
+  const indicador = sessao ? indicadorDePermissoes(sessao, Math.max(agora, Date.now())) : null;
 
   useEffect(() => {
     if (configAberta) return;
@@ -407,7 +409,7 @@ export function VisaoClaude() {
         })}
       </div>
         <span className="vsc-acoes-abas">
-          {sessao?.modo && <span className="vsc-dim vsc-acoes-texto">{C.modos[sessao.modo] ?? sessao.modo}</span>}
+          {indicador && <span className="vsc-dim vsc-acoes-texto vsc-modo-permissao" aria-label={indicador.texto} title={`${indicador.texto}. ${indicador.dica}`}>{indicador.texto}</span>}
           {sessao && <span className="vsc-dim vsc-acoes-texto">{quandoFoi(sessao.atualizadaEm, agora)}</span>}
           {sessao && (
             <button type="button" className="vsc-icone-botao" aria-label={C.terminal.trazer} title={C.terminal.trazer} onClick={() => trazerTerminalDaSessao(sessao.id)}>

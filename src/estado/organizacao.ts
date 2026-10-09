@@ -4,6 +4,7 @@ import { armazenamento, chave } from "../ponte/armazenamento";
 import type { CartaoVisao, Evento, Meta, Pilar } from "../tipos";
 import { gerarId } from "../utilitarios/basicos";
 import { hojeISO } from "../utilitarios/datas";
+import { validarEvento } from "../utilitarios/validacoes";
 
 export const PILARES_PADRAO = ["Saúde", "Carreira", "Relacionamentos", "Crescimento", "Finanças"];
 
@@ -64,11 +65,17 @@ export const useOrganizacao = create<EstadoOrganizacao>()(
       atualizarVisao: (id, parcial) => set((s) => ({ visao: s.visao.map((v) => (v.id === id ? { ...v, ...parcial } : v)) })),
       excluirVisao: (id) => set((s) => ({ visao: s.visao.filter((v) => v.id !== id) })),
       criarEvento: (dados) => {
+        validarEvento(dados);
         const evento = { ...dados, titulo: dados.titulo.trim().slice(0, 120), id: gerarId() };
         set((s) => ({ eventos: [...s.eventos, evento] }));
         return evento;
       },
-      atualizarEvento: (id, parcial) => set((s) => ({ eventos: s.eventos.map((e) => (e.id === id ? { ...e, ...parcial } : e)) })),
+      atualizarEvento: (id, parcial) => set((s) => ({ eventos: s.eventos.map((e) => {
+        if (e.id !== id) return e;
+        const novo = { ...e, ...parcial, id: e.id };
+        validarEvento(novo);
+        return novo;
+      }) })),
       marcarEventoFeito: (id, data, feito) =>
         set((s) => ({
           eventos: s.eventos.map((e) => {
@@ -82,7 +89,10 @@ export const useOrganizacao = create<EstadoOrganizacao>()(
         set((s) => ({ eventos: s.eventos.filter((e) => e.id !== id) }));
         return evento;
       },
-      restaurarEvento: (e) => set((s) => ({ eventos: [...s.eventos, e] })),
+      restaurarEvento: (e) => {
+        validarEvento(e);
+        set((s) => ({ eventos: s.eventos.some((x) => x.id === e.id) ? s.eventos : [...s.eventos, e] }));
+      },
       substituir: (dados) => set(dados),
     }),
     { name: chave("organizacao"), storage: armazenamento },

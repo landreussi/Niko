@@ -737,6 +737,12 @@
   white-space: nowrap;
 }
 
+.vsc-modo-permissao {
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .vsc {
   position: relative;
 }

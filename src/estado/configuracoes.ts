@@ -7,6 +7,8 @@ import { FUNDO_DESTAQUE, hexValido, misturar } from "../utilitarios/cores";
 import type { Buscador } from "../utilitarios/buscaApps";
 import { ATALHOS_PADRAO, atalhosComPadrao, type AcaoGlobal } from "../utilitarios/atalhos";
 import { ASSISTIVE_PADRAO, validarAssistive, type ConfigAssistive } from "../janelas/assistive/regras";
+import { configuracoesValidas } from "../utilitarios/configuracoesValidas";
+import { objeto } from "../utilitarios/validacoes";
 
 const DESTAQUE_ESCURO_PADRAO = "#a78bfa";
 
@@ -237,8 +239,8 @@ export const useConfig = create<Configuracoes & AcoesConfig>()(
   persist(
     (set) => ({
       ...CONFIG_PADRAO,
-      definir: (parcial) => set(parcial),
-      definirIlha: (parcial) => set((s) => ({ ilha: { ...s.ilha, ...parcial } })),
+      definir: (parcial) => set((s) => ({ ...configuracoesValidas({ ...s, ...parcial }, CONFIG_PADRAO), assistive: validarAssistive(parcial.assistive ?? s.assistive) })),
+      definirIlha: (parcial) => set((s) => ({ ilha: configuracoesValidas({ ...s, ilha: { ...s.ilha, ...parcial } }, CONFIG_PADRAO).ilha })),
       definirAssistive: (parcial) => set((s) => ({ assistive: validarAssistive({ ...s.assistive, ...parcial }) })),
       restaurar: () => set({ ...CONFIG_PADRAO, primeiraExecucaoFeita: true }),
     }),
@@ -247,7 +249,12 @@ export const useConfig = create<Configuracoes & AcoesConfig>()(
       storage: armazenamento,
       version: 10,
       migrate: (salvo, versao) => {
-        const s = (salvo ?? {}) as Partial<Configuracoes>;
+        const s = (objeto(salvo) ? { ...salvo } : {}) as Partial<Configuracoes>;
+        if (s.ilha) s.ilha = {
+          ...configuracoesValidas({ ilha: s.ilha }, CONFIG_PADRAO).ilha,
+          blocos: (objeto(s.ilha.blocos) ? Object.fromEntries(Object.entries(s.ilha.blocos).filter(([, v]) => typeof v === "boolean")) : {}) as ConfigIlha["blocos"],
+          ordemAbas: Array.isArray(s.ilha.ordemAbas) ? s.ilha.ordemAbas.filter((a) => typeof a === "string") : [],
+        };
         if (versao < 2) {
           if (s.ilha && s.ilha.esconderSeg === 60) s.ilha = { ...s.ilha, esconderSeg: 4 };
           if (s.dock && s.dock.modo === "fixo") s.dock = { ...s.dock, modo: "inteligente" };
@@ -296,7 +303,7 @@ export const useConfig = create<Configuracoes & AcoesConfig>()(
         return s as Configuracoes & AcoesConfig;
       },
       merge: (persistido, atual) => {
-        const salvo = (persistido ?? {}) as Partial<Configuracoes>;
+        const salvo = configuracoesValidas(persistido, CONFIG_PADRAO);
         const barraSalva = Array.isArray(salvo.barraLateral) ? salvo.barraLateral.filter((i) => BARRA_PADRAO.some((p) => p.rota === i.rota)) : BARRA_PADRAO;
         const barraLateral = [...barraSalva];
         BARRA_PADRAO.forEach((item, i) => {
@@ -330,7 +337,7 @@ export const useConfig = create<Configuracoes & AcoesConfig>()(
             ...salvo.agentes,
             cargos: Object.fromEntries((Object.keys(CONFIG_PADRAO.agentes.cargos) as AgenteId[]).map((a) => {
               const cargo = salvo.agentes?.cargos?.[a];
-              return [a, cargo && cargo.trim() ? cargo : CONFIG_PADRAO.agentes.cargos[a]];
+              return [a, typeof cargo === "string" && cargo.trim() ? cargo : CONFIG_PADRAO.agentes.cargos[a]];
             })) as Record<AgenteId, string>,
             nomes: Object.fromEntries(
               (Object.keys(CONFIG_PADRAO.agentes.nomes) as AgenteId[]).map((a) => {

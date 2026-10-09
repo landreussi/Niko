@@ -1,4 +1,5 @@
 import { createJSONStorage, type StateStorage } from "zustand/middleware";
+import { objeto } from "../utilitarios/validacoes";
 
 export const PREFIXO = "niko:";
 const bancoDeTeste = (() => {
@@ -21,14 +22,16 @@ let modo: ModoArmazenamento = "local";
 const cache = new Map<string, string>();
 const pendentes = new Map<string, string | null>();
 let temporizador = 0;
-const canal = typeof BroadcastChannel !== "undefined" ? new BroadcastChannel("niko-dados") : null;
+const nomeCanal = bancoDeTeste ? `niko-dados-${bancoDeTeste}` : "niko-dados";
+const canal = typeof BroadcastChannel !== "undefined" ? new BroadcastChannel(nomeCanal) : null;
 const ouvintesDeFora = new Set<(chave: string) => void>();
 const ORIGEM = Math.random().toString(36).slice(2);
-const EVENTO_DADOS = "niko-dados";
+const EVENTO_DADOS = nomeCanal;
 const avisosPendentes = new Map<string, string | null>();
 let temporizadorAviso = 0;
 
 interface MudancaDeDados {
+  banco: string;
   origem: string;
   chave: string;
   valor: string | null;
@@ -39,7 +42,7 @@ function tauriDisponivel(): boolean {
 }
 
 function avisarOutrasJanelas(chave: string, valor: string | null) {
-  canal?.postMessage({ origem: ORIGEM, chave, valor } satisfies MudancaDeDados);
+  canal?.postMessage({ origem: ORIGEM, banco: bancoDeTeste, chave, valor } satisfies MudancaDeDados);
   if (!tauriDisponivel()) return;
   avisosPendentes.set(chave, valor);
   if (temporizadorAviso) return;
@@ -49,20 +52,22 @@ function avisarOutrasJanelas(chave: string, valor: string | null) {
     avisosPendentes.clear();
     try {
       const { emit } = await import("@tauri-apps/api/event");
-      for (const [c, v] of itens) await emit(EVENTO_DADOS, { origem: ORIGEM, chave: c, valor: v } satisfies MudancaDeDados);
+      for (const [c, v] of itens) await emit(EVENTO_DADOS, { origem: ORIGEM, banco: bancoDeTeste, chave: c, valor: v } satisfies MudancaDeDados);
     } catch {
       return;
     }
   }, 120);
 }
 
-function receberDeFora(m: MudancaDeDados) {
-  if (!m || m.origem === ORIGEM || pendentes.has(m.chave)) return;
+function receberDeFora(m: unknown) {
+  if (!objeto(m) || m.banco !== bancoDeTeste || typeof m.origem !== "string" || typeof m.chave !== "string" || !/^niko:[a-z0-9_-]{1,60}$/.test(m.chave) || (m.valor !== null && (typeof m.valor !== "string" || m.valor.length > 20_000_000))) return;
+  if (m.origem === ORIGEM || pendentes.has(m.chave)) return;
   const atual = cache.get(m.chave) ?? null;
   if (atual === m.valor) return;
   if (m.valor === null) cache.delete(m.chave);
-  else cache.set(m.chave, m.valor);
-  ouvintesDeFora.forEach((f) => f(m.chave));
+  else cache.set(m.chave, m.valor as string);
+  const chaveRecebida = m.chave;
+  ouvintesDeFora.forEach((f) => f(chaveRecebida));
 }
 
 async function recarregarDaPonte() {
@@ -70,8 +75,9 @@ async function recarregarDaPonte() {
   try {
     const r = await fetch("/ponte/dados", { headers: CABECALHOS });
     if (!r.ok) return;
-    const { dados } = (await r.json()) as { dados: Record<string, string> };
-    for (const [k, v] of Object.entries(dados)) receberDeFora({ origem: "ponte", chave: k, valor: v });
+    const resposta: unknown = await r.json();
+    if (!objeto(resposta) || !objeto(resposta.dados)) return;
+    for (const [k, v] of Object.entries(resposta.dados)) receberDeFora({ origem: "ponte", banco: bancoDeTeste, chave: k, valor: v });
   } catch {
     return;
   }
@@ -160,8 +166,13 @@ export async function iniciarArmazenamento(): Promise<ModoArmazenamento> {
     const r = await fetch("/ponte/dados", { headers: CABECALHOS, signal: controle.signal });
     window.clearTimeout(limite);
     if (!r.ok) throw new Error(`http_${r.status}`);
-    const { dados } = (await r.json()) as { dados: Record<string, string> };
-    for (const [k, v] of Object.entries(dados)) cache.set(k, v);
+    const resposta: unknown = await r.json();
+    if (!objeto(resposta) || !objeto(resposta.dados)) throw new Error("dados_invalidos");
+    const dados = resposta.dados;
+    for (const [k, v] of Object.entries(dados)) {
+      if (!/^niko:[a-z0-9_-]{1,60}$/.test(k) || typeof v !== "string" || v.length > 20_000_000) throw new Error("dados_invalidos");
+    }
+    for (const [k, v] of Object.entries(dados)) cache.set(k, v as string);
     modo = "banco";
     const locais = chavesLocais().filter((k) => k !== `${PREFIXO}migrado`);
     const jaMigrou = localSeguro(() => localStorage.getItem(`${PREFIXO}migrado`), null);
